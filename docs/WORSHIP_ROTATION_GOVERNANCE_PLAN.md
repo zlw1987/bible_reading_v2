@@ -7,16 +7,18 @@ ServiceEvent planner/coordinator responsibility foundation, plus implemented
 `MO-S.6D-1D-A` read-only event applicability, candidate, and ownership-
 consistency domain foundation, plus implemented `MO-S.6D-1D-B` governed
 authorization, mutation enforcement, and narrow Worship Planning UI, with
-`MO-S.6D-1D-B-FU1` identity and cross-path serialization closure, plus
+`MO-S.6D-1D-B-FU1` identity and structural-ordering closure, plus
 implemented `MO-S.6D-1D-C` Worship Team operational reachability with FU1/FU2
 projection-consistency closure, plus the docs-only `MO-S.6D-1D-D-0A`
 Worship Rotation Planner batch contract and implemented read-only proposal/
 preview `MO-S.6D-1D-D-1A`, plus implemented `MO-S.6D-1D-D-1A-FU1`
-cycle-closed tail refinement. Governance FU2 finalizes the required event-planner
+cycle-closed tail refinement, plus the docs-only `MO-S.6D-1D-D-1B-A0`
+SQLite optimistic scheduling-concurrency decision. Governance FU2 finalizes the required event-planner
 prerequisite and Worship-specific pool semantics. The Campus, pool-
 configuration, event-responsibility, read-only governance, and governed
 single-event mutation and operational-reachability foundations are implemented;
-locked planner confirmation/audit, notification, and import slices below
+runtime scheduling-revision foundation, optimistic planner confirmation/audit,
+notification, and import slices below
 require separate explicit approval.
 
 ## 1. Problem and decisions owned here
@@ -100,7 +102,7 @@ The current code provides:
 
 The current code does **not** provide:
 
-- locked Worship Rotation Planner confirmation/audit;
+- optimistic Worship Rotation Planner confirmation/audit;
 - direct Worship Team change notifications; or
 - a declared `.xlsx` dependency or annual-workbook importer.
 
@@ -463,7 +465,7 @@ ServiceEvent bulk cancellation remains an intentional queryset transition out
 of the current set; arbitrary raw SQL or future `QuerySet.update()` callers are
 not claimed as protected and must not be introduced as Worship write paths.
 
-### `MO-S.6D-1D-B-FU1` identity and serialization closure
+### `MO-S.6D-1D-B-FU1` identity and structural-ordering closure
 
 The supported-write backstop now treats Worship assignment identity as
 immutable. If either the persisted or proposed current/historical assignment
@@ -475,23 +477,28 @@ downstream row cannot be retargeted into Worship. Supported pure-downstream
 retargeting remains unchanged. Cancellation and completion remain explicit
 in-place lifecycle transitions and never rewrite assignment identity.
 
-Supported current Worship assignment writes serialize on the governing
-`ServiceEvent` row. The model save boundary enters an atomic transaction, locks
-the proposed and/or persisted Worship event rows in deterministic ID order,
-then re-runs model validation before saving. The narrow selector already uses
-the same event lock, and member confirmation follows the lock order
+Supported current Worship assignment writes enter atomic code that requests
+the governing `ServiceEvent` rows in deterministic ID order, then re-runs model
+validation before saving. The narrow selector requests the same event first,
+and member confirmation follows the structural order
 `ServiceEvent -> TeamAssignment -> TeamAssignmentMember` before revalidating
 the parent. This covers the supported form, Team Schedule, Django Admin,
-direct `save()`, known `get_or_create()`, and confirmation paths without adding
-a schema or lock table. Pure downstream writes and safe lifecycle transitions
-out of the current Worship set acquire no Worship event-row lock.
+direct `save()`, known `get_or_create()`, and confirmation paths without
+changing their domain rules.
 
-This is an application-supported-write guarantee, not a database constraint.
-Arbitrary raw SQL and future bulk `QuerySet.update()` paths remain outside the
-claim and must not be introduced for Worship mutations. SQLite tests verify
-the guard decisions, transaction boundaries, and selected lock path, but do
-not prove PostgreSQL-style parallel row-lock behavior; that behavior remains a
-target-backend concurrency property.
+`MO-S.6D-1D-D-1B-A` later proved that this must not be described as an actual
+target-side row-lock guarantee: local and GoDaddy deployment settings both use
+SQLite, and Django reports `has_select_for_update=False`. The model/domain
+guard, identity immutability, atomic rollback, validation, and ordering code
+remain implemented and future-backend compatible, but SQLite ignores the
+requested row lock. Prior tests verified code paths, not parallel row locking;
+this correction does not imply corrupt stored data.
+
+Docs-only `MO-S.6D-1D-D-1B-A0` therefore selects a future monotonic
+`ServiceEvent.scheduling_revision` plus SQLite first-write serialization and
+current-truth recomputation for the supported-write guarantee. Runtime
+`1B-A1` must implement that foundation before optimistic batch confirmation
+`1B-B`. Arbitrary raw SQL and future bulk ORM writes remain outside the claim.
 
 Creating or editing a Worship assignment for a team other than the selected
 team must fail closed. Changing the selected team while any current Worship
@@ -527,7 +534,7 @@ For class 3, both halves are mandatory:
 ```text
 active Lead/Coordinator role on pool
 AND
-pool applicable to current locked event audience
+pool applicable to current reloaded event audience
 ```
 
 A role on an inapplicable pool grants nothing. An applicable pool with no role
@@ -548,12 +555,13 @@ coordination, not descendant roster authority.
 
 `/events/worship-planning/` provides bounded upcoming initial-selection
 discoverability without adding a primary navigation item or ordinary event
-visibility. `/events/<id>/worship-team/` locks and reloads the event, rechecks
-authority, audience/pool applicability, candidates, and ownership consistency,
-then compares the submitted expected `updated_at` and old team before saving.
-Actual changes write one Django `LogEntry` in the same transaction; GET, denied,
-stale, invalid, conflict, no-op, and rolled-back attempts write no audit row.
-No Worship Team change notification is emitted in this slice.
+visibility. `/events/<id>/worship-team/` enters an atomic transaction, requests
+and reloads current event state, rechecks authority, audience/pool applicability,
+candidates, and ownership consistency, then compares the submitted expected
+`updated_at` and old team before saving. Actual changes write one Django
+`LogEntry` in the same transaction; GET, denied, stale, invalid, conflict,
+no-op, and rolled-back attempts write no audit row. No Worship Team change
+notification is emitted in this slice.
 
 ## 11. Event-specific planner/coordinator responsibility
 
@@ -694,22 +702,28 @@ fail-closed behavior, zero automatic writes, and contained bilingual mobile UI.
 Several pool Leads or planners may legitimately edit a combined event. The
 implemented narrow POST therefore:
 
-1. enter `transaction.atomic` and lock/reload the `ServiceEvent`;
-2. reauthorize against the locked current event, audience, active pool roles,
+1. enter `transaction.atomic`, request current `ServiceEvent` state, and reload
+   it;
+2. reauthorize against the reloaded current event, audience, active pool roles,
    pool configuration, and candidate union;
 3. compare a browser-rendered expected `updated_at` and expected current anchor
-   against the locked row;
+   against the reloaded row;
 4. reject a stale event or a selected team that is no longer eligible;
 5. save only the anchor; and
 6. record actor plus old/new anchor through the repository's established
    `LogEntry` audit pattern inside the transaction.
 
-Using the event-level `updated_at` is conservatively broad: an unrelated event
-edit may force the user to refresh, but no silent lost update occurs and no new
-version field is needed initially. If trials show unacceptable false conflicts,
-a dedicated anchor version/audit model can be evaluated separately. SQLite
-tests can prove stale-form and atomic semantics, not parallel PostgreSQL lock
-behavior.
+The event-level `updated_at` and expected-old-anchor comparisons remain useful,
+conservatively broad request-level stale guards: an unrelated event edit may
+force the user to refresh, and stale-form/domain checks still reject detected
+changes. On target SQLite, however, `select_for_update()` supplies no actual
+`ServiceEvent` row lock, so those checks plus the atomic endpoint do not provide
+a strict parallel scheduling-write or lost-update guarantee. That supported-
+write concurrency closure is deferred to future `1B-A1`, which will implement
+the approved `ServiceEvent.scheduling_revision` contract. This preserves the
+chronology: `1D-B` implemented the existing timestamp/old-team checks, not an
+optimistic revision. Prior SQLite tests prove request-level stale-form and
+atomic rollback semantics, not parallel row locking.
 
 ### Worship Rotation Planner contract and implemented read-only preview
 
@@ -738,17 +752,20 @@ without losing a team identity. Any other non-null tail remains shown and
 blocked. This is exact identity preservation, not a stored/inferred rotation
 sequence, name/order convention, fuzzy match, or arbitrary tail-drop approval.
 Preview uses a 30-minute user-bound timestamped Django-signed normalized
-proposal. Confirmation is a separately approved locked atomic slice using
-normal per-event saves and one existing-style `LogEntry` per actual change,
-all sharing one operation UUID. No durable BatchRun schema is required for the
-limited-trial contract.
+proposal. Per-event `LogEntry` rows sharing one operation UUID are future
+`1B-B` confirmation behavior, not implemented preview behavior. No durable
+BatchRun schema is required for the limited-trial contract.
 
-The repository-truth audit also found that pure downstream assignment writes
-do not currently serialize on their ServiceEvent. Before confirmation may
-promise downstream-impact staleness, its owning `1B` slice must close the
-supported event-first downstream write paths or stop and obtain an explicit
-version/schema decision. Read-only preview `1A` is not blocked by that runtime
-closure.
+The attempted downstream row-lock closure `1B-A` correctly stopped without
+changes because target SQLite cannot provide the proposed ServiceEvent
+`select_for_update()` lock. Docs-only `1B-A0` closes the replacement
+architecture decision: future `1B-A1` adds one monotonic event-owned scheduling
+revision and retrofits supported ServiceEvent, current-assignment, required-
+team/audience, Admin/delete/cascade, member-confirmation parent-status, and
+Lighting writes. Future `1B-B` claims every selected event revision with an
+atomic expected-value CAS before full governance/authority/fingerprint
+recomputation. SQLite's first successful CAS supplies a database-wide writer
+boundary, not a row lock. Read-only preview `1A` remains unaffected.
 
 ### Direct Worship Team change notifications
 
@@ -890,25 +907,26 @@ Each slice is separately approvable and must verify repository truth again.
 | 2 | **Worship rotation-pool configuration foundation — IMPLEMENTED (`MO-S.6D-1B`)** | Worship-specific `MinistryTeam.is_worship_rotation_pool` field, default-safe migration, model/form validation, read-only configuration resolver, existing setup UI, and readiness integration; configuration grants no authority | active non-assignable pool, primary anchor/path, inactive/ambiguous/cycle fail-closed, canonical role warning, no created rows/permissions | Narrow staff setup copy/error-state/rendered QA in the implementation slice; deployment QA remains separate |
 | 3 | **ServiceEvent planner/coordinator responsibility foundation — IMPLEMENTED (`MO-S.6D-1C`)** | `ServiceEventPlannerAssignment` exact-event/user lifecycle model and migration, current-only read helper, existing full-manager bilingual edit-page setup controls, and admin exposure; the foundation grants nothing by itself, while 4B consumes it only for the exact-event Worship Team action | lifecycle/end/restore, unique event/user, multiple planners, inactive-user fail-closed lookup, draft/cancelled/completed persistence, full-manager-only setup, no audience/serving/full-event/structure/assignment authority | Narrow existing ServiceEvent edit-page rendered QA in the implementation slice; deployment QA remains separate |
 | 4A | **Read-only Worship applicability, candidate, and ownership-consistency foundation — IMPLEMENTED (`MO-S.6D-1D-A`)** | Side-effect-free domain helper only; reuses pool inspection and current scheduling statuses; no permission, selector, endpoint, enforcement, model, or migration | audience union/fail-closed applicability, active-primary descendant candidates, off-team/out-of-scope/multiple/duplicate consistency, privacy/read-only and authority boundaries | No rendered QA; no user-visible behavior changed |
-| 4B | **Narrow Worship Team authorization, write enforcement, and UI — IMPLEMENTED (`MO-S.6D-1D-B`, identity/serialization closure in `MO-S.6D-1D-B-FU1`)** | Consumes 4A from narrow GET/POST plus existing anchor/Worship-assignment write paths; pool Leads/planners receive only this action; current Worship identity is immutable and supported writes serialize on ServiceEvent; no model migration | actual denial/allow rules, locked-current reauthorization, stale form, combined union, legacy-form/admin/assignment bypass closure, cross-path identity retarget rejection, event-first lock path, LogEntry attribution, no roster move or unrelated writes | Rendered Worship Team selector, bilingual copy, conflict UX, hidden blocked controls, and narrow-context privacy verified in the implementation slices |
+| 4B | **Narrow Worship Team authorization, write enforcement, and UI — IMPLEMENTED (`MO-S.6D-1D-B`, identity/ordering closure in `MO-S.6D-1D-B-FU1`)** | Consumes 4A from narrow GET/POST plus existing anchor/Worship-assignment write paths; pool Leads/planners receive only this action; current Worship identity is immutable; atomic validation and ServiceEvent-first ordering remain implemented, but target SQLite provides no actual `select_for_update()` row lock | actual denial/allow rules, current-truth reauthorization, stale form, combined union, legacy-form/admin/assignment bypass closure, cross-path identity retarget rejection, structural event-first path, LogEntry attribution, no roster move or unrelated writes | Rendered Worship Team selector, bilingual copy, conflict UX, hidden blocked controls, and narrow-context privacy verified in the implementation slices |
 | 5 | **Worship Team operational reachability — IMPLEMENTED (`MO-S.6D-1D-C`; projection corrections `MO-S.6D-1D-C-FU1/FU2`)** | Team Schedule/Board queryset and projection change only; exact-team assignment permission unchanged; canonical eligibility fails closed; invalid raw selection never suppresses independent generic required/assignment participation; canonical ownership conflicts/ambiguity are review-only and non-actionable; no migration | selected-team-only rows, empty-coverage presentation, valid-selection de-dup, invalid required/assignment projection, off-team/out-of-scope conflict, multiple/duplicate ambiguity, global/exact-team behavior, planner/pool-Lead boundary, change/removal, privacy, no coverage/assignment/required-team writes | Rendered English desktop and Chinese mobile Team Schedule/Board QA completed in the implementation slice; FU1/FU2 are focused projection-only and test-verified |
-| 6 | **Worship Rotation Planner — DOCS CONTRACT COMPLETE (`MO-S.6D-1D-D-0A`); READ-ONLY PREVIEW IMPLEMENTED (`MO-S.6D-1D-D-1A`); CYCLE-CLOSED TAIL FU IMPLEMENTED (`MO-S.6D-1D-D-1A-FU1`); `1B` UNIMPLEMENTED** | Existing selector retains one-Sunday changes; `1A` adds the side-effect-free signed proposal/preview with no durable state; FU1 accepts only terminal blank or an exact-ID inserted-team cycle closure while any true displaced tail stays blocked; locked atomic confirmation/audit remains `1B`; no rule engine, roster mutation, or BatchRun schema | `1A/FU1`: exact event-chain/range/typed-tail rules, exact identity/no-name inference, signed semantic consistency, destination eligibility, per-event authority, roster blocker, roster-free downstream impact, privacy, and zero writes. `1B`: stale/all-or-nothing rollback, shared-operation LogEntry audit, and downstream serialization closure remain future | `1A/FU1` preview/conflict/cycle-closed UX verified in their implementation slices; confirmation/result UX remains required for `1B` |
+| 6 | **Worship Rotation Planner — DOCS CONTRACT/SQLite A0 COMPLETE; READ-ONLY PREVIEW/FU1 IMPLEMENTED; `1B-A1`/`1B-B` UNIMPLEMENTED** | Existing selector retains one-Sunday changes; `1A/FU1` remain side-effect-free; `1B-A` row-lock attempt stopped on target SQLite; docs-only `1B-A0` selects one event scheduling revision, SQLite first-write/CAS semantics, and A1/B split; no rule engine, roster mutation, or BatchRun schema | `1A/FU1`: existing preview contract. `1B-A1`: field/helper/supported-write retrofit and file-backed SQLite concurrency proof. `1B-B`: expected-revision CAS, full recomputation, stale/all-or-nothing rollback, all-selected revision advance, and future shared-operation LogEntry audit | `1A/FU1` UX already verified; A1 has no planner confirmation UI; confirmation/result UX remains required for `1B-B` |
 | 7 | **Direct Worship Team change notification producer** | Ministry-owned post-commit producer through Core port; no notification permission/schema inference; summarized batch delivery | exact role/date recipients, required/additional downstream bounds, dedupe, language/privacy, disabled-module no-op, rollback/no-emission | Required for recipient-safe copy/target QA |
 | 8 | **Excel dependency/parser + preview** | Reviewed `.xlsx` dependency and read-only upload/preview; staff/superuser only; no data write or migration expected | contract/header/date/cache/token/profile/identity classification, roster/downstream impact, size/privacy/tamper/expiry tests | Required for upload and preview |
 | 9 | **Excel exact match/update confirmation** | Atomic existing-event selected-team writes only; no new event/required team/assignment; no schema if signed proposal remains sufficient | reauthorization, target locking/fingerprint, roster conflict, stale rollback, idempotency, eligible mapping, unsupported rows, audit attribution | Required for confirmation/result UX |
 | 10 | **Later assignment import** | Deferred; would write TeamAssignment/member data and needs exact-team plus bulk authority and identity proof | unresolved/ambiguous people, explicit aliases, team ownership, no user creation, rollback/idempotency | Required; only after operational evidence |
 
 Dependencies: slices 1, 2, 3, 4A, 4B, 5, and slice 6 read-only preview
-`1A` plus its cycle-closed-tail FU1 are implemented; slice 6 locked
-confirmation `1B` remains future. Slice 1 remains
+`1A` plus its cycle-closed-tail FU1 are implemented; docs-only `1B-A0` is
+complete; runtime scheduling-revision foundation `1B-A1` must precede
+optimistic confirmation `1B-B`. Slice 1 remains
 independent but should precede real multi-campus setup. Slices 2 and 3 both
 precede 4B: pool configuration is required for pool-based authority/
 applicability, and the implemented exact-event planner responsibility is
 required for the approved event-planner workflow. Slice 4A defines the
 read-only ownership facts; 4B enforces them for supported writes. Implemented
 slice 5 now ensures an imported Worship Team can be operationally reachable
-without false required coverage before slice 9. Slice 6 confirmation `1B`
-remains separately approved and should precede using annual import as a batch
+without false required coverage before slice 9. Slice 6 confirmation `1B-B`
+remains separately approvable and should precede using annual import as a batch
 rotation tool. Slice 7 follows a proven change
 path. Slice 8 precedes 9. Slice 10 remains later.
 

@@ -1,15 +1,20 @@
 # Worship Rotation Planner V1 Contract
 
-Status: `MO-S.6D-1D-D-0A` docs-only architecture gate and
-`MO-S.6D-1D-D-1A` read-only proposal/preview runtime and
-`MO-S.6D-1D-D-1A-FU1` cycle-closed tail refinement are complete. The
+Status: `MO-S.6D-1D-D-0A` docs-only architecture gate,
+`MO-S.6D-1D-D-1A` read-only proposal/preview runtime,
+`MO-S.6D-1D-D-1A-FU1` cycle-closed tail refinement, and the docs-only
+`MO-S.6D-1D-D-1B-A0` SQLite optimistic scheduling-concurrency decision are
+complete. The
 contextual planner route now builds an explicit exact-event chain, projects
 the deterministic shift and privacy-limited downstream impact, and produces a
 30-minute user-bound signed normalized proposal without writing state.
-`MO-S.6D-1D-D-1B` locked confirmation/audit remains unimplemented and blocked
-on the downstream event-first serialization closure below. No planner model,
-migration, dependency, confirmation write, audit write, notification, session
-proposal, temp file, or data change is implemented by `1A`.
+The attempted `MO-S.6D-1D-D-1B-A` row-lock closure correctly stopped without
+changes because both local and GoDaddy deployment settings use SQLite and
+`connection.features.has_select_for_update` is false. Runtime scheduling-
+revision foundation `1B-A1` and optimistic confirmation/audit `1B-B` remain
+unimplemented. No planner model, migration, dependency, confirmation write,
+audit write, notification, session proposal, temp file, or data change is
+implemented by `1A`, `1A-FU1`, or docs-only `1B-A0`.
 
 This document owns the batch-planner contract. The broader Worship invariants
 remain canonical in
@@ -21,7 +26,7 @@ The implemented exact-event workflow already provides:
 
 - `can_change_worship_team(user, event)` for narrow per-event authority;
 - `/events/worship-planning/` for contextual upcoming-event reachability;
-- `/events/<id>/worship-team/` for a locked, stale-checked, exact-event
+- `/events/<id>/worship-team/` for an atomic, stale-checked, exact-event
   selector;
 - canonical applicable-pool, eligible-candidate, and ownership-consistency
   facts from `ministry.services.worship_governance`; and
@@ -200,9 +205,9 @@ The batch invents no authority. It reuses
 - The preview selection surface remains bounded to events reachable through
   the existing Worship Planning authority predicate; this avoids inventing a
   separate batch-read permission.
-- At preview and again under lock at confirmation, every event whose selected
-  team would actually change must pass `can_change_worship_team` for the
-  current user.
+- At preview and again after the future confirmation CAS write barrier, every
+  event whose selected team would actually change must pass
+  `can_change_worship_team` for the current user.
 - If one changed row is unauthorized, the whole proposal/confirmation is
   blocked. No row is silently omitted.
 - A no-op row has no mutation and no change audit requirement. It still must
@@ -314,6 +319,7 @@ not trust display values from the browser.
 For every selected event:
 
 - event ID;
+- expected `scheduling_revision` after future `1B-A1` implements that field;
 - `updated_at`;
 - status and event type;
 - start and end datetimes;
@@ -360,63 +366,205 @@ stale it because the preview neither displays nor depends on them.
 Any fingerprint difference rejects the entire confirmation and requires a new
 preview. No individual stale row is skipped.
 
-## 12. Confirmation transaction and lock order
+## 12. SQLite optimistic scheduling-concurrency contract
 
-The `1B` algorithm is:
+### Why the former row-lock contract stopped
 
-1. Decode the signed payload with the dedicated salt and 30-minute `max_age`;
-   verify version, operation, UUID, user binding, uniqueness, bounds, and
-   normalized shape before entering mutation logic.
-2. Enter `transaction.atomic()`.
-3. Lock every selected `ServiceEvent`, including no-op context rows, in
-   ascending primary-key order. Semantic shift order remains
-   `(start_datetime, id)` and is checked separately.
-4. Lock the current assignment rows for those events in deterministic
-   `(service_event_id, id)` order after the event locks.
-5. Reload and revalidate the exact chain/range contract.
-6. Recompute the proposal from current before values, reauthorize every changed
-   event with `can_change_worship_team`, and compare all fingerprints.
-7. Recompute canonical per-destination candidate eligibility and all current
-   Worship-assignment blockers/no-op consistency rules.
-8. If any fact differs or conflicts, raise/reject and roll back the entire
-   transaction.
-9. Save only actually changed `rotation_anchor_team` values through normal
-   per-event `ServiceEvent.save(update_fields=["rotation_anchor_team",
-   "updated_at"])`; do not use `bulk_update` or `QuerySet.update`.
-10. Write one existing-style `LogEntry` for every changed event with the same
-    operation ID and explicit old/new team IDs and names. An audit failure
-    rolls back the selected-team writes. No-op rows write no entry.
-11. Commit once. No assignment, audience, required-team, planner, roster,
-    notification, or other row is created or changed.
+`MO-S.6D-1D-D-1B-A` re-inventoried the supported downstream and required-team
+write paths, then stopped without code or documentation changes when repository
+truth proved that both `config.settings` and `config.settings_godaddy` use
+SQLite. Django reports `has_select_for_update=False`; the existing
+`select_for_update()` calls therefore provide no actual target-side
+`ServiceEvent` row lock.
 
-### Required downstream serialization closure for `1B`
+The implemented `MO-S.6D-1D-B/FU1` model/domain validation, Worship assignment
+identity immutability, atomic boundaries, deterministic ordering code, and
+member-confirmation revalidation remain useful. On SQLite, however, they must
+not be described as a strict ServiceEvent row-lock serialization guarantee.
+Prior SQLite tests proved code paths and rollback decisions, not parallel row
+locking. This is a concurrency-contract correction, not evidence of corrupt
+stored scheduling data.
 
-Current Worship assignment saves already serialize on the governing
-ServiceEvent row, and member confirmation follows
-`ServiceEvent -> TeamAssignment -> TeamAssignmentMember`. Pure downstream
-assignment create/edit/cancel/admin/direct-save paths deliberately do not
-currently acquire that event lock.
+### One event-owned revision is sufficient
 
-Therefore locking events and existing assignment rows only inside the planner
-is not enough to promise that a concurrent downstream insert/status change
-cannot pass between validation and commit. Before `1B` may claim the
-downstream-impact stale guarantee, the same slice must make all supported
-current downstream `TeamAssignment` create/edit/status/delete paths that affect
-the fingerprint serialize event-first on their ServiceEvent, or stop and adopt
-an explicitly approved version/schema alternative. The no-schema V1 decision
-is to extend event-first supported-write serialization in `1B`; it is not part
-of read-only `1A`.
+`MO-S.6D-1D-D-1B-A0` selects one future additive field:
 
-Raw SQL and future arbitrary bulk updates remain outside the application-level
-claim and must not be introduced as supported assignment paths. SQLite tests
-can prove lock ordering and atomic decisions, not production-backend parallel
-row-lock behavior; target-backend concurrency verification remains required.
+```text
+ServiceEvent.scheduling_revision
+    PositiveBigIntegerField(default=0, editable=False)
+```
 
-## 13. Audit and schema decision
+The final runtime slice must verify the generated migration, but repository
+truth supports this name and type: it is a monotonic internal concurrency token
+for operational scheduling truth, not user-visible state, audit history,
+`updated_at` replacement, or a general CMS lost-update version. Existing rows
+may safely start at zero through one normal schema migration with no data
+operation. A separate index is unnecessary because CAS addresses rows by
+primary key. No BatchRun, assignment version, required-team version, lock
+table, or EventScheduleState model is needed.
+
+Every planner-fingerprinted supported mutation belongs to one exact event or,
+for ordinary downstream retargeting, the union of the old and new events.
+Deleting the `ServiceEvent` itself needs no tombstone or revision advance:
+future CAS cannot find that event and fails stale. This makes one event-owned
+revision sufficient for the supported V1 boundary.
+
+### Writes that advance the revision
+
+Future `1B-A1` must advance the affected event revision in the same atomic
+transaction before final validation and mutation for:
+
+- a governed Worship Team selection change;
+- an existing ServiceEvent edit affecting the event fingerprint, including
+  status/lifecycle changes;
+- supported audience replacement and required-team add/remove/replacement;
+- creation of a current `TeamAssignment` (`scheduled`, `prepared`, or
+  `confirmed`), and deletion of a current assignment;
+- any current assignment tuple change in event, team, or current status;
+- transitions between current and cancelled/completed history in either
+  direction, including cancellation, completion, and reactivation;
+- the parent status change to `confirmed` caused by final member confirmation;
+- the retained Lighting pilot when it creates or changes fingerprinted
+  assignment truth; and
+- supported Admin create/edit/status/retarget/object-delete/bulk-delete and
+  MinistryTeam deletion cascades affecting current assignments.
+
+A current ordinary downstream retarget from Event A to Event B advances both
+surviving events once, in ascending event-ID order, in the same transaction.
+The existing Worship event/team identity immutability remains unchanged.
+Creating a brand-new event may retain its initial revision zero because its
+initial audience/required-team/assignment setup precedes any possible preview;
+later scheduling changes advance it normally.
+
+Pure member-roster edits, assignment notes, `TeamAssignmentMember.confirmed_at`,
+and confirmation-note detail do not advance the revision solely for planner
+staleness. If the same operation changes the parent assignment's fingerprinted
+status, that parent transition does advance it. Runtime A1 must use narrowly
+scoped saves/reloads for these non-revision writes so a stale full-row save
+cannot overwrite fingerprinted current truth. A conservative bump may remain
+for a supported direct full `TeamAssignment.save()` whose intent cannot be
+proved safely, but the normal forms/services and the Lighting notes-only update
+should avoid needless proposal staleness.
+
+### Required-team, Admin, delete, and cascade coverage
+
+Current single-event create/edit and recurring creation already save/create
+the owning event before `required_teams.set()` inside one atomic workflow.
+ServiceEvent Admin saves the parent before its required-team and audience
+inline formsets inside Admin's atomic change transaction. A1 must make the
+event-owned revision advance the first scheduling write for existing-event
+replacement, including an inline-only change; new-event related rows remain
+part of initial creation.
+
+There is no normal application TeamAssignment delete route. A1 must cover
+supported direct model delete, TeamAssignment Admin object delete, and Admin
+bulk delete explicitly. The default Admin bulk action calls
+`QuerySet.delete()` and therefore needs a bounded `delete_queryset()` path that
+collects distinct current-assignment event IDs, advances them deterministically,
+then deletes in the same transaction. MinistryTeam Admin/model deletion must
+likewise collect and advance surviving event IDs before its assignment cascade;
+required-team links already use `PROTECT` and are not silently cascaded by a
+team deletion. ServiceEvent deletion needs no advance because the CAS target
+itself disappears. Arbitrary shell/queryset deletion, bulk ORM writes, and raw
+SQL remain outside the supported-write claim.
+
+### Ordinary supported mutation barrier
+
+The reusable A1 helper/service contract is:
+
+1. enter `transaction.atomic()`;
+2. establish the affected old/proposed event IDs from the persisted baseline
+   and requested mutation;
+3. use database `F()` updates, never Python read-plus-one, to advance affected
+   revisions in ascending ID order; the first actual update establishes the
+   SQLite writer boundary;
+4. reload current events and assignment rows, and fail stale/roll back if their
+   identity no longer matches the pre-barrier baseline;
+5. reauthorize and validate current domain truth, including the stronger
+   Worship guard; and
+6. apply the mutation and commit once.
+
+If validation or any later write fails, revision increments and the mutation
+roll back together. For an ordinary downstream retarget, a stale persisted
+event discovered after the first barrier must fail/roll back and retry from a
+fresh baseline rather than acquiring another affected event in reverse order.
+Normal form, Team Schedule, Admin, cancellation/completion/reactivation,
+member-confirmation parent status, and Lighting paths must converge on this
+contract without changing their authority, notifications, or lifecycle rules.
+
+### Future `1B-B` confirmation CAS
+
+Preview after A1 must include each event's expected `scheduling_revision` in
+the signed semantic payload. Future confirmation is:
+
+1. decode and shape-check the signed payload before mutation logic;
+2. enter `transaction.atomic()` with no scheduling/governance reads before the
+   CAS claims;
+3. in ascending event-ID order execute an atomic conditional update equivalent
+   to:
+
+   ```sql
+   UPDATE events_serviceevent
+      SET scheduling_revision = scheduling_revision + 1
+    WHERE id = :event_id
+      AND scheduling_revision = :expected_revision;
+   ```
+
+4. require exactly one affected row for every selected event; zero means
+   missing/stale and rolls back the whole batch;
+5. after the first successful CAS has established the SQLite write boundary,
+   reload all events and recompute the exact chain, authority, governance,
+   current-Worship ownership, and downstream/required-team fingerprints;
+6. reject and roll back on any mismatch or conflict;
+7. save only changed Worship Team selections without a second revision bump;
+8. write one future existing-style `LogEntry` per changed event, all sharing
+   the operation ID; and
+9. commit once.
+
+Every selected context event, including a no-op row, receives the successful
+CAS revision advance. Its Worship Team remains unchanged and it writes no
+change `LogEntry`, but it participated in the confirmed concurrency boundary.
+This also makes replay of the old signed proposal stale. A later failed CAS,
+revalidation, anchor save, or audit write rolls back all earlier CAS advances.
+
+### SQLite guarantee, limits, and test gate
+
+The configured backend uses SQLite rollback-journal `delete` mode, Django's
+default deferred `BEGIN`, no explicit transaction mode, and the default
+5-second busy timeout. A disposable two-connection file-backed experiment for
+A0 proved that the first successful revision CAS establishes SQLite's single-
+writer boundary: a second connection could not update even a different event,
+rollback restored the claimed revision, an old expected revision updated zero
+rows, and a later failed batch claim rolled back the earlier successful claim.
+
+The bounded target guarantee is therefore optimistic revision plus SQLite
+write-transaction serialization plus current-truth recomputation for supported
+application writes. It is database-wide writer exclusion, not a row-level
+lock. Readers may continue. A competing writer may wait or receive
+`database is locked`; A1/B must keep transactions short and render retry/error
+without false success. Configuration/authority changes committed before the
+first CAS are caught by recomputation; after that CAS, SQLite prevents another
+database writer from committing through the confirmation window.
+
+Before enabling `1B-B`, A1 must include a real two-connection, file-backed
+SQLite concurrency test—not an in-memory database or ordinary `TestCase`—that
+proves stale CAS, cross-event writer exclusion after the barrier, rollback of
+revision claims, no partial batch commit, and safe retry/error behavior under
+the configured journal/timeout behavior. Target-environment parity must be
+checked separately. This does not certify general SQLite scalability.
+
+The revision remains useful after a future PostgreSQL/MySQL migration as the
+signed stale-proposal token. A row-locking backend may combine revision CAS
+with `select_for_update()`, but must re-audit concurrent global governance/path/
+role mutations because it will not inherit SQLite's database-wide writer
+exclusion. No backend migration is authorized here.
+
+## 13. Future `1B-B` audit and schema decision
 
 V1 does not need a durable batch model.
 
-Every actual event change uses the established `LogEntry` shape and adds:
+Every actual event change in future `1B-B` uses the established `LogEntry`
+shape and adds:
 
 ```text
 operation_id=<same UUID for every changed row>
@@ -427,7 +575,7 @@ new_team_id=<id or None>; new_team=<display>
 `LogEntry.user_id`, object identity, timestamp, and shared operation ID are
 sufficient for limited-trial diagnosis of who shifted which exact events and
 for a later summarized-notification producer to use one stable committed-batch
-identity. Actual writes and logs remain in the same transaction.
+identity. Those future actual writes and logs remain in the same transaction.
 
 This does not provide one-click rollback, durable preview retention, workflow
 recovery, a unique/query-optimized batch history table, or a batch-history UI.
@@ -440,7 +588,8 @@ The existing contextual Worship Planning page receives a contextual
 `Rotation Planner / 敬拜轮值规划` link. V1 adds no primary/global navigation
 item.
 
-The workflow is:
+The full contract workflow is below. Steps 1 through 5 are implemented by the
+read-only preview; step 6 remains future `1B-B` behavior:
 
 1. choose the starting Sunday;
 2. choose the inserted/special Worship Team;
@@ -492,7 +641,7 @@ engineering terms to schedulers.
 ### `MO-S.6D-1D-D-1A` — read-only proposal and preview — IMPLEMENTED
 
 - `ministry.services.worship_rotation_planner` implements the side-effect-free
-  normalized proposal/fingerprint/signing service reusable by `1B`.
+  normalized proposal/fingerprint/signing service reusable by future `1B-B`.
 - `/events/worship-planning/rotation/` provides the contextual exact-event and
   inserted-team form plus bilingual preview; parallel same-Sunday services
   remain separate explicit choices and are never auto-selected.
@@ -514,35 +663,57 @@ engineering terms to schedulers.
 - Adds no rotation sequence, arbitrary tail drop, confirmation action, model,
   migration, permission, audit, notification, session, or file state.
 
-### `MO-S.6D-1D-D-1B` — locked confirmation and audit
+### `MO-S.6D-1D-D-1B-A0` — SQLite optimistic contract — DOCS COMPLETE
+
+- Records that attempted row-lock closure `1B-A` stopped without changes
+  because target SQLite has no `select_for_update()` row-lock semantics.
+- Selects one event-owned scheduling revision, the exact supported-write bump
+  boundary, SQLite first-write barrier, future CAS algorithm, deletion/cascade
+  treatment, and required file-backed concurrency-test gate.
+- Adds no field, migration, helper, confirmation action, audit, notification,
+  or data change.
+
+### `MO-S.6D-1D-D-1B-A1` — Scheduling Revision Foundation — FUTURE
+
+- Add `ServiceEvent.scheduling_revision` and its normal additive migration.
+- Add atomic increment/CAS helpers and retrofit supported ServiceEvent,
+  TeamAssignment, required-team/audience, Admin/delete/cascade, confirmation-
+  parent-status, and Lighting paths.
+- Correct the runtime SQLite concurrency boundary while preserving authority,
+  notifications, lifecycle, and Worship identity rules.
+- Add real two-connection file-backed SQLite concurrency coverage. The planner
+  remains preview-only with no confirmation action or batch audit.
+
+### `MO-S.6D-1D-D-1B-B` — Optimistic batch confirmation and audit — FUTURE
 
 - Reuse the exact `1A` proposal/revalidation service; do not reimplement shift
   logic in the view.
-- Complete the required supported downstream event-first serialization
-  closure.
-- Add signed confirmation, deterministic locks, full revalidation,
-  all-or-nothing normal saves, and per-event `LogEntry` rows with the shared
-  operation ID.
-- Test stale/tampered/expired/unauthorized/conflicting rollback, lock order,
-  tail protection, no-op audit behavior, audit failure rollback, idempotent
-  replay rejection/no-op behavior, and zero assignment/audience/roster writes.
+- Add the signed confirmation route, deterministic per-event revision CAS,
+  full current-truth recomputation, all-or-nothing anchor saves, and one
+  `LogEntry` per changed event with the shared operation ID.
+- Test stale/tampered/expired/unauthorized/conflicting rollback, CAS order,
+  tail protection, all-selected/no-op revision advances, no-op audit behavior,
+  audit failure rollback, replay rejection, and zero assignment/audience/
+  roster writes.
 
 Notifications remain a later separately approved slice. They must not be added
-to either `1A` or `1B`.
+to `1A`, `1B-A1`, or `1B-B`.
 
 ## 17. Decisions and remaining gates
 
-This gate plus the implemented `1A-FU1` refinement closes the V1 product
-decisions needed before `1B`: exact explicit weekly published-future Sunday
+This gate plus the implemented `1A-FU1` refinement and docs-only `1B-A0`
+decision closes the V1 product/architecture decisions needed before `1B-A1`:
+exact explicit weekly published-future Sunday
 events, maximum 53, no interior blank, terminal blank or exact-ID cycle-closed
 tail preservation, no arbitrary tail loss, per-destination canonical
 eligibility, per-event existing authority, changed-row Worship-assignment
 blocker, narrow roster-free downstream impact, 30-minute user-bound signed
-proposal, and no BatchRun schema.
+proposal, one event-owned scheduling revision, SQLite optimistic CAS/write-
+barrier semantics, and no BatchRun schema.
 
-No remaining product decision blocks approval of `1A`. `1B` must still verify
-the downstream supported-write serialization inventory and target-database lock
-behavior during its repository-truth gate. If that closure cannot be made
-safely within `1B`, stop before confirmation runtime and present either a
-version/audit schema or a narrower impact-staleness promise for explicit product
-decision.
+No remaining product or architecture decision blocks approval of `1B-A1`.
+Runtime A1 must still verify the generated field migration, safely close every
+inventoried supported path, and pass the required file-backed SQLite
+concurrency tests before `1B-B` may be enabled. Any newly discovered supported
+bulk/cascade path outside the one-event revision contract remains a stop
+condition; the downstream stale guarantee must not be weakened silently.

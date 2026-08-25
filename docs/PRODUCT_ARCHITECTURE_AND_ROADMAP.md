@@ -83,20 +83,24 @@ presentation.
 `MO-S.6D-1D-D-0A` completes the Worship Rotation Planner batch contract,
 `MO-S.6D-1D-D-1A` implements its read-only proposal/preview, and
 `MO-S.6D-1D-D-1A-FU1` implements the preview-evidenced cycle-closed tail
-refinement in
+refinement, while docs-only `MO-S.6D-1D-D-1B-A0` closes the SQLite optimistic
+scheduling-concurrency decision in
 `docs/WORSHIP_ROTATION_PLANNER_PLAN.md`. The existing selector remains the
 one-Sunday path; planner V1 is limited to
 Insert / Shift Later Worship Teams over an exact bounded chain. A terminal
 blank or a non-null tail whose exact team ID equals the inserted team preserves
 the selected-range identities; every other non-null tail remains blocked. This
-is not a stored rotation rule or arbitrary tail drop. Destination-specific
-eligibility, per-event authority, Worship-assignment blockers, a roster-free
-downstream projection, a 30-minute user-bound signed proposal, and
-shared-operation per-event `LogEntry` audit.
-No BatchRun schema is required for V1. Preview `1A` is implemented without
-writes or durable state. Confirmation `1B` remains separately approvable and
-must close supported downstream event-first assignment serialization before
-claiming downstream-impact staleness.
+is not a stored rotation rule or arbitrary tail drop. Implemented preview
+includes destination-specific eligibility, per-event authority, Worship-
+assignment blockers, a roster-free downstream projection, and a 30-minute
+user-bound signed proposal. Shared-operation per-event `LogEntry` audit is
+future `1B-B` confirmation behavior; preview writes no audit rows.
+No BatchRun schema is required for V1. Attempted row-lock closure `1B-A`
+stopped without changes because local and GoDaddy SQLite provide no
+`select_for_update()` row lock. Docs-only A0 selects one future event-owned
+scheduling revision, SQLite first-write serialization plus recomputation, and
+the runtime split: `1B-A1` field/helpers/supported-write retrofit and real
+file-backed concurrency tests, then `1B-B` optimistic confirmation/audit.
 
 Manual QA passed for the navbar IA and Ministry Structure cleanup, covering desktop ordinary user, desktop staff user, the mobile hamburger drawer, the Staff dropdown, the account dropdown, the Today / My Serving / Bible Study serving core flows, and the Ministry Teams / Ministry Structure core flows. No product boundary changed: Today remains a general agenda/dashboard (not a serving workspace), My Serving remains the serving workspace, visibility / membership / audience scope still does not imply serving, only explicit `TeamAssignmentMember` and linked-user `BibleStudyMeetingRole.user` personalize serving, and `MinistryTeamRoleAssignment` remains long-term structure responsibility — not weekly/event serving (at that time it also drove no permission; `MINISTRY-ROLE-SOURCE.1C` later made active lead/coordinator role assignments the runtime team-management permission source).
 
@@ -595,13 +599,16 @@ Future pieces include:
   responsibility foundation. `MO-S.6D-1D-A` implements the read-only
   applicability, candidate, and ownership-consistency domain half of canonical
   slice 4, and `MO-S.6D-1D-B` now consumes it through the narrow authorization,
-  locked selector/mutation UI, audit attribution, and supported-write
-  enforcement across legacy event/admin/assignment paths. `MO-S.6D-1D-C`
+  atomic/stale-checked selector/mutation UI, audit attribution, and
+  supported-write enforcement across legacy event/admin/assignment paths.
+  `MO-S.6D-1D-C`
   implements selected-team operational reachability on the Board/Team Schedule,
   docs-only `MO-S.6D-1D-D-0A` closes the planner batch/audit contract, and
   `MO-S.6D-1D-D-1A` implements the read-only signed proposal/preview, and
-  `MO-S.6D-1D-D-1A-FU1` implements its exact-ID cycle-closed tail semantic.
-  Locked confirmation/audit, notification, importer runtime, and bulk upload
+  `MO-S.6D-1D-D-1A-FU1` implements its exact-ID cycle-closed tail semantic, and
+  docs-only `MO-S.6D-1D-D-1B-A0` closes the target SQLite optimistic
+  scheduling-concurrency decision. Runtime scheduling-revision foundation,
+  optimistic confirmation/audit, notification, importer runtime, and bulk upload
   remain later slices. The bounded
   cross-team
   coordination projection replaces the older generic “multi-team dashboard”
@@ -794,15 +801,18 @@ planner/coordinator responsibility model, lifecycle, current-only lookup, and
 full-manager setup surface; `MO-S.6D-1D-B` consumes it only for the narrow
 applicable exact-event Worship Team action. `MO-S.6D-1D-A` implements the
 side-effect-free event applicability, primary-path candidate, and pool-aware
-ownership-consistency domain facts. `MO-S.6D-1D-B` implements the locked
-selector, audit attribution, and supported-write enforcement, with FU1 closing
-valid-current/inverse identity retargeting and serializing current Worship
-writes on the ServiceEvent row. `MO-S.6D-1D-C` now implements valid
+ownership-consistency domain facts. `MO-S.6D-1D-B` implements the atomic/stale-
+checked selector, audit attribution, and supported-write enforcement, with
+FU1 closing valid-current/inverse identity retargeting and structural
+ServiceEvent-first ordering. Target SQLite does not provide the formerly implied
+`select_for_update()` event row lock. `MO-S.6D-1D-C` now implements valid
 selected-team operational reachability and fail-closed Board/Team Schedule
 projection. `MO-S.6D-1D-D-0A` closes the planner V1 batch/no-schema audit
 contract, `MO-S.6D-1D-D-1A` implements its read-only signed proposal and
 preview, and `MO-S.6D-1D-D-1A-FU1` implements the typed terminal-blank /
-exact-ID-cycle-closed / true-displaced distinction. `1B` confirmation runtime,
+exact-ID-cycle-closed / true-displaced distinction. Docs-only `1B-A0` records
+the target SQLite limitation and optimistic event scheduling-revision decision.
+Runtime `1B-A1` and `1B-B` confirmation,
 notification, and import slices still
 require their own explicit task approval and repository-truth review. The
 canonical governance and planner decisions are
@@ -978,11 +988,14 @@ docs-only MO-S.6D-0A/FU1/FU2 investigations, and the separately approved
 `MO-S.6D-1C` exact-event planner/coordinator responsibility foundations are
 complete. `MO-S.6D-1D-A` read-only governance and `MO-S.6D-1D-B` narrow
 authorization/mutation enforcement are also complete, including FU1 assignment
-identity and ServiceEvent-serialization closure. `MO-S.6D-1D-C` operational
+identity and structural ServiceEvent-first ordering; A0 corrects the target
+SQLite row-lock claim without changing the implemented domain guard.
+`MO-S.6D-1D-C` operational
 reachability is implemented, docs-only `MO-S.6D-1D-D-0A` closes the planner
 batch/audit decision, `MO-S.6D-1D-D-1A` implements read-only preview, and
-`MO-S.6D-1D-D-1A-FU1` implements the cycle-closed-tail refinement while leaving
-locked confirmation/audit `1B` unimplemented. Any remaining governance
+`MO-S.6D-1D-D-1A-FU1` implements the cycle-closed-tail refinement. Docs-only
+`1B-A0` is complete; runtime Scheduling Revision Foundation `1B-A1` and
+optimistic confirmation/audit `1B-B` remain unimplemented. Any remaining governance
 prerequisite or later MO-S.6 runtime slice
 requires separate explicit approval and repository-truth review.
 
@@ -1279,14 +1292,18 @@ and `MO-S.6D-1C` has implemented the exact-event planner/coordinator
 responsibility source and full-manager lifecycle setup. `MO-S.6D-1D-A` has
 implemented the read-only event applicability/candidate/ownership-consistency
 domain facts, and `MO-S.6D-1D-B` adds their narrow planner/pool-Lead/full-manager
-authorization consumer, locked selector/mutation, audit attribution, and
-supported-write enforcement. `MO-S.6D-1D-C` now adds selected-team operational
+authorization consumer, atomic/stale-checked selector/mutation, audit
+attribution, and supported-write enforcement. `MO-S.6D-1D-C` now adds
+selected-team operational
 reachability on the Board/Team Schedule. Docs-only `MO-S.6D-1D-D-0A` closes
 the planner V1 batch/tail/fingerprint/no-schema audit contract, read-only
 preview `MO-S.6D-1D-D-1A` is implemented, and `1A-FU1` now records the
 preview-evidenced exact-ID cycle-closed safe tail before confirmation exists.
-Locked confirmation `1B` remains
-unimplemented and blocked on downstream event-first serialization closure.
+Attempted row-lock closure `1B-A` stopped without changes on target SQLite;
+docs-only `1B-A0` now closes the one-event scheduling-revision, SQLite writer-
+barrier, supported-write, CAS, and A1/B split decisions. Runtime `1B-A1`
+remains separately approvable and must pass target-like file-backed SQLite
+concurrency tests before separately approved `1B-B` confirmation/audit.
 Notifications, importer runtime, and bulk upload remain unimplemented.
 Remaining MO-S.6D and later slices are not
 authorized by the governance closure or these foundations. Availability,

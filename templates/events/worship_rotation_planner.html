@@ -107,6 +107,12 @@
     <div class="card planner-tail">
         <strong>{% if language == "zh" %}范围结束后被顺延出的团队{% else %}Displaced after selected range{% endif %}:</strong>
         {% if proposal.displaced_tail %}{{ proposal.displaced_tail|ministry_team_name:language }}{% else %}—{% endif %}
+        {% if proposal.tail_resolution.value == "cycle_closed" %}
+        <p>
+            <strong>{% if language == "zh" %}本次顺延在所选范围内完成轮值闭合，没有敬拜团队被遗漏。{% else %}Rotation cycle closes within the selected range. No Worship Team is lost from this shift.{% endif %}</strong>
+        </p>
+        <p class="muted">{% if language == "zh" %}插入的敬拜团队完成了轮值闭合。{% else %}Cycle closed by the inserted Worship Team.{% endif %}</p>
+        {% endif %}
     </div>
     <p class="muted"><strong>{% if language == "zh" %}当前仅提供预览；确认顺延将在后续阶段启用。{% else %}Preview only. Confirmation will be enabled in the next implementation stage.{% endif %}</strong></p>
 </section>

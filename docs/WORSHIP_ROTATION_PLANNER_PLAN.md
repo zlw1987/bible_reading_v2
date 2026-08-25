@@ -1,7 +1,8 @@
 # Worship Rotation Planner V1 Contract
 
 Status: `MO-S.6D-1D-D-0A` docs-only architecture gate and
-`MO-S.6D-1D-D-1A` read-only proposal/preview runtime are complete. The
+`MO-S.6D-1D-D-1A` read-only proposal/preview runtime and
+`MO-S.6D-1D-D-1A-FU1` cycle-closed tail refinement are complete. The
 contextual planner route now builds an explicit exact-event chain, projects
 the deterministic shift and privacy-limited downstream impact, and produces a
 30-minute user-bound signed normalized proposal without writing state.
@@ -114,8 +115,21 @@ selected-team value.
 
 ## 4. Tail-preservation decision
 
-V1 never confirms a proposal that would remove a non-null displaced tail from
-the explicit schedule.
+The docs-only `0A` contract conservatively allowed only a terminal blank. The
+implemented `1A` preview then demonstrated a second deterministic no-loss
+case before any `1B` confirmation writes existed: the non-null displaced tail
+can be the exact same `MinistryTeam` identity as the explicitly inserted team.
+`1A-FU1` therefore defines three typed tail outcomes:
+
+1. `terminal_blank`: the displaced tail is null. This is a safe landing slot.
+2. `cycle_closed`: the displaced tail is non-null and its primary key exactly
+   equals the inserted team's primary key. The selected-range team multiset is
+   preserved, so this tail adds no blocker.
+3. `displaced`: the displaced tail is non-null and its primary key differs from
+   the inserted team's primary key. `DISPLACED_TAIL` remains a blocker.
+
+Terminal-blank and cycle-closed proposals may be confirmable when every other
+rule passes. A true displaced tail remains reviewable but not confirmable.
 
 The preview always shows:
 
@@ -124,9 +138,15 @@ Displaced after selected range: Tn
 范围结束后被顺延出的团队：Tn
 ```
 
-If `Tn` is non-null, the proposal is reviewable but blocked. The operator must
-extend the chain to an existing later Sunday and regenerate until the final
-event is a blank landing slot. No event is created to make such a slot.
+For a true displaced tail, the operator must extend the chain to an existing
+later Sunday and regenerate until the final event is a blank landing slot or
+the exact inserted team closes the selected-range cycle. No event is created
+to make such a slot.
+
+Cycle closure uses only exact `MinistryTeam` identity. Team names, display
+labels, A/C1/C2/C3 conventions, pool position, inferred order, fuzzy matching,
+and historical frequency are irrelevant. This does not store or infer a
+recurring rotation rule, and it does not approve arbitrary tail drop.
 
 An explicit "accept ending the shift here" / tail-drop option is deferred. It
 would be a destructive semantic and requires a separate product decision,
@@ -271,6 +291,8 @@ The normalized payload contains:
 - inserted team ID;
 - before and proposed team IDs per event;
 - displaced-tail team ID or null;
+- normalized tail resolution (`terminal_blank`, `cycle_closed`, or
+  `displaced`), validated against the inserted and displaced-tail IDs;
 - exact event, governance, current-Worship, and downstream-impact fingerprints
   defined below; and
 - a dedicated signing salt/version.
@@ -439,6 +461,11 @@ Scheduler-facing terms are:
 | Generate Preview | 生成预览 |
 | Confirm Shift | 确认顺延 |
 
+A cycle-closed preview is positive informational state, not a blocker: “Rotation
+cycle closes within the selected range. No Worship Team is lost from this
+shift.” / “本次顺延在所选范围内完成轮值闭合，没有敬拜团队被遗漏。” The displaced
+tail identity remains visible for transparent review.
+
 Do not call the operation Auto Rotate, Generate Rotation, or Smart Schedule.
 Do not expose `rotation_anchor_team`, pool/path, fingerprint, or other
 engineering terms to schedulers.
@@ -447,8 +474,9 @@ engineering terms to schedulers.
 
 | Scenario | Preview result | Confirmation |
 | --- | --- | --- |
-| `C1, C2, C3, A`; insert `A` | `A, C1, C2, C3`; displaced tail `A` is visible | Blocked until the chain is extended to a blank landing event; no tail drop in V1 |
+| `C1, C2, C3, A`; insert `A` | `A, C1, C2, C3`; displaced tail `A` is visible and cycle-closed | Allowed if every other rule passes; exact team identities are preserved |
 | Final landing event is blank | Prior last team moves into that exact existing event; displaced tail is blank | Allowed if every other rule passes |
+| `C1, C2, C3`; insert `A` | `A, C1, C2`; displaced tail `C3` is visible | Blocked; this is a true displaced tail, not an accepted tail drop |
 | Combined service | Audience was already changed to Whole Church; `A` is eligible for that event | Allowed only if every shifted team is eligible for its own destination |
 | Audience mismatch | Shifted `C1` is not eligible for an EM-only destination | Whole proposal blocked |
 | `C1, blank, C2` | Interior blank is visible; no jumping over it | Whole proposal blocked; choose a shorter/different chain |
@@ -476,6 +504,16 @@ engineering terms to schedulers.
   authorization, ownership/no-op rules, privacy, signing/expiry/tamper handling,
   and zero writes.
 
+### `MO-S.6D-1D-D-1A-FU1` — cycle-closed tail refinement — IMPLEMENTED
+
+- Keeps the preview read-only and changes only displaced-tail semantics.
+- Adds the immutable typed `terminal_blank` / `cycle_closed` / `displaced`
+  result and includes it in proposal contract version 2.
+- Accepts a non-null tail only when its exact team ID equals the explicitly
+  inserted team ID; decode validates the semantic against both IDs.
+- Adds no rotation sequence, arbitrary tail drop, confirmation action, model,
+  migration, permission, audit, notification, session, or file state.
+
 ### `MO-S.6D-1D-D-1B` — locked confirmation and audit
 
 - Reuse the exact `1A` proposal/revalidation service; do not reimplement shift
@@ -494,9 +532,10 @@ to either `1A` or `1B`.
 
 ## 17. Decisions and remaining gates
 
-This gate closes the V1 product decisions needed for `1A`: exact explicit
-weekly published-future Sunday events, maximum 53, no interior blank, terminal
-blank landing slot, no non-null tail loss, per-destination canonical
+This gate plus the implemented `1A-FU1` refinement closes the V1 product
+decisions needed before `1B`: exact explicit weekly published-future Sunday
+events, maximum 53, no interior blank, terminal blank or exact-ID cycle-closed
+tail preservation, no arbitrary tail loss, per-destination canonical
 eligibility, per-event existing authority, changed-row Worship-assignment
 blocker, narrow roster-free downstream impact, 30-minute user-bound signed
 proposal, and no BatchRun schema.

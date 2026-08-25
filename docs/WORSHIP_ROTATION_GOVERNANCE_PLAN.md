@@ -11,7 +11,8 @@ authorization, mutation enforcement, and narrow Worship Planning UI, with
 implemented `MO-S.6D-1D-C` Worship Team operational reachability with FU1/FU2
 projection-consistency closure, plus the docs-only `MO-S.6D-1D-D-0A`
 Worship Rotation Planner batch contract and implemented read-only proposal/
-preview `MO-S.6D-1D-D-1A`. Governance FU2 finalizes the required event-planner
+preview `MO-S.6D-1D-D-1A`, plus implemented `MO-S.6D-1D-D-1A-FU1`
+cycle-closed tail refinement. Governance FU2 finalizes the required event-planner
 prerequisite and Worship-specific pool semantics. The Campus, pool-
 configuration, event-responsibility, read-only governance, and governed
 single-event mutation and operational-reachability foundations are implemented;
@@ -729,8 +730,13 @@ assignment impact, and never changes audience, assignments, rosters, required
 teams, or planner responsibility.
 
 V1 permits no silent tail loss: an interior blank blocks, while a final blank
-existing event may serve as the landing slot. A non-null displaced tail is
-shown and blocks confirmation until the range is extended and regenerated.
+existing event may serve as the landing slot. Preview evidence from `1A`
+refined the earlier conservative `0A` rule before confirmation existed:
+`1A-FU1` also accepts a non-null tail when its exact `MinistryTeam` ID equals
+the explicitly inserted team ID, because that closes the selected-range cycle
+without losing a team identity. Any other non-null tail remains shown and
+blocked. This is exact identity preservation, not a stored/inferred rotation
+sequence, name/order convention, fuzzy match, or arbitrary tail-drop approval.
 Preview uses a 30-minute user-bound timestamped Django-signed normalized
 proposal. Confirmation is a separately approved locked atomic slice using
 normal per-event saves and one existing-style `LogEntry` per actual change,
@@ -886,14 +892,15 @@ Each slice is separately approvable and must verify repository truth again.
 | 4A | **Read-only Worship applicability, candidate, and ownership-consistency foundation — IMPLEMENTED (`MO-S.6D-1D-A`)** | Side-effect-free domain helper only; reuses pool inspection and current scheduling statuses; no permission, selector, endpoint, enforcement, model, or migration | audience union/fail-closed applicability, active-primary descendant candidates, off-team/out-of-scope/multiple/duplicate consistency, privacy/read-only and authority boundaries | No rendered QA; no user-visible behavior changed |
 | 4B | **Narrow Worship Team authorization, write enforcement, and UI — IMPLEMENTED (`MO-S.6D-1D-B`, identity/serialization closure in `MO-S.6D-1D-B-FU1`)** | Consumes 4A from narrow GET/POST plus existing anchor/Worship-assignment write paths; pool Leads/planners receive only this action; current Worship identity is immutable and supported writes serialize on ServiceEvent; no model migration | actual denial/allow rules, locked-current reauthorization, stale form, combined union, legacy-form/admin/assignment bypass closure, cross-path identity retarget rejection, event-first lock path, LogEntry attribution, no roster move or unrelated writes | Rendered Worship Team selector, bilingual copy, conflict UX, hidden blocked controls, and narrow-context privacy verified in the implementation slices |
 | 5 | **Worship Team operational reachability — IMPLEMENTED (`MO-S.6D-1D-C`; projection corrections `MO-S.6D-1D-C-FU1/FU2`)** | Team Schedule/Board queryset and projection change only; exact-team assignment permission unchanged; canonical eligibility fails closed; invalid raw selection never suppresses independent generic required/assignment participation; canonical ownership conflicts/ambiguity are review-only and non-actionable; no migration | selected-team-only rows, empty-coverage presentation, valid-selection de-dup, invalid required/assignment projection, off-team/out-of-scope conflict, multiple/duplicate ambiguity, global/exact-team behavior, planner/pool-Lead boundary, change/removal, privacy, no coverage/assignment/required-team writes | Rendered English desktop and Chinese mobile Team Schedule/Board QA completed in the implementation slice; FU1/FU2 are focused projection-only and test-verified |
-| 6 | **Worship Rotation Planner — DOCS CONTRACT COMPLETE (`MO-S.6D-1D-D-0A`); READ-ONLY PREVIEW IMPLEMENTED (`MO-S.6D-1D-D-1A`); `1B` UNIMPLEMENTED** | Existing selector retains one-Sunday changes; `1A` adds the side-effect-free signed proposal/preview with no durable state; locked atomic confirmation/audit remains `1B`; no rule engine, roster mutation, or BatchRun schema | `1A`: exact event-chain/range/tail rules, destination eligibility, per-event authority, roster blocker, roster-free downstream impact, signed expiry/tamper, privacy, and zero writes. `1B`: stale/all-or-nothing rollback, shared-operation LogEntry audit, and downstream serialization closure remain future | `1A` preview/conflict UX verified in its implementation slice; confirmation/result UX remains required for `1B` |
+| 6 | **Worship Rotation Planner — DOCS CONTRACT COMPLETE (`MO-S.6D-1D-D-0A`); READ-ONLY PREVIEW IMPLEMENTED (`MO-S.6D-1D-D-1A`); CYCLE-CLOSED TAIL FU IMPLEMENTED (`MO-S.6D-1D-D-1A-FU1`); `1B` UNIMPLEMENTED** | Existing selector retains one-Sunday changes; `1A` adds the side-effect-free signed proposal/preview with no durable state; FU1 accepts only terminal blank or an exact-ID inserted-team cycle closure while any true displaced tail stays blocked; locked atomic confirmation/audit remains `1B`; no rule engine, roster mutation, or BatchRun schema | `1A/FU1`: exact event-chain/range/typed-tail rules, exact identity/no-name inference, signed semantic consistency, destination eligibility, per-event authority, roster blocker, roster-free downstream impact, privacy, and zero writes. `1B`: stale/all-or-nothing rollback, shared-operation LogEntry audit, and downstream serialization closure remain future | `1A/FU1` preview/conflict/cycle-closed UX verified in their implementation slices; confirmation/result UX remains required for `1B` |
 | 7 | **Direct Worship Team change notification producer** | Ministry-owned post-commit producer through Core port; no notification permission/schema inference; summarized batch delivery | exact role/date recipients, required/additional downstream bounds, dedupe, language/privacy, disabled-module no-op, rollback/no-emission | Required for recipient-safe copy/target QA |
 | 8 | **Excel dependency/parser + preview** | Reviewed `.xlsx` dependency and read-only upload/preview; staff/superuser only; no data write or migration expected | contract/header/date/cache/token/profile/identity classification, roster/downstream impact, size/privacy/tamper/expiry tests | Required for upload and preview |
 | 9 | **Excel exact match/update confirmation** | Atomic existing-event selected-team writes only; no new event/required team/assignment; no schema if signed proposal remains sufficient | reauthorization, target locking/fingerprint, roster conflict, stale rollback, idempotency, eligible mapping, unsupported rows, audit attribution | Required for confirmation/result UX |
 | 10 | **Later assignment import** | Deferred; would write TeamAssignment/member data and needs exact-team plus bulk authority and identity proof | unresolved/ambiguous people, explicit aliases, team ownership, no user creation, rollback/idempotency | Required; only after operational evidence |
 
-Dependencies: slices 1, 2, 3, 4A, 4B, 5, and slice 6 read-only preview `1A`
-are implemented; slice 6 locked confirmation `1B` remains future. Slice 1 remains
+Dependencies: slices 1, 2, 3, 4A, 4B, 5, and slice 6 read-only preview
+`1A` plus its cycle-closed-tail FU1 are implemented; slice 6 locked
+confirmation `1B` remains future. Slice 1 remains
 independent but should precede real multi-campus setup. Slices 2 and 3 both
 precede 4B: pool configuration is required for pool-based authority/
 applicability, and the implemented exact-event planner responsibility is

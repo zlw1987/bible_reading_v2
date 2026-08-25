@@ -20,9 +20,12 @@ from ministry.models import (
     TeamMembership,
 )
 from ministry.services.worship_rotation_planner import (
+    PLANNER_CONTRACT_VERSION,
+    PLANNER_SIGNING_SALT,
     PlannerBlocker,
     SignedProposalError,
     SignedProposalUserMismatch,
+    TailResolution,
     build_worship_rotation_proposal,
     decode_signed_worship_rotation_proposal,
 )
@@ -152,13 +155,72 @@ class WorshipRotationProposalDomainTests(WorshipRotationPlannerTestBase):
             [self.c2, self.c1, self.c2],
         )
         self.assertIsNone(proposal.displaced_tail)
+        self.assertEqual(proposal.tail_resolution, TailResolution.TERMINAL_BLANK)
+        self.assertEqual(
+            proposal.normalized_payload["tail_resolution"], "terminal_blank"
+        )
 
-    def test_non_null_tail_is_prominent_review_blocker(self):
+    def test_two_row_cycle_closure_is_confirmable(self):
         events = [self.event(0, self.c1), self.event(1, self.c2)]
         proposal = self.proposal(events)
         self.assertEqual(proposal.displaced_tail, self.c2)
+        self.assertEqual(proposal.tail_resolution, TailResolution.CYCLE_CLOSED)
+        self.assertNotIn(PlannerBlocker.DISPLACED_TAIL, proposal.blockers)
+        self.assertTrue(proposal.confirmable)
+
+    def test_longer_cycle_closure_preserves_team_identity_multiset(self):
+        c3 = self.team("Chinese Worship Team Three", self.cm_pool)
+        team_a = self.team("Chinese Worship Team A", self.cm_pool)
+        events = [
+            self.event(0, self.c1),
+            self.event(1, self.c2),
+            self.event(2, c3),
+            self.event(3, team_a),
+        ]
+        proposal = self.proposal(events, inserted=team_a)
+
+        self.assertEqual(
+            [row.proposed_team for row in proposal.rows],
+            [team_a, self.c1, self.c2, c3],
+        )
+        self.assertEqual(proposal.tail_resolution, TailResolution.CYCLE_CLOSED)
+        self.assertCountEqual(
+            [row.before_team.pk for row in proposal.rows],
+            [row.proposed_team.pk for row in proposal.rows],
+        )
+        self.assertTrue(proposal.confirmable)
+
+    def test_true_non_null_tail_is_prominent_review_blocker(self):
+        team_a = self.team("Chinese Worship Team A", self.cm_pool)
+        events = [self.event(0, self.c1), self.event(1, self.c2)]
+        proposal = self.proposal(events, inserted=team_a)
+        self.assertEqual(proposal.displaced_tail, self.c2)
+        self.assertEqual(proposal.tail_resolution, TailResolution.DISPLACED)
         self.assertIn(PlannerBlocker.DISPLACED_TAIL, proposal.blockers)
         self.assertFalse(proposal.confirmable)
+
+    def test_same_team_noop_beginning_still_cycle_closes(self):
+        events = [
+            self.event(0, self.c1),
+            self.event(1, self.c2),
+            self.event(2, self.c1),
+        ]
+        proposal = self.proposal(events, inserted=self.c1)
+
+        self.assertFalse(proposal.rows[0].changed)
+        self.assertEqual(proposal.tail_resolution, TailResolution.CYCLE_CLOSED)
+        self.assertNotIn(PlannerBlocker.DISPLACED_TAIL, proposal.blockers)
+        self.assertTrue(proposal.confirmable)
+
+    def test_tail_identity_uses_exact_primary_key_not_display_name(self):
+        same_name_team = self.team(self.c2.name, self.cm_pool)
+        events = [self.event(0, self.c1), self.event(1, same_name_team)]
+        proposal = self.proposal(events, inserted=self.c2)
+
+        self.assertEqual(proposal.displaced_tail.name, proposal.inserted_team.name)
+        self.assertNotEqual(proposal.displaced_tail.pk, proposal.inserted_team.pk)
+        self.assertEqual(proposal.tail_resolution, TailResolution.DISPLACED)
+        self.assertIn(PlannerBlocker.DISPLACED_TAIL, proposal.blockers)
 
     def test_interior_blank_and_weekly_gap_block(self):
         blank = [self.event(0, self.c1), self.event(1, None), self.event(2, None)]
@@ -246,12 +308,44 @@ class WorshipRotationProposalDomainTests(WorshipRotationPlannerTestBase):
         self.assertIn([self.e1.pk, self.em_pool.pk], eligible)
 
     def test_unauthorized_changed_middle_row_blocks_whole_proposal(self):
-        events = [self.event(0, self.c1), self.event(1, self.c2), self.event(2, None)]
+        events = [
+            self.event(0, self.c1),
+            self.event(1, self.c2),
+            self.event(2, self.c2),
+        ]
         ServiceEventPlannerAssignment.objects.create(service_event=events[0], user=self.other)
         ServiceEventPlannerAssignment.objects.create(service_event=events[2], user=self.other)
         proposal = self.proposal(events, user=self.other)
+        self.assertEqual(proposal.tail_resolution, TailResolution.CYCLE_CLOSED)
         self.assertIn(PlannerBlocker.UNAUTHORIZED, proposal.rows[1].blockers)
         self.assertFalse(proposal.confirmable)
+
+    def test_cycle_closure_does_not_override_other_blockers(self):
+        destination_events = [
+            self.event(6, self.c1),
+            self.event(7, self.e1, audience=self.em),
+        ]
+        destination = self.proposal(destination_events, inserted=self.e1)
+        self.assertEqual(destination.tail_resolution, TailResolution.CYCLE_CLOSED)
+        self.assertIn(
+            PlannerBlocker.DESTINATION_INELIGIBLE,
+            destination.blockers,
+        )
+        self.assertFalse(destination.confirmable)
+
+        assignment_events = [self.event(9, self.c1), self.event(10, self.c2)]
+        self.stored_assignment(assignment_events[0], self.c1)
+        assignment = self.proposal(assignment_events, inserted=self.c2)
+        self.assertEqual(assignment.tail_resolution, TailResolution.CYCLE_CLOSED)
+        self.assertIn(PlannerBlocker.WORSHIP_ASSIGNMENT, assignment.blockers)
+        self.assertFalse(assignment.confirmable)
+
+        conflict_events = [self.event(12, self.c1), self.event(13, self.c2)]
+        self.stored_assignment(conflict_events[0], self.c2)
+        conflict = self.proposal(conflict_events, inserted=self.c2)
+        self.assertEqual(conflict.tail_resolution, TailResolution.CYCLE_CLOSED)
+        self.assertIn(PlannerBlocker.OWNERSHIP_CONFLICT, conflict.blockers)
+        self.assertFalse(conflict.confirmable)
 
     def test_changed_assignment_blocks_but_noop_consistent_is_informational(self):
         changed = self.event(0, self.c1)
@@ -349,6 +443,8 @@ class WorshipRotationSigningTests(WorshipRotationPlannerTestBase):
             self.proposal_value.signed_payload, user=self.staff
         )
         self.assertEqual(payload, self.proposal_value.normalized_payload)
+        self.assertEqual(payload["contract_version"], PLANNER_CONTRACT_VERSION)
+        self.assertEqual(payload["tail_resolution"], "terminal_blank")
         with self.assertRaises(SignedProposalUserMismatch):
             decode_signed_worship_rotation_proposal(
                 self.proposal_value.signed_payload, user=self.other
@@ -365,10 +461,27 @@ class WorshipRotationSigningTests(WorshipRotationPlannerTestBase):
         payload = dict(self.proposal_value.normalized_payload)
         payload["contract_version"] = 999
         wrong = signing.dumps(
-            payload, compress=True, salt="ministry.worship-rotation-planner.v1"
+            payload, compress=True, salt=PLANNER_SIGNING_SALT
         )
         with self.assertRaises(SignedProposalError):
             decode_signed_worship_rotation_proposal(wrong, user=self.staff)
+
+    def test_inconsistent_tail_resolution_is_rejected(self):
+        payload = dict(self.proposal_value.normalized_payload)
+        payload["tail_resolution"] = TailResolution.CYCLE_CLOSED.value
+        inconsistent = signing.dumps(
+            payload,
+            compress=True,
+            salt=PLANNER_SIGNING_SALT,
+        )
+
+        with self.assertRaisesMessage(
+            SignedProposalError, "Inconsistent tail resolution."
+        ):
+            decode_signed_worship_rotation_proposal(
+                inconsistent,
+                user=self.staff,
+            )
 
 
 class WorshipRotationPlannerViewTests(WorshipRotationPlannerTestBase):
@@ -435,11 +548,63 @@ class WorshipRotationPlannerViewTests(WorshipRotationPlannerTestBase):
         self.assertContains(response, "After")
         self.assertContains(response, "Downstream teams to review")
         self.assertContains(response, "Displaced after selected range")
+        self.assertNotContains(response, "Rotation cycle closes")
         self.assertNotContains(response, "Confirm Shift")
         self.assertNotContains(response, "PRIVATE ROSTER NAME")
         self.assertNotContains(response, "private-roster@example.com")
         self.assertNotContains(response, "PRIVATE ASSIGNMENT NOTE")
         self.assertNotContains(response, "PRIVATE CONFIRMATION NOTE")
+
+    def test_cycle_closed_preview_is_positive_and_bilingual(self):
+        events = [self.event(3, self.c1), self.event(4, self.c2)]
+        response = self.client.post(
+            reverse("worship_rotation_planner"),
+            {"events": [event.pk for event in events], "inserted_team": self.c2.pk},
+        )
+        self.assertContains(response, "Confirmable")
+        self.assertContains(
+            response, "Rotation cycle closes within the selected range"
+        )
+        self.assertContains(response, "No Worship Team is lost from this shift")
+        self.assertContains(response, "Cycle closed by the inserted Worship Team")
+        self.assertNotContains(response, "Review required")
+        self.assertNotContains(response, "Confirm Shift")
+
+        session = self.client.session
+        session["language"] = "zh"
+        session.save()
+        response = self.client.post(
+            reverse("worship_rotation_planner"),
+            {"events": [event.pk for event in events], "inserted_team": self.c2.pk},
+        )
+        self.assertContains(response, "可确认")
+        self.assertContains(response, "本次顺延在所选范围内完成轮值闭合")
+        self.assertContains(response, "没有敬拜团队被遗漏")
+        self.assertNotContains(response, "需要检查")
+
+    def test_true_displaced_tail_remains_review_required_and_bilingual(self):
+        team_a = self.team("Chinese Worship Team A", self.cm_pool)
+        events = [self.event(3, self.c1), self.event(4, self.c2)]
+        response = self.client.post(
+            reverse("worship_rotation_planner"),
+            {"events": [event.pk for event in events], "inserted_team": team_a.pk},
+        )
+        self.assertContains(response, "Review required")
+        self.assertContains(
+            response, "A Worship Team would be displaced after the selected range."
+        )
+        self.assertNotContains(response, "Rotation cycle closes")
+
+        session = self.client.session
+        session["language"] = "zh"
+        session.save()
+        response = self.client.post(
+            reverse("worship_rotation_planner"),
+            {"events": [event.pk for event in events], "inserted_team": team_a.pk},
+        )
+        self.assertContains(response, "需要检查")
+        self.assertContains(response, "范围结束后仍有一个敬拜团队被顺延出范围")
+        self.assertNotContains(response, "完成轮值闭合")
 
     def test_get_and_preview_post_are_zero_write_no_session_or_notification(self):
         payloads = []

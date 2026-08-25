@@ -25,7 +25,7 @@ from .worship_governance import (
 )
 
 
-PLANNER_CONTRACT_VERSION = 1
+PLANNER_CONTRACT_VERSION = 2
 PLANNER_SIGNING_VERSION = 1
 PLANNER_OPERATION_TYPE = "insert_shift_later"
 PLANNER_SIGNING_SALT = "ministry.worship-rotation-planner.v1"
@@ -49,6 +49,12 @@ class PlannerBlocker(StrEnum):
     WORSHIP_ASSIGNMENT = "worship_assignment"
     OWNERSHIP_CONFLICT = "ownership_conflict"
     DISPLACED_TAIL = "displaced_tail"
+
+
+class TailResolution(StrEnum):
+    TERMINAL_BLANK = "terminal_blank"
+    CYCLE_CLOSED = "cycle_closed"
+    DISPLACED = "displaced"
 
 
 class SignedProposalError(ValueError):
@@ -91,6 +97,7 @@ class WorshipRotationProposal:
     inserted_team: MinistryTeam | None
     rows: tuple[PlannerRow, ...]
     displaced_tail: MinistryTeam | None
+    tail_resolution: TailResolution
     blockers: tuple[PlannerBlocker, ...]
     normalized_payload: dict
     signed_payload: str
@@ -222,6 +229,20 @@ def _unique(values):
     return tuple(dict.fromkeys(values))
 
 
+def _resolve_tail_resolution(*, inserted_team, displaced_tail):
+    if displaced_tail is None:
+        return TailResolution.TERMINAL_BLANK
+    if inserted_team is not None and displaced_tail.pk == inserted_team.pk:
+        return TailResolution.CYCLE_CLOSED
+    return TailResolution.DISPLACED
+
+
+def _cycle_closed_multiset_is_preserved(before_teams, proposed_teams):
+    before_ids = sorted(team.pk for team in before_teams if team is not None)
+    proposed_ids = sorted(team.pk for team in proposed_teams if team is not None)
+    return before_ids == proposed_ids
+
+
 def build_worship_rotation_proposal(*, user, event_ids, inserted_team, now=None):
     """Build and sign one deterministic, side-effect-free shift proposal."""
 
@@ -269,12 +290,23 @@ def build_worship_rotation_proposal(*, user, event_ids, inserted_team, now=None)
     if any(team is None for team in before_teams[:-1]):
         global_blockers.append(PlannerBlocker.INTERIOR_BLANK)
     displaced_tail = before_teams[-1] if before_teams else None
-    if displaced_tail is not None:
+    tail_resolution = _resolve_tail_resolution(
+        inserted_team=inserted_team,
+        displaced_tail=displaced_tail,
+    )
+    if tail_resolution == TailResolution.DISPLACED:
         global_blockers.append(PlannerBlocker.DISPLACED_TAIL)
 
     proposed_teams = []
     if events:
         proposed_teams = [inserted_team, *before_teams[:-1]]
+    if (
+        tail_resolution == TailResolution.CYCLE_CLOSED
+        and not _cycle_closed_multiset_is_preserved(before_teams, proposed_teams)
+    ):
+        raise ValueError(
+            "Cycle-closed shift did not preserve the selected-range team multiset."
+        )
 
     rows = []
     all_blockers = list(global_blockers)
@@ -350,6 +382,7 @@ def build_worship_rotation_proposal(*, user, event_ids, inserted_team, now=None)
             getattr(team, "pk", None) for team in proposed_teams
         ],
         "displaced_tail_team_id": getattr(displaced_tail, "pk", None),
+        "tail_resolution": tail_resolution.value,
         "fingerprints": [row.fingerprints for row in rows],
     }
     signed_payload = signing.dumps(
@@ -363,6 +396,7 @@ def build_worship_rotation_proposal(*, user, event_ids, inserted_team, now=None)
         inserted_team=inserted_team,
         rows=tuple(rows),
         displaced_tail=displaced_tail,
+        tail_resolution=tail_resolution,
         blockers=_unique(all_blockers),
         normalized_payload=payload,
         signed_payload=signed_payload,
@@ -402,6 +436,12 @@ def decode_signed_worship_rotation_proposal(
     before_ids = payload.get("before_team_ids")
     proposed_ids = payload.get("proposed_team_ids")
     fingerprints = payload.get("fingerprints")
+    try:
+        tail_resolution = TailResolution(payload.get("tail_resolution"))
+    except (TypeError, ValueError) as exc:
+        raise SignedProposalError("Invalid tail resolution.") from exc
+    inserted_team_id = payload.get("inserted_team_id")
+    displaced_tail_team_id = payload.get("displaced_tail_team_id")
     team_id_values = [
         payload.get("inserted_team_id"),
         payload.get("displaced_tail_team_id"),
@@ -423,4 +463,18 @@ def decode_signed_worship_rotation_proposal(
         or any(not isinstance(item, dict) for item in fingerprints)
     ):
         raise SignedProposalError("Invalid proposal shape.")
+    tail_resolution_is_consistent = (
+        tail_resolution == TailResolution.TERMINAL_BLANK
+        and displaced_tail_team_id is None
+    ) or (
+        tail_resolution == TailResolution.CYCLE_CLOSED
+        and inserted_team_id is not None
+        and displaced_tail_team_id == inserted_team_id
+    ) or (
+        tail_resolution == TailResolution.DISPLACED
+        and displaced_tail_team_id is not None
+        and displaced_tail_team_id != inserted_team_id
+    )
+    if not tail_resolution_is_consistent:
+        raise SignedProposalError("Inconsistent tail resolution.")
     return payload

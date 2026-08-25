@@ -11,7 +11,8 @@ legacy-write enforcement, and narrow planning UI, with
 plus `MO-S.6D-1D-C` Worship Team operational reachability and its FU1/FU2
 projection-consistency closures, plus the docs-only `MO-S.6D-1D-D-0A`
 Worship Rotation Planner contract and implemented read-only proposal/preview
-`MO-S.6D-1D-D-1A`, plus
+`MO-S.6D-1D-D-1A`, plus implemented cycle-closed tail refinement
+`MO-S.6D-1D-D-1A-FU1`, plus
 the MO-S.6D-0A workbook/readiness investigation plus MO-S.6D-0A-FU1/FU2
 multi-campus Worship rotation governance closure. Locked planner confirmation/
 audit `1B` and remaining MO-S.6D runtime slices remain separately scoped and
@@ -132,7 +133,9 @@ provides the narrow Worship Team authorization and selector/mutation UI and
 enforces ownership on supported existing assignment writes. `MO-S.6D-1D-C`
 now provides selected-team operational reachability on Team Schedule and the
 Sunday Board without false coverage. `MO-S.6D-1D-D-1A` now provides the
-read-only Worship Rotation Planner proposal/preview. The system still does not
+read-only Worship Rotation Planner proposal/preview, and `1A-FU1`
+distinguishes terminal blank, exact-ID cycle-closed, and true displaced tail
+outcomes without adding writes. The system still does not
 provide locked planner confirmation/audit, direct Worship Team change notifications, Excel
 dependency/parser/import runtime, or the MO-S.6E roster-change staleness
 mechanism.
@@ -740,7 +743,8 @@ tests and limited-trial review pass.
   change path. The docs-only contract in
   [`WORSHIP_ROTATION_PLANNER_PLAN.md`](WORSHIP_ROTATION_PLANNER_PLAN.md) limits
   planner V1 to a bounded insert/shift of later explicit selections, with a
-  terminal blank landing slot, no non-null tail loss, per-destination candidate
+  terminal blank landing slot or exact-ID inserted-team cycle closure, no
+  arbitrary tail loss, per-destination candidate
   validation, per-event authority, roster blockers, a 30-minute user-bound
   signed proposal, and shared-operation per-event `LogEntry` audit without a
   BatchRun schema. Read-only preview `1A` is implemented; locked confirmation
@@ -767,10 +771,13 @@ tests and limited-trial review pass.
 - Product split: the existing selector owns one Sunday; planner V1 owns only
   Insert / Shift Later Worship Teams over 2 through 53 exact published future
   Sunday Service events.
-- Safety: no interior blank, final blank landing slot, no non-null displaced
-  tail confirmation, destination-specific canonical eligibility, per-event
-  existing authority, and any current Worship assignment blocking an actual
-  changed row.
+- Historical `0A` safety decision: no interior blank, final blank landing slot,
+  and no non-null displaced-tail confirmation. Implemented `1A` preview later
+  supplied evidence for the narrow `1A-FU1` refinement below; this chronology
+  is retained rather than rewriting `0A` as though it already contained it.
+- Other safety: destination-specific canonical eligibility, per-event existing
+  authority, and any current Worship assignment blocking an actual changed
+  row.
 - Proposal/audit: 30-minute user-bound Django-signed normalized proposal;
   normal per-event saves and one same-operation-ID `LogEntry` per actual change;
   no durable BatchRun model for V1.
@@ -795,6 +802,24 @@ tests and limited-trial review pass.
   and displaced tail. It intentionally has no Confirm Shift control.
 - Remaining: `1B` is unimplemented and remains blocked on the documented
   downstream event-first serialization closure.
+
+### MO-S.6D-1D-D-1A-FU1 — Cycle-closed shift preview
+
+- Status: implemented as a read-only product-contract refinement with no
+  schema, dependency, permission, audit, notification, session/file state, or
+  confirmation action.
+- Evidence chronology: `0A` selected terminal-blank-only conservatively; real
+  `1A` preview showed that a non-null tail exactly equal to the inserted team
+  preserves the selected-range team multiset; FU1 refines the contract before
+  any `1B` writes exist.
+- Typed result: `terminal_blank` is safe; `cycle_closed` is safe when the exact
+  displaced-tail team primary key equals the exact inserted-team primary key;
+  every other non-null tail is `displaced` and keeps `DISPLACED_TAIL`.
+- Signed boundary: proposal contract version 2 includes the non-sensitive tail
+  semantic, and decode rejects missing, unknown, or ID-inconsistent values.
+- Identity boundary: team name, A/C1/C2/C3 labels, pool position, inferred
+  order, fuzzy matching, and history do not participate. This stores no
+  rotation rule and approves no arbitrary tail drop.
 
 ### MO-S.6D-0A — Workbook Contract & Imported-Sunday Readiness
 

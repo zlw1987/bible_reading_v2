@@ -9,6 +9,11 @@ urlpatterns = [
         views.worship_planning,
         name="worship_planning",
     ),
+    path(
+        "events/worship-planning/rotation/",
+        views.worship_rotation_planner,
+        name="worship_rotation_planner",
+    ),
     path("events/new/", views.create_service_event, name="create_service_event"),
     path(
         "events/recurring/new/",

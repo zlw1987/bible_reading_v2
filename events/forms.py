@@ -464,6 +464,76 @@ class WorshipTeamSelectionForm(forms.Form):
         )
 
 
+class RotationPlannerEventChoiceField(forms.ModelMultipleChoiceField):
+    def __init__(self, *args, language="en", **kwargs):
+        self.language = language
+        super().__init__(*args, **kwargs)
+
+    def label_from_instance(self, event):
+        local_start = timezone.localtime(event.start_datetime)
+        timestamp = local_start.strftime("%Y-%m-%d %H:%M")
+        return f"{timestamp} — {event.get_title(self.language)}"
+
+
+class WorshipRotationPlannerForm(forms.Form):
+    events = RotationPlannerEventChoiceField(
+        queryset=ServiceEvent.objects.none(),
+        widget=forms.CheckboxSelectMultiple,
+    )
+    inserted_team = MinistryTeamChoiceField(
+        queryset=MinistryTeam.objects.none(),
+        required=True,
+    )
+
+    def __init__(self, *args, language="en", events=(), candidates=(), **kwargs):
+        super().__init__(*args, **kwargs)
+        self.language = language
+        event_ids = [event.pk for event in events]
+        candidate_ids = [candidate.team.pk for candidate in candidates]
+        self.fields["events"].queryset = (
+            ServiceEvent.objects.filter(pk__in=event_ids)
+            .select_related("rotation_anchor_team")
+            .order_by("start_datetime", "id")
+        )
+        self.fields["events"].language = language
+        self.fields["inserted_team"].queryset = MinistryTeam.objects.filter(
+            pk__in=candidate_ids
+        ).order_by("name", "name_en", "id")
+        self.fields["inserted_team"].language = language
+        if language == "zh":
+            self.fields["events"].label = "明确选择每个主日聚会（2–53 场）"
+            self.fields["events"].help_text = (
+                "若同一主日有多场聚会，请明确选择其中一场；系统不会自动代选。"
+            )
+            self.fields["inserted_team"].label = "插入的敬拜团队"
+        else:
+            self.fields["events"].label = (
+                "Explicitly select each Sunday event (2–53 events)"
+            )
+            self.fields["events"].help_text = (
+                "When a Sunday has parallel services, explicitly choose one; "
+                "the planner never chooses automatically."
+            )
+            self.fields["inserted_team"].label = "Inserted Worship Team"
+
+    def clean_events(self):
+        events = list(self.cleaned_data["events"])
+        if not 2 <= len(events) <= 53:
+            raise ValidationError(
+                "请选择 2 至 53 场聚会。"
+                if self.language == "zh"
+                else "Select between 2 and 53 events."
+            )
+        local_dates = [timezone.localtime(event.start_datetime).date() for event in events]
+        if len(set(local_dates)) != len(local_dates):
+            raise ValidationError(
+                "同一主日只能明确选择一场聚会。"
+                if self.language == "zh"
+                else "Select exactly one event for each represented Sunday."
+            )
+        return events
+
+
 class PlannerUserChoiceField(forms.ModelChoiceField):
     def label_from_instance(self, user):
         full_name = user.get_full_name().strip()

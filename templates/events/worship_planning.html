@@ -18,6 +18,20 @@
     </p>
 </div>
 
+{% if rotation_planner_available %}
+<section class="card">
+    <h2 class="card-title">{% if language == "zh" %}敬拜轮值规划{% else %}Rotation Planner{% endif %}</h2>
+    <p class="muted">
+        {% if language == "zh" %}为明确选择的一系列主日聚会预览“顺延后续敬拜团队”。{% else %}Preview “Shift later Worship Teams” across an explicitly selected Sunday event chain.{% endif %}
+    </p>
+    <div class="actions">
+        <a class="button" href="{% url 'worship_rotation_planner' %}">
+            {% if language == "zh" %}打开敬拜轮值规划{% else %}Open Rotation Planner{% endif %}
+        </a>
+    </div>
+</section>
+{% endif %}
+
 {% if planning_rows %}
 <div class="stack">
     {% for row in planning_rows %}

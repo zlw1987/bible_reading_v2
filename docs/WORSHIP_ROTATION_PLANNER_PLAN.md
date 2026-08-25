@@ -1,10 +1,14 @@
 # Worship Rotation Planner V1 Contract
 
-Status: `MO-S.6D-1D-D-0A` docs-only architecture and repository-truth gate
-complete. No planner runtime, route, form, template, model, migration,
-dependency, notification, management command, or data change is implemented by
-this document. Runtime remains split into separately approvable `1A` read-only
-preview and `1B` locked confirmation/audit slices.
+Status: `MO-S.6D-1D-D-0A` docs-only architecture gate and
+`MO-S.6D-1D-D-1A` read-only proposal/preview runtime are complete. The
+contextual planner route now builds an explicit exact-event chain, projects
+the deterministic shift and privacy-limited downstream impact, and produces a
+30-minute user-bound signed normalized proposal without writing state.
+`MO-S.6D-1D-D-1B` locked confirmation/audit remains unimplemented and blocked
+on the downstream event-first serialization closure below. No planner model,
+migration, dependency, confirmation write, audit write, notification, session
+proposal, temp file, or data change is implemented by `1A`.
 
 This document owns the batch-planner contract. The broader Worship invariants
 remain canonical in
@@ -457,15 +461,18 @@ engineering terms to schedulers.
 
 ## 16. Runtime implementation split
 
-### `MO-S.6D-1D-D-1A` — read-only proposal and preview
+### `MO-S.6D-1D-D-1A` — read-only proposal and preview — IMPLEMENTED
 
-- Add the side-effect-free normalized proposal/fingerprint service.
-- Add the contextual range/insert-team form and preview UI.
-- Generate the signed, user-bound, expiring payload.
-- Project the narrow downstream impact and every blocker/tail state.
-- Write nothing on GET or preview POST: no event, assignment, audit,
+- `ministry.services.worship_rotation_planner` implements the side-effect-free
+  normalized proposal/fingerprint/signing service reusable by `1B`.
+- `/events/worship-planning/rotation/` provides the contextual exact-event and
+  inserted-team form plus bilingual preview; parallel same-Sunday services
+  remain separate explicit choices and are never auto-selected.
+- The preview generates the signed, user-bound, expiring payload and projects
+  the narrow downstream impact plus every blocker/tail state.
+- GET and preview POST write nothing: no event, assignment, audit,
   notification, session, temp-file, or model row.
-- Test exact range/gaps, deterministic shift, source/destination eligibility,
+- Focused tests cover exact range/gaps, deterministic shift, source/destination eligibility,
   authorization, ownership/no-op rules, privacy, signing/expiry/tamper handling,
   and zero writes.
 
@@ -500,4 +507,3 @@ behavior during its repository-truth gate. If that closure cannot be made
 safely within `1B`, stop before confirmation runtime and present either a
 version/audit schema or a narrower impact-staleness promise for explicit product
 decision.
-

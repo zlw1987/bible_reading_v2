@@ -23,13 +23,19 @@ from ministry.services.assignment_coverage import (
 )
 from ministry.services.worship_governance import (
     WorshipOwnershipConsistencyState,
+    eligible_worship_team_candidates,
     inspect_worship_ownership_consistency,
+)
+from ministry.services.worship_rotation_planner import (
+    PlannerBlocker,
+    build_worship_rotation_proposal,
 )
 
 from .forms import (
     RecurringServiceEventForm,
     ServiceEventForm,
     ServiceEventPlannerAssignmentForm,
+    WorshipRotationPlannerForm,
     WorshipTeamSelectionForm,
 )
 from .models import (
@@ -235,6 +241,85 @@ def worship_planning_rows(user, language):
             }
         )
     return rows
+
+
+def worship_rotation_planner_events_for_user(user):
+    """Exact future Sunday choices bounded by existing per-event authority."""
+
+    now = timezone.now()
+    events = (
+        ServiceEvent.objects.filter(
+            event_type=ServiceEvent.EVENT_SUNDAY_SERVICE,
+            status=ServiceEvent.STATUS_PUBLISHED,
+            start_datetime__gt=now,
+            start_datetime__lte=now
+            + timezone.timedelta(days=WORSHIP_PLANNING_HORIZON_DAYS),
+        )
+        .select_related("rotation_anchor_team", "host_language_unit")
+        .prefetch_related("audience_scope_links__unit")
+        .order_by("start_datetime", "id")
+    )
+    return [
+        event
+        for event in events
+        if timezone.localtime(event.start_datetime).weekday() == 6
+        and can_change_worship_team(user, event)
+    ]
+
+
+def _planner_candidate_union(events):
+    candidates_by_id = {}
+    for event in events:
+        for candidate in eligible_worship_team_candidates(event):
+            candidates_by_id[candidate.team.pk] = candidate
+    return tuple(
+        sorted(
+            candidates_by_id.values(),
+            key=lambda item: (
+                item.team.name,
+                item.team.name_en,
+                item.team.pk,
+            ),
+        )
+    )
+
+
+def _planner_blocker_text(language, blocker):
+    labels = {
+        "en": {
+            PlannerBlocker.CHAIN_LENGTH: "Select between 2 and 53 exact events.",
+            PlannerBlocker.DUPLICATE_EVENT: "Each exact event may appear only once.",
+            PlannerBlocker.EVENT_NOT_FOUND: "One or more selected events are no longer available.",
+            PlannerBlocker.INVALID_EVENT: "Every event must be a published future Sunday Service.",
+            PlannerBlocker.NOT_SUNDAY: "Every selected event must start on a local Sunday.",
+            PlannerBlocker.SAME_SUNDAY: "Choose exactly one event for each represented Sunday.",
+            PlannerBlocker.WEEKLY_GAP: "The selected Sundays must be exactly seven days apart.",
+            PlannerBlocker.INTERIOR_BLANK: "An interior Worship Team is blank; the shift cannot jump over it.",
+            PlannerBlocker.INVALID_SOURCE: "The stored Worship Team is no longer valid for this event.",
+            PlannerBlocker.DESTINATION_INELIGIBLE: "The proposed Worship Team is not eligible for this exact event.",
+            PlannerBlocker.UNAUTHORIZED: "You cannot change the Worship Team for this exact event.",
+            PlannerBlocker.WORSHIP_ASSIGNMENT: "Current Worship schedule blocks this change.",
+            PlannerBlocker.OWNERSHIP_CONFLICT: "Current Worship ownership needs review before shifting.",
+            PlannerBlocker.DISPLACED_TAIL: "A Worship Team would be displaced after the selected range.",
+        },
+        "zh": {
+            PlannerBlocker.CHAIN_LENGTH: "请选择 2 至 53 场明确聚会。",
+            PlannerBlocker.DUPLICATE_EVENT: "每场明确聚会只能出现一次。",
+            PlannerBlocker.EVENT_NOT_FOUND: "一场或多场所选聚会已不可用。",
+            PlannerBlocker.INVALID_EVENT: "每场聚会都必须是已发布且未来举行的主日崇拜。",
+            PlannerBlocker.NOT_SUNDAY: "每场所选聚会都必须在本地星期日开始。",
+            PlannerBlocker.SAME_SUNDAY: "每个所列主日只能明确选择一场聚会。",
+            PlannerBlocker.WEEKLY_GAP: "所选主日之间必须正好相隔七天。",
+            PlannerBlocker.INTERIOR_BLANK: "范围中间有空白敬拜团队，不能跨过空白顺延。",
+            PlannerBlocker.INVALID_SOURCE: "当前保存的敬拜团队已不适用于这场聚会。",
+            PlannerBlocker.DESTINATION_INELIGIBLE: "新安排的敬拜团队不适用于这场明确聚会。",
+            PlannerBlocker.UNAUTHORIZED: "你无权更改这场明确聚会的敬拜团队。",
+            PlannerBlocker.WORSHIP_ASSIGNMENT: "当前已有敬拜排班，无法顺延此项。",
+            PlannerBlocker.OWNERSHIP_CONFLICT: "当前敬拜安排需要先检查，才能顺延。",
+            PlannerBlocker.DISPLACED_TAIL: "范围结束后仍有一个敬拜团队被顺延出范围。",
+        },
+    }
+    return labels.get(language, labels["en"])[blocker]
 
 
 @login_required
@@ -558,10 +643,71 @@ def _expected_event_timestamp_matches(raw_value, current_value):
 @login_required
 def worship_planning(request):
     language = get_user_language(request)
+    planner_events = worship_rotation_planner_events_for_user(request.user)
     return render(
         request,
         "events/worship_planning.html",
-        {"planning_rows": worship_planning_rows(request.user, language)},
+        {
+            "planning_rows": worship_planning_rows(request.user, language),
+            "rotation_planner_available": len(planner_events) >= 2,
+        },
+    )
+
+
+@login_required
+def worship_rotation_planner(request):
+    language = get_user_language(request)
+    available_events = worship_rotation_planner_events_for_user(request.user)
+    candidates = _planner_candidate_union(available_events)
+    proposal = None
+    if request.method == "POST":
+        form = WorshipRotationPlannerForm(
+            request.POST,
+            language=language,
+            events=available_events,
+            candidates=candidates,
+        )
+        if form.is_valid():
+            proposal = build_worship_rotation_proposal(
+                user=request.user,
+                event_ids=[event.pk for event in form.cleaned_data["events"]],
+                inserted_team=form.cleaned_data["inserted_team"],
+            )
+    else:
+        form = WorshipRotationPlannerForm(
+            language=language,
+            events=available_events,
+            candidates=candidates,
+        )
+
+    preview_rows = []
+    proposal_blockers = []
+    if proposal is not None:
+        proposal_blockers = [
+            _planner_blocker_text(language, blocker)
+            for blocker in proposal.blockers
+        ]
+        preview_rows = [
+            {
+                "row": row,
+                "blockers": [
+                    _planner_blocker_text(language, blocker)
+                    for blocker in row.blockers
+                ],
+            }
+            for row in proposal.rows
+        ]
+
+    return render(
+        request,
+        "events/worship_rotation_planner.html",
+        {
+            "form": form,
+            "proposal": proposal,
+            "proposal_blockers": proposal_blockers,
+            "preview_rows": preview_rows,
+            "available_events": available_events,
+        },
     )
 
 

@@ -1,0 +1,129 @@
+{% extends "base.html" %}
+{% load event_extras %}
+{% load datetime_extras %}
+
+{% block title %}{% if language == "zh" %}敬拜轮值规划{% else %}Rotation Planner{% endif %} | {{ ui.site_title }}{% endblock %}
+
+{% block content %}
+<p>
+    <a href="{% url 'worship_planning' %}">← {% if language == "zh" %}返回敬拜安排{% else %}Back to Worship Planning{% endif %}</a>
+</p>
+
+<div class="page-header">
+    <h1 class="page-title">{% if language == "zh" %}敬拜轮值规划{% else %}Rotation Planner{% endif %}</h1>
+    <p class="page-subtitle">{% if language == "zh" %}顺延后续敬拜团队{% else %}Shift later Worship Teams{% endif %}</p>
+</div>
+
+<div class="card" role="note">
+    <strong>{% if language == "zh" %}当前仅提供预览；确认顺延将在后续阶段启用。{% else %}Preview only. Confirmation will be enabled in the next implementation stage.{% endif %}</strong>
+    <p class="muted">
+        {% if language == "zh" %}此页面不会更改聚会、敬拜团队、排班、成员或受众。{% else %}This page does not change events, Worship Teams, assignments, members, or audience.{% endif %}
+    </p>
+</div>
+
+<form method="post" class="card">
+    {% csrf_token %}
+    {{ form.non_field_errors }}
+    <div class="form-row" data-field="events">
+        {{ form.events.label_tag }}
+        <p class="helptext">{{ form.events.help_text }}</p>
+        {{ form.events.errors }}
+        <div class="planner-event-choices">{{ form.events }}</div>
+    </div>
+    <div class="form-row" data-field="inserted_team">
+        {{ form.inserted_team.label_tag }}
+        {{ form.inserted_team }}
+        {{ form.inserted_team.errors }}
+    </div>
+    <div class="actions">
+        <button type="submit">{% if language == "zh" %}生成预览{% else %}Generate Preview{% endif %}</button>
+    </div>
+</form>
+
+{% if proposal %}
+<section aria-labelledby="planner-preview-heading">
+    <div class="page-header">
+        <h2 id="planner-preview-heading" class="page-title">{% if language == "zh" %}顺延预览{% else %}Shift Preview{% endif %}</h2>
+        <p class="page-subtitle">
+            <strong>{% if proposal.confirmable %}{% if language == "zh" %}可确认{% else %}Confirmable{% endif %}{% else %}{% if language == "zh" %}需要检查{% else %}Review required{% endif %}{% endif %}</strong>
+        </p>
+    </div>
+
+    {% if proposal_blockers %}
+    <div class="card" role="alert">
+        <strong>{% if language == "zh" %}需要检查{% else %}Review required{% endif %}</strong>
+        <ul>
+            {% for blocker in proposal_blockers %}<li>{{ blocker }}</li>{% endfor %}
+        </ul>
+    </div>
+    {% endif %}
+
+    <div class="planner-preview-list">
+        {% for item in preview_rows %}
+        {% with row=item.row %}
+        <article class="card planner-preview-row">
+            <header>
+                <h3 class="card-title">{{ row.event|event_title:language }}</h3>
+                <p class="muted">{{ row.event.start_datetime|member_datetime:language }}</p>
+                {% if row.event.location %}<p class="muted">{{ row.event.location }}</p>{% endif %}
+                {% with host=row.event|event_host_language_label:language %}{% if host %}<p class="muted">{{ host }}</p>{% endif %}{% endwith %}
+            </header>
+            <dl class="planner-before-after">
+                <div>
+                    <dt>{% if language == "zh" %}原安排{% else %}Before{% endif %}</dt>
+                    <dd>{% if row.before_team %}{{ row.before_team|ministry_team_name:language }}{% else %}—{% endif %}</dd>
+                </div>
+                <div>
+                    <dt>{% if language == "zh" %}新安排{% else %}After{% endif %}</dt>
+                    <dd>{% if row.proposed_team %}{{ row.proposed_team|ministry_team_name:language }}{% else %}—{% endif %}</dd>
+                </div>
+            </dl>
+            <p><strong>{% if row.changed %}{% if language == "zh" %}已变更{% else %}Changed{% endif %}{% else %}{% if language == "zh" %}无变化{% else %}No change{% endif %}{% endif %}</strong></p>
+            <p class="muted">
+                {% if row.destination_eligible %}{% if language == "zh" %}敬拜团队适用于这场聚会{% else %}Worship Team is eligible for this event{% endif %}{% else %}{% if language == "zh" %}敬拜团队不适用于这场聚会{% else %}Worship Team is not eligible for this event{% endif %}{% endif %}
+                ·
+                {% if row.authorized %}{% if language == "zh" %}可以更改{% else %}Authorized{% endif %}{% else %}{% if language == "zh" %}无权更改{% else %}Not authorized{% endif %}{% endif %}
+            </p>
+            {% if row.worship_assignment_informational %}<p class="muted">{% if language == "zh" %}当前一致的敬拜排班仅供参考；此项无变化。{% else %}The current consistent Worship assignment is informational; this row has no change.{% endif %}</p>{% endif %}
+            {% if item.blockers %}<ul class="errorlist">{% for blocker in item.blockers %}<li>{{ blocker }}</li>{% endfor %}</ul>{% endif %}
+
+            {% if row.downstream_impacts %}
+            <h4>{% if language == "zh" %}需要关注的后续服事团队{% else %}Downstream teams to review{% endif %}</h4>
+            <ul class="planner-downstream">
+                {% for impact in row.downstream_impacts %}
+                <li>
+                    <strong>{{ impact.team|ministry_team_name:language }}</strong>
+                    — {% if impact.participation == "required" %}{% if language == "zh" %}需要{% else %}Required{% endif %}{% else %}{% if language == "zh" %}额外{% else %}Additional{% endif %}{% endif %};
+                    {% if impact.assignment_state == "none" %}{% if language == "zh" %}当前无排班{% else %}No current assignment{% endif %}{% elif impact.assignment_state == "duplicate" %}{% if language == "zh" %}有重复排班{% else %}Duplicate assignments{% endif %}{% else %}{% if impact.statuses.0 == "confirmed" %}{% if language == "zh" %}已确认{% else %}Confirmed{% endif %}{% elif impact.statuses.0 == "prepared" %}{% if language == "zh" %}已准备{% else %}Prepared{% endif %}{% else %}{% if language == "zh" %}已安排{% else %}Scheduled{% endif %}{% endif %}{% endif %}
+                </li>
+                {% endfor %}
+            </ul>
+            {% endif %}
+        </article>
+        {% endwith %}
+        {% endfor %}
+    </div>
+
+    <div class="card planner-tail">
+        <strong>{% if language == "zh" %}范围结束后被顺延出的团队{% else %}Displaced after selected range{% endif %}:</strong>
+        {% if proposal.displaced_tail %}{{ proposal.displaced_tail|ministry_team_name:language }}{% else %}—{% endif %}
+    </div>
+    <p class="muted"><strong>{% if language == "zh" %}当前仅提供预览；确认顺延将在后续阶段启用。{% else %}Preview only. Confirmation will be enabled in the next implementation stage.{% endif %}</strong></p>
+</section>
+{% endif %}
+
+<style>
+.planner-event-choices ul { list-style: none; padding-left: 0; }
+.planner-event-choices li { margin: 0.45rem 0; }
+.planner-before-after { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; }
+.planner-before-after div { min-width: 0; padding: 0.75rem; background: var(--surface-muted, #f5f5f5); border-radius: 0.35rem; overflow-wrap: anywhere; }
+.planner-before-after dt { font-weight: 700; }
+.planner-before-after dd { margin: 0.25rem 0 0; }
+.planner-downstream { overflow-wrap: anywhere; }
+.planner-tail { overflow-wrap: anywhere; }
+@media (max-width: 520px) {
+    .planner-before-after { grid-template-columns: 1fr; }
+    .planner-preview-row { overflow: hidden; }
+}
+</style>
+{% endblock %}

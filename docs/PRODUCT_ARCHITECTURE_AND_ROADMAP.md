@@ -80,17 +80,18 @@ it in the narrow selector and supported-write backstop; `MO-S.6D-1D-C` now
 consumes the same canonical facts for Board/Team Schedule reachability and
 presentation.
 
-`MO-S.6D-1D-D-0A` completes the docs-only Worship Rotation Planner batch
-contract and audit decision in `docs/WORSHIP_ROTATION_PLANNER_PLAN.md`. The
-existing selector remains the one-Sunday path; future planner V1 is limited to
+`MO-S.6D-1D-D-0A` completes the Worship Rotation Planner batch contract and
+`MO-S.6D-1D-D-1A` implements its read-only proposal/preview in
+`docs/WORSHIP_ROTATION_PLANNER_PLAN.md`. The existing selector remains the
+one-Sunday path; planner V1 is limited to
 Insert / Shift Later Worship Teams over an exact bounded chain, with no
 non-null tail loss, destination-specific eligibility, per-event authority,
 Worship-assignment blockers, a roster-free downstream projection, a 30-minute
 user-bound signed proposal, and shared-operation per-event `LogEntry` audit.
-No BatchRun schema is required for V1. Preview `1A` and confirmation `1B`
-runtime remain separately approvable; `1B` must close supported downstream
-event-first assignment serialization before claiming downstream-impact
-staleness.
+No BatchRun schema is required for V1. Preview `1A` is implemented without
+writes or durable state. Confirmation `1B` remains separately approvable and
+must close supported downstream event-first assignment serialization before
+claiming downstream-impact staleness.
 
 Manual QA passed for the navbar IA and Ministry Structure cleanup, covering desktop ordinary user, desktop staff user, the mobile hamburger drawer, the Staff dropdown, the account dropdown, the Today / My Serving / Bible Study serving core flows, and the Ministry Teams / Ministry Structure core flows. No product boundary changed: Today remains a general agenda/dashboard (not a serving workspace), My Serving remains the serving workspace, visibility / membership / audience scope still does not imply serving, only explicit `TeamAssignmentMember` and linked-user `BibleStudyMeetingRole.user` personalize serving, and `MinistryTeamRoleAssignment` remains long-term structure responsibility — not weekly/event serving (at that time it also drove no permission; `MINISTRY-ROLE-SOURCE.1C` later made active lead/coordinator role assignments the runtime team-management permission source).
 
@@ -592,9 +593,10 @@ Future pieces include:
   locked selector/mutation UI, audit attribution, and supported-write
   enforcement across legacy event/admin/assignment paths. `MO-S.6D-1D-C`
   implements selected-team operational reachability on the Board/Team Schedule,
-  and docs-only `MO-S.6D-1D-D-0A` closes the planner batch/audit contract.
-  Planner runtime, notification, importer runtime, and bulk upload remain later
-  slices. The bounded
+  docs-only `MO-S.6D-1D-D-0A` closes the planner batch/audit contract, and
+  `MO-S.6D-1D-D-1A` implements the read-only signed proposal/preview.
+  Locked confirmation/audit, notification, importer runtime, and bulk upload
+  remain later slices. The bounded
   cross-team
   coordination projection replaces the older generic “multi-team dashboard”
   future label; every remaining governance runtime/schema prerequisite and
@@ -791,10 +793,11 @@ selector, audit attribution, and supported-write enforcement, with FU1 closing
 valid-current/inverse identity retargeting and serializing current Worship
 writes on the ServiceEvent row. `MO-S.6D-1D-C` now implements valid
 selected-team operational reachability and fail-closed Board/Team Schedule
-projection. `MO-S.6D-1D-D-0A` now closes the docs-only planner V1 batch and
-no-schema audit contract; its `1A` preview and `1B` confirmation runtime,
-notification, and import slices still require their own explicit task approval
-and repository-truth review. The canonical governance and planner decisions are
+projection. `MO-S.6D-1D-D-0A` closes the planner V1 batch/no-schema audit
+contract, and `MO-S.6D-1D-D-1A` implements its read-only signed proposal and
+preview. `1B` confirmation runtime, notification, and import slices still
+require their own explicit task approval and repository-truth review. The
+canonical governance and planner decisions are
 `docs/WORSHIP_ROTATION_GOVERNANCE_PLAN.md` and
 `docs/WORSHIP_ROTATION_PLANNER_PLAN.md`.
 
@@ -968,9 +971,10 @@ docs-only MO-S.6D-0A/FU1/FU2 investigations, and the separately approved
 complete. `MO-S.6D-1D-A` read-only governance and `MO-S.6D-1D-B` narrow
 authorization/mutation enforcement are also complete, including FU1 assignment
 identity and ServiceEvent-serialization closure. `MO-S.6D-1D-C` operational
-reachability is implemented, and docs-only `MO-S.6D-1D-D-0A` closes the
-planner batch/audit decision while leaving `1A`/`1B` runtime unimplemented. Any
-remaining governance prerequisite or later MO-S.6 runtime slice
+reachability is implemented, docs-only `MO-S.6D-1D-D-0A` closes the planner
+batch/audit decision, and `MO-S.6D-1D-D-1A` implements read-only preview while
+leaving locked confirmation/audit `1B` unimplemented. Any remaining governance
+prerequisite or later MO-S.6 runtime slice
 requires separate explicit approval and repository-truth review.
 
 Still deferred unless separately approved and supported by real use:
@@ -1269,8 +1273,9 @@ domain facts, and `MO-S.6D-1D-B` adds their narrow planner/pool-Lead/full-manage
 authorization consumer, locked selector/mutation, audit attribution, and
 supported-write enforcement. `MO-S.6D-1D-C` now adds selected-team operational
 reachability on the Board/Team Schedule. Docs-only `MO-S.6D-1D-D-0A` closes
-the planner V1 batch/tail/fingerprint/no-schema audit contract; read-only
-preview `1A` and locked confirmation `1B` runtime remain unimplemented.
+the planner V1 batch/tail/fingerprint/no-schema audit contract, and read-only
+preview `MO-S.6D-1D-D-1A` is implemented. Locked confirmation `1B` remains
+unimplemented and blocked on downstream event-first serialization closure.
 Notifications, importer runtime, and bulk upload remain unimplemented.
 Remaining MO-S.6D and later slices are not
 authorized by the governance closure or these foundations. Availability,

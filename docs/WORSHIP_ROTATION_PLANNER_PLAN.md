@@ -6,7 +6,9 @@ Status: `MO-S.6D-1D-D-0A` docs-only architecture gate,
 `MO-S.6D-1D-D-1B-A0` SQLite optimistic scheduling-concurrency decision are
 complete. `MO-S.6D-1D-D-1B-A1` Scheduling Revision Foundation and
 `MO-S.6D-1D-D-1B-B` optimistic batch confirmation/shared audit are also
-implemented. The contextual planner route builds an explicit exact-event
+implemented. Docs-only `NOTIFY.1G-0A` now closes the notification contract that
+may consume the shared batch identity; `NOTIFY.1G` runtime remains
+unimplemented. The contextual planner route builds an explicit exact-event
 chain, projects the deterministic shift and privacy-limited downstream impact,
 and produces a 30-minute user-bound signed normalized proposal without writing
 state; an explicit confirm action may then apply that exact proposal atomically.
@@ -577,8 +579,10 @@ new_team_id=<id or None>; new_team=<display>
 
 `LogEntry.user_id`, object identity, timestamp, and shared operation ID are
 sufficient for limited-trial diagnosis of who shifted which exact events and
-for a later summarized-notification producer to use one stable committed-batch
-identity. Those actual writes and logs remain in the same transaction.
+for the docs-complete `NOTIFY.1G-0A` contract to select one stable committed-
+batch dedupe identity, `ministry:worship_rotation:<operation_id>`. The future
+recipient-specific summary contains only qualifying changed events for that
+recipient. Those actual writes and logs remain in the same transaction.
 
 This does not provide one-click rollback, durable preview retention, workflow
 recovery, a unique/query-optimized batch history table, or a batch-history UI.
@@ -709,8 +713,9 @@ engineering terms to schedulers.
 - Rendered English desktop and Chinese mobile QA covers confirmable, blocked,
   success, replay-safe, responsive, and narrow-authority/privacy states.
 
-Notifications remain a later separately approved slice. They must not be added
-to `1A`, `1B-A1`, or `1B-B`.
+`NOTIFY.1G-0A` is docs complete; the `NOTIFY.1G` producer remains a later
+separately approved runtime slice. It must not be retroactively added to `1A`,
+`1B-A1`, or `1B-B`.
 
 ## 17. Decisions and remaining gates
 

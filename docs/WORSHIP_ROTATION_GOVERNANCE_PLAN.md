@@ -15,7 +15,10 @@ preview `MO-S.6D-1D-D-1A`, plus implemented `MO-S.6D-1D-D-1A-FU1`
 cycle-closed tail refinement, plus the docs-only `MO-S.6D-1D-D-1B-A0`
 SQLite optimistic scheduling-concurrency decision, plus implemented
 `MO-S.6D-1D-D-1B-A1` Scheduling Revision Foundation, plus implemented
-`MO-S.6D-1D-D-1B-B` optimistic batch confirmation/shared audit. Governance FU2 finalizes the required event-planner
+`MO-S.6D-1D-D-1B-B` optimistic batch confirmation/shared audit, plus the
+docs-only `NOTIFY.1G-0A` Direct Worship Team Change Notification Contract.
+`NOTIFY.1G` runtime remains unimplemented. Governance FU2 finalizes the required
+event-planner
 prerequisite and Worship-specific pool semantics. The Campus, pool-
 configuration, event-responsibility, read-only governance, and governed
 single-event mutation, operational-reachability, and planner-confirmation
@@ -103,7 +106,7 @@ The current code provides:
 
 The current code does **not** provide:
 
-- direct Worship Team change notifications; or
+- direct Worship Team change notification producer runtime; or
 - a declared `.xlsx` dependency or annual-workbook importer.
 
 `created_by` is creation attribution, not durable planner responsibility or
@@ -769,37 +772,52 @@ atomic expected-value CAS before full governance/authority/fingerprint
 recomputation. SQLite's first successful CAS supplies a database-wide writer
 boundary, not a row lock. Read-only preview `1A` remains unaffected.
 
-### Direct Worship Team change notifications
+### Direct Worship Team change notifications — contract complete, runtime unimplemented
 
-A successfully committed selected-team change is a known domain event with an
-exact old/new value. A future ministry-owned producer should notify a bounded,
-deduplicated recipient set:
+`NOTIFY.1G-0A` closes the docs-only contract. A successfully committed
+selected-team change is a known domain event with an exact old/new value. The
+future ministry-owned `NOTIFY.1G` producer must notify a bounded, deduplicated
+recipient set:
 
 - active, date-valid Leads/Coordinators of the old selected Worship team;
 - active, date-valid Leads/Coordinators of the new selected Worship team;
 - active, date-valid Leads/Coordinators of active required downstream service
   teams for the event; and
 - active, date-valid Leads/Coordinators of active additional downstream teams
-  that already have a non-cancelled assignment for the event.
+  that already have a current operational assignment (`scheduled`,
+  `confirmed`, or `prepared`) for the event.
 
-The last class is repository-grounded: Sunday Board already treats a current
+The last class resolves the earlier loose phrase "non-cancelled assignment"
+to canonical Sunday Board/planner participation. A completed assignment is
+non-cancelled but historical and does not qualify; cancelled also does not
+qualify. Sunday Board already treats a current
 assignment without a required-team row as real operational participation. It
 does not justify notifying assignment members, all team members, audience
 members, Church Structure members, generic staff, or unrelated pool leaders.
-Exclude Worship candidate teams from the downstream classes, deduplicate a user
+Exclude any team whose canonical primary path resolves to a configured Worship
+pool from the downstream classes, even when the pool is currently unusable;
+an unresolved malformed path must not be guessed from names, team kinds,
+labels, or secondary paths, and independent readiness/governance blockers stay
+authoritative. Deduplicate a user
 who qualifies through several teams, use recipient-persisted language, and keep
 the snapshot free of rosters, notes, contact data, audience internals, and
 private profile data.
 
 The producer must live in `ministry`, resolve its own recipients and dedupe
-identity, and emit only through the Core notification port after a successful
-commit. It must not import Notification persistence or use Django signals. A
+identity before Core post-commit registration, and emit only through the Core
+notification port. It must not import Notification persistence or use Django
+signals. A
 single-event change produces at most one notification per recipient. A batch
 shift produces one summarized notification per recipient for the committed
-batch, not one per Sunday. The owning slice must define a stable operation
-identity/dedupe key and a recipient-safe target; an old-team leader may lose
-anchor-only Board reachability after the change, so a Board link must not be
-assumed accessible. Disabled Notifications remains a safe no-op.
+batch, not one per Sunday. The exact-event dedupe identity is
+`ministry:worship_team_change:log:<logentry_id>` using the saved audit row; the
+batch identity is `ministry:worship_rotation:<operation_id>`. Batch summaries
+contain only events for which that recipient qualifies. The safe common target
+is `reverse("my_serving")`: its role-driven Teams I manage entrance remains
+available to an old-team leader after anchor-only Board reachability is lost and
+does not depend on event audience. Snapshots use recipient language, date plus
+old/new localized team only, and batch previews at most three recipient-relevant
+changes plus `+ N more`. Disabled Notifications remains a safe no-op.
 
 This direct producer is separate from MO-S.6E. A committed selected-team change
 has explicit before/after facts and can notify immediately. Detecting a later
@@ -912,7 +930,7 @@ Each slice is separately approvable and must verify repository truth again.
 | 4B | **Narrow Worship Team authorization, write enforcement, and UI — IMPLEMENTED (`MO-S.6D-1D-B`, identity/ordering closure in `MO-S.6D-1D-B-FU1`)** | Consumes 4A from narrow GET/POST plus existing anchor/Worship-assignment write paths; pool Leads/planners receive only this action; current Worship identity is immutable; atomic validation and ServiceEvent-first ordering remain implemented, but target SQLite provides no actual `select_for_update()` row lock | actual denial/allow rules, current-truth reauthorization, stale form, combined union, legacy-form/admin/assignment bypass closure, cross-path identity retarget rejection, structural event-first path, LogEntry attribution, no roster move or unrelated writes | Rendered Worship Team selector, bilingual copy, conflict UX, hidden blocked controls, and narrow-context privacy verified in the implementation slices |
 | 5 | **Worship Team operational reachability — IMPLEMENTED (`MO-S.6D-1D-C`; projection corrections `MO-S.6D-1D-C-FU1/FU2`)** | Team Schedule/Board queryset and projection change only; exact-team assignment permission unchanged; canonical eligibility fails closed; invalid raw selection never suppresses independent generic required/assignment participation; canonical ownership conflicts/ambiguity are review-only and non-actionable; no migration | selected-team-only rows, empty-coverage presentation, valid-selection de-dup, invalid required/assignment projection, off-team/out-of-scope conflict, multiple/duplicate ambiguity, global/exact-team behavior, planner/pool-Lead boundary, change/removal, privacy, no coverage/assignment/required-team writes | Rendered English desktop and Chinese mobile Team Schedule/Board QA completed in the implementation slice; FU1/FU2 are focused projection-only and test-verified |
 | 6 | **Worship Rotation Planner — IMPLEMENTED THROUGH `1B-B`** | Existing selector retains one-Sunday changes; `1A/FU1` remain side-effect-free; `1B-A1` owns the event revision/barriers/fingerprint-v3 foundation; `1B-B` adds POST-only signed confirmation and shared audit; no rule engine, roster mutation, notification, or BatchRun schema | expected-revision CAS first, full recomputation, stale/all-or-nothing rollback, all-selected revision advance, changed-only shared-operation LogEntry audit, replay/tail/privacy/zero-cross-domain-write coverage, and target-like file-backed SQLite proof | Rendered English desktop and Chinese mobile confirmable/blocked/success/replay/narrow-authority QA completed; deployment QA remains separate |
-| 7 | **Direct Worship Team change notification producer** | Ministry-owned post-commit producer through Core port; no notification permission/schema inference; summarized batch delivery | exact role/date recipients, required/additional downstream bounds, dedupe, language/privacy, disabled-module no-op, rollback/no-emission | Required for recipient-safe copy/target QA |
+| 7 | **Direct Worship Team change notification producer — DOCS CONTRACT COMPLETE (`NOTIFY.1G-0A`); RUNTIME UNIMPLEMENTED (`NOTIFY.1G`)** | Ministry-owned post-commit producer through Core port; no notification permission/schema inference; recipient-specific summarized batch delivery | exact role/date recipients, current-operational required/additional downstream bounds, Worship exclusion, dedupe, subset privacy, language/snapshot safety, disabled-module no-op, rollback/no-emission | Required in the implementation slice for recipient-safe copy/target QA |
 | 8 | **Excel dependency/parser + preview** | Reviewed `.xlsx` dependency and read-only upload/preview; staff/superuser only; no data write or migration expected | contract/header/date/cache/token/profile/identity classification, roster/downstream impact, size/privacy/tamper/expiry tests | Required for upload and preview |
 | 9 | **Excel exact match/update confirmation** | Atomic existing-event selected-team writes only; no new event/required team/assignment; no schema if signed proposal remains sufficient | reauthorization, target locking/fingerprint, roster conflict, stale rollback, idempotency, eligible mapping, unsupported rows, audit attribution | Required for confirmation/result UX |
 | 10 | **Later assignment import** | Deferred; would write TeamAssignment/member data and needs exact-team plus bulk authority and identity proof | unresolved/ambiguous people, explicit aliases, team ownership, no user creation, rollback/idempotency | Required; only after operational evidence |

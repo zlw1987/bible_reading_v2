@@ -18,7 +18,9 @@ implemented Scheduling Revision Foundation `MO-S.6D-1D-D-1B-A1`, plus
 the MO-S.6D-0A workbook/readiness investigation plus MO-S.6D-0A-FU1/FU2
 multi-campus Worship rotation governance closure. Planner confirmation/audit is
 implemented through runtime revision foundation `1B-A1` and optimistic batch
-confirmation/shared audit `1B-B`; remaining MO-S.6D runtime slices remain
+confirmation/shared audit `1B-B`. The docs-only `NOTIFY.1G-0A` Direct Worship
+Team Change Notification Contract is complete while `NOTIFY.1G` runtime is
+unimplemented; remaining MO-S.6D runtime slices remain
 separately scoped and require explicit approval.
 
 ## 1. Purpose
@@ -139,7 +141,8 @@ Sunday Board without false coverage. `MO-S.6D-1D-D-1A` now provides the
 read-only Worship Rotation Planner proposal/preview, and `1A-FU1`
 distinguishes terminal blank, exact-ID cycle-closed, and true displaced tail
 outcomes without adding preview writes. The system now provides optimistic
-planner confirmation/shared audit, but still does not provide direct Worship Team change notifications, Excel
+planner confirmation/shared audit and a closed docs-only direct-change
+notification contract, but still does not provide the `NOTIFY.1G` producer, Excel
 dependency/parser/import runtime, or the MO-S.6E roster-change staleness
 mechanism.
 
@@ -763,9 +766,10 @@ tests and limited-trial review pass.
   supported-write bump scope, and expected-revision CAS. Runtime `1B-A1` now
   implements and concurrency-tests that foundation; `1B-B` now consumes it and
   provides downstream-impact staleness for supported writes. A
-  separate ministry-owned
-  post-commit producer may send direct old/new/downstream leadership notices,
-  summarized once per recipient for a batch. This is distinct from MO-S.6E
+  docs-only `NOTIFY.1G-0A` contract now defines the separate ministry-owned
+  post-commit producer for direct old/new/downstream leadership notices,
+  summarized once per recipient from that recipient's qualifying batch-event
+  subset. `NOTIFY.1G` remains unimplemented. This is distinct from MO-S.6E
   roster-change staleness detection.
 - Copy: scheduler-facing UI should use Worship Team / 敬拜团队 rather than the
   engineering term rotation anchor.
@@ -773,7 +777,8 @@ tests and limited-trial review pass.
   governance, governed single-event mutation, operational reachability,
   read-only planner preview, docs-only SQLite optimistic contract, `1B-A1`
   scheduling revision foundation, and `1B-B` optimistic batch confirmation/
-  shared audit are implemented. Notification and import slices remain
+  shared audit are implemented. The direct notification architecture gate is
+  docs complete, but notification runtime and import slices remain
   separately scoped and require separate task approval and focused verification.
 
 ### MO-S.6D-1D-D-0A — Worship Rotation Planner contract and audit decision
@@ -919,6 +924,30 @@ tests and limited-trial review pass.
   previews; focused tests and rendered English desktop/Chinese mobile QA cover
   success, blockers, replay-safe retry, responsive layout, narrow authority,
   privacy, concurrency, and zero cross-domain writes/notifications.
+
+### NOTIFY.1G-0A — Direct Worship Team Change Notification Contract
+
+- Status: docs complete; `NOTIFY.1G` runtime is unimplemented.
+- Trigger: actual committed selected-team changes through the exact selector or
+  `1B-B` only; no-op, preview, stale/blocked/failed, replay, rollback, and
+  unsupported write paths emit nothing.
+- Recipients: active users with current active/date-valid exact Lead/Coordinator
+  roles on the old team, new team, active required downstream teams, or active
+  additional downstream teams with a `scheduled`/`confirmed`/`prepared`
+  assignment. Completed/cancelled rows do not qualify, and primary-path Worship
+  teams never re-enter through downstream classes.
+- Aggregation/privacy: exact-user dedupe, at most one notification per recipient
+  per single operation or batch, and a batch summary contains only that
+  recipient's qualifying changed Sundays.
+- Identity/target: single audit LogEntry identity, shared batch `operation_id`,
+  stable `worship_team.changed` / `worship_rotation.changed` types, and common
+  permission-neutral `reverse("my_serving")` target.
+- Snapshot/timing: recipient-language date and localized old/new team only;
+  batch preview capped at three entries plus a remainder count; source-owned
+  resolution and Core registration remain inside the successful source
+  transaction, with persistence after commit.
+- Scope: no schema, permission, new route/UI, background job, external delivery,
+  or relationship to later roster-context staleness in `MO-S.6E`.
 
 ### MO-S.6D-0A — Workbook Contract & Imported-Sunday Readiness
 
@@ -1261,7 +1290,8 @@ published zero-audience creation.
 - Scope: conservative derived warning first; later version field only if needed.
 - Out of scope: downstream rewrite, automatic rescheduling, and notification
   fanout. A known committed before/after Worship Team selection may receive a
-  separate direct FU1 notification producer; it does not solve this harder
+  separately implemented `NOTIFY.1G` producer under the docs-complete
+  `NOTIFY.1G-0A` contract; it does not solve this harder
   later-roster-change staleness problem.
 - Likely components: event/team context helper and board/team schedule copy.
 - Schema impact: none initially; explicit context/version field deferred.
@@ -1335,8 +1365,10 @@ permission, privacy, idempotency, and exception handling are observed to work.
 
 These are genuine future decisions, not hidden implementation assumptions:
 
-- When, if at all, should the separately scoped direct Worship Team change
-  notification producer follow the now-implemented planner confirmation path?
+The direct Worship Team change notification is not an open architecture item:
+`NOTIFY.1G-0A` closed its contract. Runtime still requires separate task
+approval, but no further product or architecture decision precedes that slice.
+
 - Which teams participate in the default Sunday board, and how are combined or
   special services represented?
 - Which additional cross-team details, if any, may be added beyond the

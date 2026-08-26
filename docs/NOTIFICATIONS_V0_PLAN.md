@@ -1,6 +1,8 @@
 # Notification V0 Plan
 
-Status: current through `NOTIFY.1F`. The app/model/admin/Core delivery-port
+Status: runtime current through `NOTIFY.1F`, plus the docs-only
+`NOTIFY.1G-0A` Direct Worship Team Change Notification Contract. The
+`NOTIFY.1G` producer remains unimplemented. The app/model/admin/Core delivery-port
 foundation, recipient-scoped Notification Center/bell UI, the ministry-owned
 explicit ServiceEvent serving-assignment producer, and the studies-owned
 explicit Bible Study meeting-role producer, and the Community Activities-owned
@@ -11,6 +13,13 @@ This document is the implementation boundary for Notification V0. The completed
 `NOTIFY.1A` through `NOTIFY.1F` scopes are recorded below; later producers,
 background jobs, external delivery, and permission changes still require
 separate approval.
+
+`NOTIFY.1G-0A` closes the architecture contract for a later ministry-owned
+producer covering actual committed `ServiceEvent.rotation_anchor_team` changes
+through the governed exact-event selector and Worship Rotation Planner batch
+confirmation only. It adds no producer runtime, model, migration, signal,
+route, UI, permission, or data change. `NOTIFY.1G` remains a separately
+approved implementation slice.
 
 ## 1. Status
 
@@ -152,6 +161,233 @@ delivery, preferences, mark-unread, delete/archive, search/filtering, retention
 cleanup/purge, Today/Calendar/My Serving/Staff Overview integration, and
 queue/outbox/retry/background-job work remain separately deferred and
 unapproved.
+
+### `NOTIFY.1G-0A` Direct Worship Team Change Contract — DOCS COMPLETE
+
+`NOTIFY.1G-0A` defines the exact contract below. `NOTIFY.1G` is
+**UNIMPLEMENTED**.
+
+#### Ownership, dependency, and trigger boundary
+
+The producer belongs to `ministry` and must preserve the implemented directed
+delivery dependency:
+
+```text
+ministry -> Core notification delivery port
+notifications -> Core sink registration
+```
+
+`ministry -> notifications`, `notifications -> ministry`, and
+`Core -> ministry` remain forbidden. The producer uses no Django signal,
+generic domain event bus, scheduler, background job, outbox, or retry worker.
+
+Notify only for an actual `rotation_anchor_team` change that successfully
+commits through either the governed exact-event selector or implemented
+Worship Rotation Planner `1B-B` confirmation. GET, preview, no-op, stale or
+invalid input, denied authority, governance/assignment/tail blocker, busy or
+audit failure, rollback, stale replay, and unsupported Admin/direct ORM/raw SQL
+paths emit nothing. A no-op batch emits nothing; a no-op context row in a
+changed batch contributes no notification fact.
+
+#### One shared recipient contract
+
+For each actually changed event, candidates are exactly active users holding a
+current active, date-valid Lead or Coordinator
+`MinistryTeamRoleAssignment` on one or more of these exact active teams:
+
+1. the non-null old selected Worship Team;
+2. the non-null new selected Worship Team;
+3. an active required downstream service team for the event; or
+4. an active additional downstream team with at least one current operational
+   assignment for the event.
+
+"Date-valid" uses the existing canonical current-role semantics at emission
+time: active role row and role type, active team and user, `start_date` no later
+than the current local date, and null or non-expired `end_date`. Serving rows,
+all team memberships, audience, Church Structure belonging, event planner
+responsibility, applicable-pool leadership alone, staff/global authority,
+creator, actor, event visibility, Calendar visibility, and notification
+history never add a recipient.
+
+Class 4 deliberately resolves the earlier loose phrase "non-cancelled
+assignment" to the repository's canonical current operational statuses:
+`scheduled`, `confirmed`, or `prepared`. `completed` is non-cancelled but
+historical and does not qualify; `cancelled` also does not qualify. Class 3
+requires no assignment because the required-team row is already the exact
+operational expectation.
+
+Classes 3 and 4 exclude every team whose canonical active-primary Ministry
+Structure path resolves to a configured Worship rotation pool. This matches
+the existing planner downstream projection and applies even when that pool is
+currently unusable. If a missing, ambiguous, broken, or cyclic primary path
+does not canonically resolve a pool, the classifier must not guess Worship
+status from display data; independent readiness/governance blockers remain
+authoritative. A canonically resolved Worship team can qualify only as the
+exact old/new selection. Names, `team_kind`, A/C1/C2/C3 labels, pool order,
+secondary paths, and fuzzy matching never classify it.
+
+The later implementation must provide one ministry-owned resolver contract
+used by both write paths, preferably a pure per-event projection plus batch
+aggregation. Exact user identity deduplicates repeated role/team eligibility.
+A single change yields at most one notification per recipient. One batch yields
+at most one notification per recipient for the whole operation.
+
+#### Recipient-specific batch privacy
+
+Batch aggregation is per recipient, not per operation alone. Each recipient's
+summary contains only actually changed events for which that recipient
+qualified through the preceding rules. Qualification for one Sunday never
+reveals another changed Sunday from the same batch. Recipient resolution,
+recipient-specific event subsets, localized copy, target, and dedupe identity
+are completed inside the source transaction before Core delivery registration;
+the post-commit callback does not reopen source objects to expand authority.
+
+#### Stable type and dedupe decisions
+
+Stable producer-owned types are:
+
+```text
+single event: worship_team.changed
+batch:        worship_rotation.changed
+```
+
+Both keys are safely below the current 100-character `notification_type`
+limit.
+
+The single-event selector must retain the saved `LogEntry` returned by its
+same-transaction audit creation and use:
+
+```text
+ministry:worship_team_change:log:<logentry_id>
+```
+
+`LogEntryManager.log_action()` returns the already-saved row, so its primary
+key exists before Core `on_commit` registration. The key is safely below the
+current 255-character `dedupe_key` limit. Rollback removes both the audit row
+and the pending callback. `scheduling_revision` is rejected as the preferred
+identity because it is event-owned and also advances for unrelated supported
+scheduling writes; the exact change audit row is the narrower durable logical
+identity. No new single-change model is needed.
+
+The batch uses its already-signed random UUID unchanged:
+
+```text
+ministry:worship_rotation:<operation_id>
+```
+
+This is also safely below 255 characters. The same batch key is used for every
+recipient; the existing database uniqueness is recipient plus dedupe key.
+Individual event IDs, per-event LogEntry IDs, timestamps, and display strings
+do not define batch identity. A replayed committed proposal fails its revision
+claim before producer registration.
+
+#### Permission-neutral common target
+
+The common target is exactly `reverse("my_serving")`, with no new route and no
+event-specific fragment. `My Serving` is login-required and its existing
+`Teams I manage / 我负责的团队` section is driven by the same active,
+date-valid exact-team Lead/Coordinator role semantics. It does not require
+ServiceEvent audience membership. An old selected-team Lead/Coordinator
+therefore retains a useful owned-team scheduling entrance after that team loses
+anchor-only Sunday Board reachability. Required/additional downstream leaders
+and ordinary/staff recipients use the same safe surface.
+
+The notification grants no event detail, Board row, Worship-selection,
+TeamAssignment, serving, audience, belonging, or Church Structure permission.
+If the source role later ends, existing historical-record behavior applies:
+the notification is retained, the target remains an ordinary authenticated
+surface, and no historical notification is rewritten or deleted.
+
+#### Localized bounded snapshots
+
+Copy uses each recipient's persisted `zh` preference, with English fallback;
+the actor/request language is irrelevant. Team names use the recipient's
+language. Event dates use the configured local date in recipient-language
+format. A null old/new selection is rendered as `Not selected` / `未选择`.
+
+Single-event copy is:
+
+```text
+EN title: Worship Team changed
+ZH title: 敬拜团队已调整
+body: <localized date> · <old team or Not selected> → <new team or Not selected>
+```
+
+Batch copy is:
+
+```text
+EN title: Worship rotation updated
+ZH title: 敬拜轮值已更新
+```
+
+Its body states the number of Sundays in this recipient's subset and previews
+at most three ordered `date old -> new` entries. A larger subset ends with
+localized `+ N more` / `另有 N 个主日`. The count and remainder always refer
+to this recipient's subset, never the whole batch. Notification remains a
+prompt, not batch-history UI.
+
+The count prefix is `1 Sunday affecting your team was updated:` or
+`<N> Sundays affecting your team were updated:` in English, and
+`与您团队相关的 <N> 个主日已更新：` in Chinese, followed by the bounded entries.
+
+Snapshots may contain only local date, localized old/new team names, and the
+recipient-relevant count. They exclude event title, location, description,
+rosters/member names or counts, notes, confirmations, contacts, audience or
+Church Structure internals, role/pool/path/planner details, private profile
+data, fingerprints, scheduling revision, and visible operation UUID.
+
+#### Source references, metadata, and actor
+
+Single-event payload:
+
+```text
+source_module = "ministry"
+source_model_label = "events.ServiceEvent"
+source_object_id = <event pk as string>
+metadata = {}
+actor = authenticated selector user
+```
+
+Batch payload:
+
+```text
+source_module = "ministry"
+source_model_label = ""
+source_object_id = ""
+metadata = {
+    "operation_id": <shared UUID>,
+    "recipient_relevant_event_count": <recipient subset count>,
+}
+actor = confirming user
+```
+
+The batch does not pretend one ServiceEvent is the source object. Metadata is
+minimal operational correlation, not a hidden event list or history store.
+The current Notification Center renders title, body, source label, time, and
+actions only; it does not render actor or metadata. Actor attribution may
+therefore be persisted but must not be added automatically to visible copy.
+
+#### Transaction and failure timing
+
+For a single event, the future integration must complete current authorization,
+revision/governance validation, actual anchor save, and existing LogEntry save;
+then resolve recipients/payloads and call Core once per recipient before
+leaving the same atomic transaction. For a batch, it must run only after every
+selected revision is claimed, current truth is recomputed, every changed anchor
+is saved, and every shared-operation changed-event LogEntry is written; it then
+aggregates changed rows into recipient-specific subsets and registers one Core
+delivery per recipient before the same transaction exits.
+
+Core's existing `transaction.on_commit()` behavior is authoritative. Any later
+source rollback produces zero notifications. Disabled Notifications remains a
+safe no-op. An ordinary persistence failure after source commit is logged and
+contained and must not reverse or falsely report failure of the committed
+Worship change; the existing strict test/development seam may surface it.
+
+This producer covers only the immediate explicit selected-team mutation. It
+does not detect later roster membership/status changes, downstream context
+staleness, rescheduling need, or reminders. Those remain the separate future
+`MO-S.6E` problem.
 
 ## 2. Purpose
 
@@ -813,6 +1049,29 @@ dry-run, and must never mutate source data. This adds no producer, mark-unread,
 delete/archive, search, preferences, external delivery, scheduler, or shared
 surface integration.
 
+### NOTIFY.1G-0A Direct Worship Team Change Contract
+
+Status: docs complete; `NOTIFY.1G` runtime is unimplemented.
+
+This docs-only gate closes the ministry-owned trigger, exact active/date-valid
+Lead/Coordinator recipient classes, current-operational downstream status
+interpretation, Worship-team exclusion, recipient-specific batch privacy,
+single and batch dedupe identities, permission-neutral My Serving target,
+localized bounded snapshots, source references, actor, and post-commit timing.
+It adds no Python, template, model, migration, test, route, permission, or data
+change.
+
+### NOTIFY.1G Direct Worship Team Change Producer
+
+Status: unimplemented; requires separate explicit implementation approval.
+
+The bounded future slice should add one ministry-owned helper (for example,
+`ministry/services/worship_change_notifications.py`), integrate it only at the
+governed exact-event selector and successful `1B-B` confirmation seams, and add
+focused source-domain tests through the Core test sink. It requires no
+Notification schema, source permission, new UI route/template, background job,
+or external delivery.
+
 Fable 5 should be reserved for hard architecture/planning questions. It is not
 needed for routine docs, model, simple UI, or focused producer slices.
 
@@ -827,7 +1086,9 @@ completes the current limited-trial V0 recipient read/open and pagination polish
 with a retain-for-now policy. None changes target permission, audience,
 belonging, or source serving semantics.
 
-Additional producers may be added one at a time only in separately approved
-later slices. Each producer must prove
+`NOTIFY.1G-0A` is docs complete and closes the architecture decision for the
+direct Worship Team change producer; `NOTIFY.1G` remains unimplemented and
+separately approvable. Additional producers may be added one at a time only in
+separately approved later slices. Each producer must prove
 recipient selection, idempotency, disabled-module behavior, and permission
 neutrality in its own focused tests before another producer is added.

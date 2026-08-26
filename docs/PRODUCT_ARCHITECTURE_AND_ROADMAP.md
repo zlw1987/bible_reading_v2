@@ -1,11 +1,13 @@
 # Product Architecture and Roadmap
 
-Status: canonical current-state product architecture and roadmap, current
+Status: canonical current-state product architecture and roadmap, runtime current
 through `NOTIFY.1F` (notification app/model/admin/Core delivery-port foundation,
 recipient Notification Center/bell UI, the ministry-owned explicit ServiceEvent
 serving-assignment producer, the studies-owned explicit Bible Study meeting-role
 producer, and the Community Activities-owned primary-creator review-outcome
-producer after `REPOSITORY-AUDIT-CLOSEOUT.1A`). Church Calendar V1 remains implemented
+producer after `REPOSITORY-AUDIT-CLOSEOUT.1A`), plus the docs-only
+`NOTIFY.1G-0A` Direct Worship Team Change Notification Contract. `NOTIFY.1G`
+runtime remains unimplemented. Church Calendar V1 remains implemented
 as a model-free, read-only aggregation surface with source providers, month/day
 UI, grouping, limited-trial baseline QA closure, and personal explicit-serving
 overlays through `CHURCH-CALENDAR.2B`. Calendar remains read-only and does not
@@ -306,6 +308,20 @@ limited-trial scope is closed through `NOTIFY.1F`. There is no Today, Calendar,
 Staff Overview, announcement/audience fanout, external delivery, scheduler,
 background job, queue, retry, outbox, mark-unread, delete/archive, search, or
 preferences; broader notification expansion remains separately deferred.
+
+`NOTIFY.1G-0A` closes the docs-only contract for a future ministry-owned direct
+Worship Team change producer. It is limited to actual committed selected-team
+changes from the governed exact-event selector and `1B-B` batch confirmation.
+Recipients are active users with current active/date-valid exact
+Lead/Coordinator roles on the old/new team or active required/current-
+operational downstream teams; completed/cancelled assignments do not qualify,
+and canonical primary-path Worship teams cannot re-enter as downstream. A batch
+is deduplicated once per recipient and includes only that recipient's qualifying
+changed Sundays. The contract selects exact audit/shared-operation dedupe keys,
+`worship_team.changed` / `worship_rotation.changed`, recipient-language bounded
+date/team snapshots, and permission-neutral `reverse("my_serving")`. It changes
+no runtime, schema, permission, route, UI, or data. `NOTIFY.1G` remains
+unimplemented and separately approvable.
 
 MO-S.1 Ministry Scheduling Requirements Plan is complete as docs-only planning for real pilot feedback about required ministry teams, assignment coverage display, and team-leader scheduling workflow. MO-S.2 Event Required-Team implementation, MO-S.3 read-only assignment coverage display, MO-S.4 team-leader scheduling workspace, MO-S.4A scheduling semantic cleanup, MO-S.5A rotation anchor foundation, and MO-S.5B limited copy-forward suggestion helper are complete.
 
@@ -612,7 +628,9 @@ Future pieces include:
   docs-only `MO-S.6D-1D-D-1B-A0` closes the target SQLite optimistic
   scheduling-concurrency decision. Runtime scheduling-revision foundation
   `1B-A1` and optimistic confirmation/shared audit `1B-B` are implemented;
-  notification, importer runtime, and bulk upload remain later slices. The bounded
+  direct-notification runtime, importer runtime, and bulk upload remain later
+  slices; the `NOTIFY.1G-0A` notification architecture gate is docs complete.
+  The bounded
   cross-team
   coordination projection replaces the older generic “multi-team dashboard”
   future label; every remaining governance runtime/schema prerequisite and
@@ -815,7 +833,8 @@ contract, `MO-S.6D-1D-D-1A` implements its read-only signed proposal and
 preview, and `MO-S.6D-1D-D-1A-FU1` implements the typed terminal-blank /
 exact-ID-cycle-closed / true-displaced distinction. Docs-only `1B-A0` records
 the target SQLite limitation and optimistic event scheduling-revision decision.
-Runtime `1B-A1` and `1B-B` confirmation/audit are implemented; notification
+Runtime `1B-A1` and `1B-B` confirmation/audit are implemented; docs-only
+`NOTIFY.1G-0A` closes the direct-change notification contract, while its runtime
 and import slices still require their own explicit task approval and
 repository-truth review. The
 canonical governance and planner decisions are
@@ -1307,7 +1326,8 @@ docs-only `1B-A0` now closes the one-event scheduling-revision, SQLite writer-
 barrier, supported-write, CAS, and A1/B split decisions. Runtime `1B-A1` is
 implemented with target-like file-backed SQLite concurrency coverage;
 separately approved `1B-B` confirmation/shared audit is implemented.
-Notifications, importer runtime, and bulk upload remain unimplemented.
+`NOTIFY.1G` notification runtime, importer runtime, and bulk upload remain
+unimplemented.
 Remaining MO-S.6D and later slices are not
 authorized by the governance closure or these foundations. Availability,
 swaps, reminders, automatic
@@ -1355,6 +1375,11 @@ closed through `NOTIFY.1F`; broader notification product expansion remains
 separately deferred and unapproved. Product work should return to limited-trial
 feedback and separately approved roadmap slices rather than continuing
 Notification expansion by default.
+
+The separately approved docs-only `NOTIFY.1G-0A` architecture gate is complete.
+It authorizes no runtime by itself, but no further product/architecture decision
+remains before a narrowly approved `NOTIFY.1G` implementation of the exact
+contract.
 
 Short next-candidate list:
 

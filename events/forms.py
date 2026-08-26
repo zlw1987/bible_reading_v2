@@ -534,6 +534,10 @@ class WorshipRotationPlannerForm(forms.Form):
         return events
 
 
+class WorshipRotationConfirmationForm(forms.Form):
+    proposal = forms.CharField(widget=forms.HiddenInput)
+
+
 class PlannerUserChoiceField(forms.ModelChoiceField):
     def label_from_instance(self, user):
         full_name = user.get_full_name().strip()

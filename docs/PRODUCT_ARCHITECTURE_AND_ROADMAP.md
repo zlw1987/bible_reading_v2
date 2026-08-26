@@ -94,14 +94,16 @@ the selected-range identities; every other non-null tail remains blocked. This
 is not a stored rotation rule or arbitrary tail drop. Implemented preview
 includes destination-specific eligibility, per-event authority, Worship-
 assignment blockers, a roster-free downstream projection, and a 30-minute
-user-bound signed proposal. Shared-operation per-event `LogEntry` audit is
-future `1B-B` confirmation behavior; preview writes no audit rows.
+user-bound signed proposal. Implemented `1B-B` adds explicit optimistic batch
+confirmation and shared-operation per-changed-event `LogEntry` audit; preview
+still writes no audit rows.
 No BatchRun schema is required for V1. Attempted row-lock closure `1B-A`
 stopped without changes because local and GoDaddy SQLite provide no
 `select_for_update()` row lock. A1 supplies the event-owned scheduling revision,
 SQLite first-write serialization plus recomputation, supported-write retrofit,
 planner fingerprint v3, and real file-backed concurrency tests. `1B-B`
-optimistic confirmation/audit remains separately unimplemented and unapproved.
+optimistic confirmation/shared audit is implemented without a BatchRun schema,
+notification producer, or cross-domain scheduling writes.
 
 Manual QA passed for the navbar IA and Ministry Structure cleanup, covering desktop ordinary user, desktop staff user, the mobile hamburger drawer, the Staff dropdown, the account dropdown, the Today / My Serving / Bible Study serving core flows, and the Ministry Teams / Ministry Structure core flows. No product boundary changed: Today remains a general agenda/dashboard (not a serving workspace), My Serving remains the serving workspace, visibility / membership / audience scope still does not imply serving, only explicit `TeamAssignmentMember` and linked-user `BibleStudyMeetingRole.user` personalize serving, and `MinistryTeamRoleAssignment` remains long-term structure responsibility — not weekly/event serving (at that time it also drove no permission; `MINISTRY-ROLE-SOURCE.1C` later made active lead/coordinator role assignments the runtime team-management permission source).
 
@@ -608,9 +610,9 @@ Future pieces include:
   `MO-S.6D-1D-D-1A` implements the read-only signed proposal/preview, and
   `MO-S.6D-1D-D-1A-FU1` implements its exact-ID cycle-closed tail semantic, and
   docs-only `MO-S.6D-1D-D-1B-A0` closes the target SQLite optimistic
-  scheduling-concurrency decision. Runtime scheduling-revision foundation,
-  optimistic confirmation/audit, notification, importer runtime, and bulk upload
-  remain later slices. The bounded
+  scheduling-concurrency decision. Runtime scheduling-revision foundation
+  `1B-A1` and optimistic confirmation/shared audit `1B-B` are implemented;
+  notification, importer runtime, and bulk upload remain later slices. The bounded
   cross-team
   coordination projection replaces the older generic “multi-team dashboard”
   future label; every remaining governance runtime/schema prerequisite and
@@ -813,9 +815,9 @@ contract, `MO-S.6D-1D-D-1A` implements its read-only signed proposal and
 preview, and `MO-S.6D-1D-D-1A-FU1` implements the typed terminal-blank /
 exact-ID-cycle-closed / true-displaced distinction. Docs-only `1B-A0` records
 the target SQLite limitation and optimistic event scheduling-revision decision.
-Runtime `1B-A1` is implemented; `1B-B` confirmation,
-notification, and import slices still
-require their own explicit task approval and repository-truth review. The
+Runtime `1B-A1` and `1B-B` confirmation/audit are implemented; notification
+and import slices still require their own explicit task approval and
+repository-truth review. The
 canonical governance and planner decisions are
 `docs/WORSHIP_ROTATION_GOVERNANCE_PLAN.md` and
 `docs/WORSHIP_ROTATION_PLANNER_PLAN.md`.
@@ -995,9 +997,8 @@ SQLite row-lock claim without changing the implemented domain guard.
 reachability is implemented, docs-only `MO-S.6D-1D-D-0A` closes the planner
 batch/audit decision, `MO-S.6D-1D-D-1A` implements read-only preview, and
 `MO-S.6D-1D-D-1A-FU1` implements the cycle-closed-tail refinement. Docs-only
-`1B-A0` is complete and runtime Scheduling Revision Foundation `1B-A1` is
-implemented; optimistic confirmation/audit `1B-B` remains unimplemented and
-unapproved. Any remaining governance
+`1B-A0` is complete and runtime Scheduling Revision Foundation `1B-A1` plus
+optimistic confirmation/shared audit `1B-B` are implemented. Any remaining governance
 prerequisite or later MO-S.6 runtime slice
 requires separate explicit approval and repository-truth review.
 
@@ -1305,7 +1306,7 @@ Attempted row-lock closure `1B-A` stopped without changes on target SQLite;
 docs-only `1B-A0` now closes the one-event scheduling-revision, SQLite writer-
 barrier, supported-write, CAS, and A1/B split decisions. Runtime `1B-A1` is
 implemented with target-like file-backed SQLite concurrency coverage;
-separately approved `1B-B` confirmation/audit remains unimplemented.
+separately approved `1B-B` confirmation/shared audit is implemented.
 Notifications, importer runtime, and bulk upload remain unimplemented.
 Remaining MO-S.6D and later slices are not
 authorized by the governance closure or these foundations. Availability,

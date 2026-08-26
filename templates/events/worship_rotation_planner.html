@@ -15,9 +15,9 @@
 </div>
 
 <div class="card" role="note">
-    <strong>{% if language == "zh" %}当前仅提供预览；确认顺延将在后续阶段启用。{% else %}Preview only. Confirmation will be enabled in the next implementation stage.{% endif %}</strong>
+    <strong>{% if language == "zh" %}请先生成并检查预览，再明确确认顺延。{% else %}Generate and review the preview before explicitly confirming the shift.{% endif %}</strong>
     <p class="muted">
-        {% if language == "zh" %}此页面不会更改聚会、敬拜团队、排班、成员或受众。{% else %}This page does not change events, Worship Teams, assignments, members, or audience.{% endif %}
+        {% if language == "zh" %}生成预览不会写入资料；确认只会更新预览中的敬拜团队，不会更改排班、成员或受众。{% else %}Generating a preview writes nothing; confirmation updates only the previewed Worship Teams, never assignments, members, or audience.{% endif %}
     </p>
 </div>
 
@@ -114,7 +114,16 @@
         <p class="muted">{% if language == "zh" %}插入的敬拜团队完成了轮值闭合。{% else %}Cycle closed by the inserted Worship Team.{% endif %}</p>
         {% endif %}
     </div>
-    <p class="muted"><strong>{% if language == "zh" %}当前仅提供预览；确认顺延将在后续阶段启用。{% else %}Preview only. Confirmation will be enabled in the next implementation stage.{% endif %}</strong></p>
+    {% if confirmation_form %}
+    <form method="post" action="{% url 'worship_rotation_planner_confirm' %}" class="card planner-confirm-form">
+        {% csrf_token %}
+        {{ confirmation_form.proposal }}
+        <p><strong>{% if language == "zh" %}确认后将以完整批次更新上述敬拜团队。{% else %}Confirmation updates the Worship Teams above as one complete batch.{% endif %}</strong></p>
+        <div class="actions">
+            <button type="submit">{% if language == "zh" %}确认顺延{% else %}Confirm Shift{% endif %}</button>
+        </div>
+    </form>
+    {% endif %}
 </section>
 {% endif %}
 
@@ -127,6 +136,7 @@
 .planner-before-after dd { margin: 0.25rem 0 0; }
 .planner-downstream { overflow-wrap: anywhere; }
 .planner-tail { overflow-wrap: anywhere; }
+.planner-confirm-form { overflow-wrap: anywhere; }
 @media (max-width: 520px) {
     .planner-before-after { grid-template-columns: 1fr; }
     .planner-preview-row { overflow: hidden; }

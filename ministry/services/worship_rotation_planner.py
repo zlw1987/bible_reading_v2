@@ -1,19 +1,18 @@
-"""Read-only Worship Rotation Planner proposal and signing contract.
-
-MO-S.6D-1D-D-1A deliberately stops at proposal/preview.  This module performs
-no writes and keeps the normalized proposal reusable by the future locked 1B
-confirmation slice.
-"""
+"""Worship Rotation Planner proposal, signing, and confirmation contract."""
 
 from dataclasses import dataclass
 from enum import StrEnum
 from uuid import UUID, uuid4
 
+from django.contrib.admin.models import CHANGE, LogEntry
+from django.contrib.contenttypes.models import ContentType
 from django.core import signing
+from django.db import transaction
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 
 from events.models import ServiceEvent
+from events.scheduling_revision import claim_scheduling_revisions
 
 from ..models import MinistryTeam, TeamAssignment
 from ..permissions import can_change_worship_team
@@ -65,6 +64,14 @@ class SignedProposalUserMismatch(SignedProposalError):
     pass
 
 
+class WorshipRotationConfirmationError(RuntimeError):
+    """The signed proposal no longer confirms against current scheduling truth."""
+
+
+class WorshipRotationAuditError(WorshipRotationConfirmationError):
+    """The shared-operation audit could not be written transactionally."""
+
+
 @dataclass(frozen=True)
 class DownstreamImpact:
     team: MinistryTeam
@@ -105,6 +112,13 @@ class WorshipRotationProposal:
     @property
     def confirmable(self):
         return not self.blockers
+
+
+@dataclass(frozen=True)
+class WorshipRotationConfirmationResult:
+    operation_id: str
+    claimed_event_ids: tuple[int, ...]
+    changed_event_ids: tuple[int, ...]
 
 
 def _team_is_worship(team):
@@ -404,10 +418,178 @@ def build_worship_rotation_proposal(*, user, event_ids, inserted_team, now=None)
     )
 
 
+def _is_positive_int(value):
+    return type(value) is int and value > 0
+
+
+def _is_optional_positive_int(value):
+    return value is None or _is_positive_int(value)
+
+
+def _is_datetime_value(value, *, optional=False):
+    if optional and value is None:
+        return True
+    return isinstance(value, str) and parse_datetime(value) is not None
+
+
+def _is_id_pair_list(value):
+    return isinstance(value, list) and all(
+        isinstance(item, list)
+        and len(item) == 2
+        and all(_is_positive_int(part) for part in item)
+        for item in value
+    )
+
+
+def _fingerprint_shape_is_valid(fingerprint, *, event_id, before_team_id):
+    if not isinstance(fingerprint, dict) or set(fingerprint) != {
+        "event",
+        "governance",
+        "current_worship",
+        "downstream",
+    }:
+        return False
+    event = fingerprint["event"]
+    governance = fingerprint["governance"]
+    current_worship = fingerprint["current_worship"]
+    downstream = fingerprint["downstream"]
+    if not isinstance(event, dict) or set(event) != {
+        "event_id",
+        "scheduling_revision",
+        "updated_at",
+        "status",
+        "event_type",
+        "start_datetime",
+        "end_datetime",
+        "before_team_id",
+    }:
+        return False
+    if (
+        event.get("event_id") != event_id
+        or type(event.get("scheduling_revision")) is not int
+        or event["scheduling_revision"] < 0
+        or not _is_datetime_value(event.get("updated_at"))
+        or not isinstance(event.get("status"), str)
+        or not isinstance(event.get("event_type"), str)
+        or not _is_datetime_value(event.get("start_datetime"))
+        or not _is_datetime_value(event.get("end_datetime"), optional=True)
+        or event.get("before_team_id") != before_team_id
+    ):
+        return False
+    if not isinstance(governance, dict) or set(governance) != {
+        "audience_unit_ids",
+        "applicable_pools",
+        "eligible_candidates",
+        "selected_team_eligible",
+        "ownership_state",
+    }:
+        return False
+    if (
+        not isinstance(governance["audience_unit_ids"], list)
+        or any(
+            not _is_positive_int(unit_id)
+            for unit_id in governance["audience_unit_ids"]
+        )
+        or not _is_id_pair_list(governance["applicable_pools"])
+        or not _is_id_pair_list(governance["eligible_candidates"])
+        or type(governance["selected_team_eligible"]) is not bool
+        or governance["ownership_state"]
+        not in {state.value for state in WorshipOwnershipConsistencyState}
+    ):
+        return False
+    if not isinstance(current_worship, list) or any(
+        not isinstance(item, list)
+        or len(item) != 7
+        or not all(_is_positive_int(part) for part in item[:3])
+        or not isinstance(item[3], str)
+        or not all(type(part) is bool for part in item[4:])
+        for item in current_worship
+    ):
+        return False
+    if not isinstance(downstream, dict) or set(downstream) != {
+        "required_team_ids",
+        "assignments",
+    }:
+        return False
+    return (
+        isinstance(downstream["required_team_ids"], list)
+        and all(
+            _is_positive_int(team_id)
+            for team_id in downstream["required_team_ids"]
+        )
+        and isinstance(downstream["assignments"], list)
+        and all(
+            isinstance(item, list)
+            and len(item) == 3
+            and _is_positive_int(item[0])
+            and _is_positive_int(item[1])
+            and isinstance(item[2], str)
+            for item in downstream["assignments"]
+        )
+    )
+
+
+def _validate_decoded_payload_shape(payload):
+    event_ids = payload.get("event_ids")
+    before_ids = payload.get("before_team_ids")
+    proposed_ids = payload.get("proposed_team_ids")
+    fingerprints = payload.get("fingerprints")
+    inserted_team_id = payload.get("inserted_team_id")
+    displaced_tail_team_id = payload.get("displaced_tail_team_id")
+    if (
+        type(payload.get("previewing_user_id")) is not int
+        or payload["previewing_user_id"] <= 0
+        or not _is_datetime_value(payload.get("generated_at"))
+        or not isinstance(event_ids, list)
+        or not MIN_CHAIN_LENGTH <= len(event_ids) <= MAX_CHAIN_LENGTH
+        or any(not _is_positive_int(event_id) for event_id in event_ids)
+        or len(set(event_ids)) != len(event_ids)
+        or not isinstance(before_ids, list)
+        or not isinstance(proposed_ids, list)
+        or not isinstance(fingerprints, list)
+        or not len(event_ids)
+        == len(before_ids)
+        == len(proposed_ids)
+        == len(fingerprints)
+        or not _is_positive_int(inserted_team_id)
+        or any(not _is_optional_positive_int(value) for value in before_ids)
+        or any(not _is_optional_positive_int(value) for value in proposed_ids)
+        or not _is_optional_positive_int(displaced_tail_team_id)
+        or proposed_ids[0] != inserted_team_id
+        or proposed_ids[1:] != before_ids[:-1]
+        or displaced_tail_team_id != before_ids[-1]
+        or any(
+            not _fingerprint_shape_is_valid(
+                fingerprint,
+                event_id=event_id,
+                before_team_id=before_team_id,
+            )
+            for event_id, before_team_id, fingerprint in zip(
+                event_ids,
+                before_ids,
+                fingerprints,
+            )
+        )
+    ):
+        raise SignedProposalError("Invalid proposal shape.")
+
+
+def extract_expected_scheduling_revisions(payload):
+    """Return the exact signed pre-claim revisions without database access."""
+
+    _validate_decoded_payload_shape(payload)
+    return tuple(
+        (event_id, fingerprint["event"]["scheduling_revision"])
+        for event_id, fingerprint in zip(
+            payload["event_ids"], payload["fingerprints"]
+        )
+    )
+
+
 def decode_signed_worship_rotation_proposal(
     token, *, user, max_age=PLANNER_MAX_AGE_SECONDS
 ):
-    """Decode and validate the reusable 1B proposal boundary."""
+    """Decode and fully shape-validate the user-bound v3 proposal."""
 
     try:
         payload = signing.loads(
@@ -433,43 +615,13 @@ def decode_signed_worship_rotation_proposal(
         or payload.get("previewing_user_id") != user.pk
     ):
         raise SignedProposalUserMismatch("Proposal belongs to another user.")
-    event_ids = payload.get("event_ids")
-    before_ids = payload.get("before_team_ids")
-    proposed_ids = payload.get("proposed_team_ids")
-    fingerprints = payload.get("fingerprints")
+    _validate_decoded_payload_shape(payload)
     try:
         tail_resolution = TailResolution(payload.get("tail_resolution"))
     except (TypeError, ValueError) as exc:
         raise SignedProposalError("Invalid tail resolution.") from exc
     inserted_team_id = payload.get("inserted_team_id")
     displaced_tail_team_id = payload.get("displaced_tail_team_id")
-    team_id_values = [
-        payload.get("inserted_team_id"),
-        payload.get("displaced_tail_team_id"),
-        *(before_ids if isinstance(before_ids, list) else []),
-        *(proposed_ids if isinstance(proposed_ids, list) else []),
-    ]
-    if (
-        not isinstance(payload.get("previewing_user_id"), int)
-        or parse_datetime(payload.get("generated_at") or "") is None
-        or not isinstance(event_ids, list)
-        or not MIN_CHAIN_LENGTH <= len(event_ids) <= MAX_CHAIN_LENGTH
-        or any(not isinstance(event_id, int) for event_id in event_ids)
-        or len(set(event_ids)) != len(event_ids)
-        or not isinstance(before_ids, list)
-        or not isinstance(proposed_ids, list)
-        or not isinstance(fingerprints, list)
-        or not len(event_ids) == len(before_ids) == len(proposed_ids) == len(fingerprints)
-        or any(value is not None and not isinstance(value, int) for value in team_id_values)
-        or any(not isinstance(item, dict) for item in fingerprints)
-        or any(
-            not isinstance(item.get("event"), dict)
-            or not isinstance(item["event"].get("scheduling_revision"), int)
-            or item["event"]["scheduling_revision"] < 0
-            for item in fingerprints
-        )
-    ):
-        raise SignedProposalError("Invalid proposal shape.")
     tail_resolution_is_consistent = (
         tail_resolution == TailResolution.TERMINAL_BLANK
         and displaced_tail_team_id is None
@@ -485,3 +637,155 @@ def decode_signed_worship_rotation_proposal(
     if not tail_resolution_is_consistent:
         raise SignedProposalError("Inconsistent tail resolution.")
     return payload
+
+
+def _post_cas_fingerprints_match(
+    *, signed_fingerprints, current_fingerprints, expected_revisions
+):
+    """Compare all semantic facts while treating revision as the pre-CAS token."""
+
+    if len(signed_fingerprints) != len(current_fingerprints):
+        return False
+    expected_by_id = dict(expected_revisions)
+    for signed, current in zip(signed_fingerprints, current_fingerprints):
+        signed_event = signed["event"]
+        current_event = current["event"]
+        event_id = signed_event["event_id"]
+        expected_revision = expected_by_id.get(event_id)
+        if (
+            expected_revision is None
+            or signed_event["scheduling_revision"] != expected_revision
+            or current_event.get("scheduling_revision") != expected_revision + 1
+        ):
+            return False
+        if {
+            key: value
+            for key, value in signed_event.items()
+            if key != "scheduling_revision"
+        } != {
+            key: value
+            for key, value in current_event.items()
+            if key != "scheduling_revision"
+        }:
+            return False
+        for section in ("governance", "current_worship", "downstream"):
+            if signed[section] != current[section]:
+                return False
+    return True
+
+
+def revalidated_proposal_matches_signed_payload(
+    *, signed_payload, current_proposal, expected_revisions
+):
+    """Validate recomputed shift semantics without weakening any fingerprint."""
+
+    return (
+        list(current_proposal.ordered_event_ids) == signed_payload["event_ids"]
+        and getattr(current_proposal.inserted_team, "pk", None)
+        == signed_payload["inserted_team_id"]
+        and [row.before_team and row.before_team.pk for row in current_proposal.rows]
+        == signed_payload["before_team_ids"]
+        and [
+            row.proposed_team and row.proposed_team.pk
+            for row in current_proposal.rows
+        ]
+        == signed_payload["proposed_team_ids"]
+        and getattr(current_proposal.displaced_tail, "pk", None)
+        == signed_payload["displaced_tail_team_id"]
+        and current_proposal.tail_resolution.value
+        == signed_payload["tail_resolution"]
+        and _post_cas_fingerprints_match(
+            signed_fingerprints=signed_payload["fingerprints"],
+            current_fingerprints=[
+                row.fingerprints for row in current_proposal.rows
+            ],
+            expected_revisions=expected_revisions,
+        )
+    )
+
+
+def confirm_worship_rotation_proposal(*, user, payload):
+    """CAS, fully revalidate, mutate anchors, and audit one atomic batch."""
+
+    expected_revisions = extract_expected_scheduling_revisions(payload)
+    event_ids = tuple(payload["event_ids"])
+    with transaction.atomic():
+        # This conditional UPDATE sequence is intentionally the first scheduling
+        # or governance database access in confirmation.
+        claim_results = claim_scheduling_revisions(expected_revisions)
+
+        reloaded_ids = tuple(
+            ServiceEvent.objects.filter(pk__in=event_ids)
+            .order_by("start_datetime", "id")
+            .values_list("pk", flat=True)
+        )
+        if reloaded_ids != event_ids:
+            raise WorshipRotationConfirmationError(
+                "The exact event chain changed after preview."
+            )
+        inserted_team = MinistryTeam.objects.filter(
+            pk=payload["inserted_team_id"]
+        ).first()
+        if inserted_team is None:
+            raise WorshipRotationConfirmationError(
+                "The inserted Worship Team is no longer available."
+            )
+        current_proposal = build_worship_rotation_proposal(
+            user=user,
+            event_ids=event_ids,
+            inserted_team=inserted_team,
+        )
+        if not current_proposal.confirmable:
+            raise WorshipRotationConfirmationError(
+                "The recomputed proposal is not confirmable."
+            )
+        if not revalidated_proposal_matches_signed_payload(
+            signed_payload=payload,
+            current_proposal=current_proposal,
+            expected_revisions=expected_revisions,
+        ):
+            raise WorshipRotationConfirmationError(
+                "Scheduling or governance truth changed after preview."
+            )
+
+        content_type_id = ContentType.objects.get_for_model(ServiceEvent).pk
+        changed_event_ids = []
+        for row in current_proposal.rows:
+            if not row.changed:
+                continue
+            event = row.event
+            old_team = row.before_team
+            proposed_team = row.proposed_team
+            event.rotation_anchor_team = proposed_team
+            event.save(
+                update_fields=["rotation_anchor_team", "updated_at"],
+                _skip_scheduling_revision=True,
+            )
+            try:
+                LogEntry.objects.log_action(
+                    user_id=user.pk,
+                    content_type_id=content_type_id,
+                    object_id=event.pk,
+                    object_repr=str(event),
+                    action_flag=CHANGE,
+                    change_message=(
+                        "Worship Rotation Planner batch confirmation "
+                        "(MO-S.6D-1D-D-1B-B). "
+                        f"operation_id={payload['operation_id']}; "
+                        f"old_team_id={getattr(old_team, 'pk', None)!r}; "
+                        f"old_team={getattr(old_team, 'name', None)!r}; "
+                        f"new_team_id={getattr(proposed_team, 'pk', None)!r}; "
+                        f"new_team={getattr(proposed_team, 'name', None)!r}."
+                    ),
+                )
+            except Exception as exc:
+                raise WorshipRotationAuditError(
+                    "Worship Rotation Planner audit write failed."
+                ) from exc
+            changed_event_ids.append(event.pk)
+
+    return WorshipRotationConfirmationResult(
+        operation_id=payload["operation_id"],
+        claimed_event_ids=tuple(result.event_id for result in claim_results),
+        changed_event_ids=tuple(changed_event_ids),
+    )

@@ -7,6 +7,7 @@ from django.db.models import Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
+from django.views.decorators.http import require_POST
 
 from accounts.language import get_user_language
 from accounts.permissions import CAP_MANAGE_SERVICE_EVENTS, has_capability
@@ -28,7 +29,11 @@ from ministry.services.worship_governance import (
 )
 from ministry.services.worship_rotation_planner import (
     PlannerBlocker,
+    SignedProposalError,
+    WorshipRotationConfirmationError,
     build_worship_rotation_proposal,
+    confirm_worship_rotation_proposal,
+    decode_signed_worship_rotation_proposal,
 )
 
 from .scheduling_revision import (
@@ -41,6 +46,7 @@ from .forms import (
     RecurringServiceEventForm,
     ServiceEventForm,
     ServiceEventPlannerAssignmentForm,
+    WorshipRotationConfirmationForm,
     WorshipRotationPlannerForm,
     WorshipTeamSelectionForm,
 )
@@ -99,6 +105,10 @@ def event_ui_text(language, key):
             "scheduling_retry": (
                 "Scheduling changed or is busy. Reload the current state and try again."
             ),
+            "rotation_confirmation_retry": (
+                "Scheduling changed or is busy. Generate a new preview and try again."
+            ),
+            "rotation_confirmation_saved": "Worship rotation updated.",
         },
         "zh": {
             "no_permission": "你没有管理聚会事件的权限。",
@@ -120,6 +130,10 @@ def event_ui_text(language, key):
                 "再更改敬拜团队。"
             ),
             "scheduling_retry": "排班资料已有变化或系统正忙。请刷新当前状态后重试。",
+            "rotation_confirmation_retry": (
+                "排班资料已有变化或系统正忙。请重新生成预览后再试。"
+            ),
+            "rotation_confirmation_saved": "敬拜轮值已更新。",
         },
     }
     return labels.get(language, labels["en"])[key]
@@ -709,6 +723,7 @@ def worship_rotation_planner(request):
 
     preview_rows = []
     proposal_blockers = []
+    confirmation_form = None
     if proposal is not None:
         proposal_blockers = [
             _planner_blocker_text(language, blocker)
@@ -724,6 +739,10 @@ def worship_rotation_planner(request):
             }
             for row in proposal.rows
         ]
+        if proposal.confirmable:
+            confirmation_form = WorshipRotationConfirmationForm(
+                initial={"proposal": proposal.signed_payload}
+            )
 
     return render(
         request,
@@ -734,8 +753,45 @@ def worship_rotation_planner(request):
             "proposal_blockers": proposal_blockers,
             "preview_rows": preview_rows,
             "available_events": available_events,
+            "confirmation_form": confirmation_form,
         },
     )
+
+
+@login_required
+@require_POST
+def worship_rotation_planner_confirm(request):
+    language = get_user_language(request)
+    form = WorshipRotationConfirmationForm(request.POST)
+    if not form.is_valid():
+        messages.error(
+            request,
+            event_ui_text(language, "rotation_confirmation_retry"),
+        )
+        return redirect("worship_rotation_planner")
+
+    try:
+        payload = decode_signed_worship_rotation_proposal(
+            form.cleaned_data["proposal"],
+            user=request.user,
+        )
+        confirm_worship_rotation_proposal(user=request.user, payload=payload)
+    except (
+        SignedProposalError,
+        SchedulingRevisionError,
+        WorshipRotationConfirmationError,
+    ):
+        messages.error(
+            request,
+            event_ui_text(language, "rotation_confirmation_retry"),
+        )
+        return redirect("worship_rotation_planner")
+
+    messages.success(
+        request,
+        event_ui_text(language, "rotation_confirmation_saved"),
+    )
+    return redirect("worship_planning")
 
 
 @login_required

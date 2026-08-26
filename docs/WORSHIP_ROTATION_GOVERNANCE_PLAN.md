@@ -14,13 +14,13 @@ Worship Rotation Planner batch contract and implemented read-only proposal/
 preview `MO-S.6D-1D-D-1A`, plus implemented `MO-S.6D-1D-D-1A-FU1`
 cycle-closed tail refinement, plus the docs-only `MO-S.6D-1D-D-1B-A0`
 SQLite optimistic scheduling-concurrency decision, plus implemented
-`MO-S.6D-1D-D-1B-A1` Scheduling Revision Foundation. Governance FU2 finalizes the required event-planner
+`MO-S.6D-1D-D-1B-A1` Scheduling Revision Foundation, plus implemented
+`MO-S.6D-1D-D-1B-B` optimistic batch confirmation/shared audit. Governance FU2 finalizes the required event-planner
 prerequisite and Worship-specific pool semantics. The Campus, pool-
 configuration, event-responsibility, read-only governance, and governed
-single-event mutation and operational-reachability foundations are implemented;
-optimistic planner confirmation/audit,
-notification, and import slices below
-require separate explicit approval.
+single-event mutation, operational-reachability, and planner-confirmation
+foundations are implemented; notification and import slices below require
+separate explicit approval.
 
 ## 1. Problem and decisions owned here
 
@@ -103,7 +103,6 @@ The current code provides:
 
 The current code does **not** provide:
 
-- optimistic Worship Rotation Planner confirmation/audit;
 - direct Worship Team change notifications; or
 - a declared `.xlsx` dependency or annual-workbook importer.
 
@@ -499,7 +498,8 @@ Docs-only `MO-S.6D-1D-D-1B-A0` selected the monotonic
 `ServiceEvent.scheduling_revision`; implemented `1B-A1` now supplies SQLite
 first-write serialization, current-truth recomputation, supported-write
 coverage, and file-backed concurrency proof. Optimistic batch confirmation
-`1B-B`. Arbitrary raw SQL and future bulk ORM writes remain outside the claim.
+`1B-B` is implemented on that foundation. Arbitrary raw SQL and future bulk ORM
+writes remain outside the claim.
 
 Creating or editing a Worship assignment for a team other than the selected
 team must fail closed. Changing the selected team while any current Worship
@@ -726,7 +726,7 @@ chronology: `1D-B` implemented the existing timestamp/old-team checks, not an
 optimistic revision. Prior SQLite tests prove request-level stale-form and
 atomic rollback semantics, not parallel row locking.
 
-### Worship Rotation Planner contract and implemented read-only preview
+### Worship Rotation Planner contract, preview, and optimistic confirmation
 
 `MO-S.6D-1D-D-0A` closes the docs-only batch contract in
 [`WORSHIP_ROTATION_PLANNER_PLAN.md`](WORSHIP_ROTATION_PLANNER_PLAN.md).
@@ -753,9 +753,10 @@ without losing a team identity. Any other non-null tail remains shown and
 blocked. This is exact identity preservation, not a stored/inferred rotation
 sequence, name/order convention, fuzzy match, or arbitrary tail-drop approval.
 Preview uses a 30-minute user-bound timestamped Django-signed normalized
-proposal. Per-event `LogEntry` rows sharing one operation UUID are future
-`1B-B` confirmation behavior, not implemented preview behavior. No durable
-BatchRun schema is required for the limited-trial contract.
+proposal. Implemented `1B-B` confirms only a currently matching proposal and
+writes one per-changed-event `LogEntry` whose shared operation UUID identifies
+the batch; preview itself still writes no audit rows. No durable BatchRun schema
+is required for the limited-trial contract.
 
 The attempted downstream row-lock closure `1B-A` correctly stopped without
 changes because target SQLite cannot provide the proposed ServiceEvent
@@ -763,7 +764,7 @@ changes because target SQLite cannot provide the proposed ServiceEvent
 architecture decision; implemented `1B-A1` adds one monotonic event-owned
 scheduling revision and retrofits supported ServiceEvent, current-assignment, required-
 team/audience, Admin/delete/cascade, member-confirmation parent-status, and
-Lighting writes. Future `1B-B` claims every selected event revision with an
+Lighting writes. Implemented `1B-B` claims every selected event revision with an
 atomic expected-value CAS before full governance/authority/fingerprint
 recomputation. SQLite's first successful CAS supplies a database-wide writer
 boundary, not a row lock. Read-only preview `1A` remains unaffected.
@@ -910,25 +911,22 @@ Each slice is separately approvable and must verify repository truth again.
 | 4A | **Read-only Worship applicability, candidate, and ownership-consistency foundation — IMPLEMENTED (`MO-S.6D-1D-A`)** | Side-effect-free domain helper only; reuses pool inspection and current scheduling statuses; no permission, selector, endpoint, enforcement, model, or migration | audience union/fail-closed applicability, active-primary descendant candidates, off-team/out-of-scope/multiple/duplicate consistency, privacy/read-only and authority boundaries | No rendered QA; no user-visible behavior changed |
 | 4B | **Narrow Worship Team authorization, write enforcement, and UI — IMPLEMENTED (`MO-S.6D-1D-B`, identity/ordering closure in `MO-S.6D-1D-B-FU1`)** | Consumes 4A from narrow GET/POST plus existing anchor/Worship-assignment write paths; pool Leads/planners receive only this action; current Worship identity is immutable; atomic validation and ServiceEvent-first ordering remain implemented, but target SQLite provides no actual `select_for_update()` row lock | actual denial/allow rules, current-truth reauthorization, stale form, combined union, legacy-form/admin/assignment bypass closure, cross-path identity retarget rejection, structural event-first path, LogEntry attribution, no roster move or unrelated writes | Rendered Worship Team selector, bilingual copy, conflict UX, hidden blocked controls, and narrow-context privacy verified in the implementation slices |
 | 5 | **Worship Team operational reachability — IMPLEMENTED (`MO-S.6D-1D-C`; projection corrections `MO-S.6D-1D-C-FU1/FU2`)** | Team Schedule/Board queryset and projection change only; exact-team assignment permission unchanged; canonical eligibility fails closed; invalid raw selection never suppresses independent generic required/assignment participation; canonical ownership conflicts/ambiguity are review-only and non-actionable; no migration | selected-team-only rows, empty-coverage presentation, valid-selection de-dup, invalid required/assignment projection, off-team/out-of-scope conflict, multiple/duplicate ambiguity, global/exact-team behavior, planner/pool-Lead boundary, change/removal, privacy, no coverage/assignment/required-team writes | Rendered English desktop and Chinese mobile Team Schedule/Board QA completed in the implementation slice; FU1/FU2 are focused projection-only and test-verified |
-| 6 | **Worship Rotation Planner — DOCS CONTRACT/SQLite A0 COMPLETE; READ-ONLY PREVIEW/FU1 AND `1B-A1` IMPLEMENTED; `1B-B` UNIMPLEMENTED** | Existing selector retains one-Sunday changes; `1A/FU1` remain side-effect-free; `1B-A1` adds the event revision, supported-write barriers, planner fingerprint v3, and target-like SQLite proof; no rule engine, roster mutation, or BatchRun schema | `1A/FU1/A1`: implemented focused coverage. `1B-B`: expected-revision CAS, full recomputation, stale/all-or-nothing rollback, all-selected revision advance, and future shared-operation LogEntry audit | `1A/FU1` UX already verified; A1 adds only bounded retry errors and no planner confirmation UI; confirmation/result UX remains required for `1B-B` |
+| 6 | **Worship Rotation Planner — IMPLEMENTED THROUGH `1B-B`** | Existing selector retains one-Sunday changes; `1A/FU1` remain side-effect-free; `1B-A1` owns the event revision/barriers/fingerprint-v3 foundation; `1B-B` adds POST-only signed confirmation and shared audit; no rule engine, roster mutation, notification, or BatchRun schema | expected-revision CAS first, full recomputation, stale/all-or-nothing rollback, all-selected revision advance, changed-only shared-operation LogEntry audit, replay/tail/privacy/zero-cross-domain-write coverage, and target-like file-backed SQLite proof | Rendered English desktop and Chinese mobile confirmable/blocked/success/replay/narrow-authority QA completed; deployment QA remains separate |
 | 7 | **Direct Worship Team change notification producer** | Ministry-owned post-commit producer through Core port; no notification permission/schema inference; summarized batch delivery | exact role/date recipients, required/additional downstream bounds, dedupe, language/privacy, disabled-module no-op, rollback/no-emission | Required for recipient-safe copy/target QA |
 | 8 | **Excel dependency/parser + preview** | Reviewed `.xlsx` dependency and read-only upload/preview; staff/superuser only; no data write or migration expected | contract/header/date/cache/token/profile/identity classification, roster/downstream impact, size/privacy/tamper/expiry tests | Required for upload and preview |
 | 9 | **Excel exact match/update confirmation** | Atomic existing-event selected-team writes only; no new event/required team/assignment; no schema if signed proposal remains sufficient | reauthorization, target locking/fingerprint, roster conflict, stale rollback, idempotency, eligible mapping, unsupported rows, audit attribution | Required for confirmation/result UX |
 | 10 | **Later assignment import** | Deferred; would write TeamAssignment/member data and needs exact-team plus bulk authority and identity proof | unresolved/ambiguous people, explicit aliases, team ownership, no user creation, rollback/idempotency | Required; only after operational evidence |
 
-Dependencies: slices 1, 2, 3, 4A, 4B, 5, and slice 6 read-only preview
-`1A` plus its cycle-closed-tail FU1 and runtime scheduling-revision foundation
-`1B-A1` are implemented; docs-only `1B-A0` is complete. Optimistic confirmation
-`1B-B` remains separately unimplemented and unapproved. Slice 1 remains
+Dependencies: slices 1, 2, 3, 4A, 4B, 5, and slice 6 through confirmation
+`1B-B` are implemented; docs-only `1B-A0` is complete. Slice 1 remains
 independent but should precede real multi-campus setup. Slices 2 and 3 both
 precede 4B: pool configuration is required for pool-based authority/
 applicability, and the implemented exact-event planner responsibility is
 required for the approved event-planner workflow. Slice 4A defines the
 read-only ownership facts; 4B enforces them for supported writes. Implemented
 slice 5 now ensures an imported Worship Team can be operationally reachable
-without false required coverage before slice 9. Slice 6 confirmation `1B-B`
-remains separately approvable and should precede using annual import as a batch
-rotation tool. Slice 7 follows a proven change
+without false required coverage before slice 9. Implemented slice 6 precedes
+using annual import as a batch rotation tool. Slice 7 follows a proven change
 path. Slice 8 precedes 9. Slice 10 remains later.
 
 ## 18. Permission, privacy, and data invariants

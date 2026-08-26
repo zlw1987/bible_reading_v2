@@ -4,19 +4,20 @@ Status: `MO-S.6D-1D-D-0A` docs-only architecture gate,
 `MO-S.6D-1D-D-1A` read-only proposal/preview runtime,
 `MO-S.6D-1D-D-1A-FU1` cycle-closed tail refinement, and the docs-only
 `MO-S.6D-1D-D-1B-A0` SQLite optimistic scheduling-concurrency decision are
-complete. `MO-S.6D-1D-D-1B-A1` Scheduling Revision Foundation is also
-implemented. The
-contextual planner route now builds an explicit exact-event chain, projects
-the deterministic shift and privacy-limited downstream impact, and produces a
-30-minute user-bound signed normalized proposal without writing state.
+complete. `MO-S.6D-1D-D-1B-A1` Scheduling Revision Foundation and
+`MO-S.6D-1D-D-1B-B` optimistic batch confirmation/shared audit are also
+implemented. The contextual planner route builds an explicit exact-event
+chain, projects the deterministic shift and privacy-limited downstream impact,
+and produces a 30-minute user-bound signed normalized proposal without writing
+state; an explicit confirm action may then apply that exact proposal atomically.
 The attempted `MO-S.6D-1D-D-1B-A` row-lock closure correctly stopped without
 changes because both local and GoDaddy deployment settings use SQLite and
 `connection.features.has_select_for_update` is false. Runtime scheduling-
-revision foundation now supplies the target SQLite concurrency boundary;
-optimistic confirmation/audit `1B-B` remains unimplemented and unapproved. No
-planner model, confirmation write,
-audit write, notification, session proposal, temp file, or data change is
-implemented by `1A`, `1A-FU1`, or docs-only `1B-A0`.
+revision foundation supplies the target SQLite concurrency boundary and `1B-B`
+consumes it. No planner model, notification, session proposal, temp file, or
+BatchRun schema was added. Preview remains zero-write; confirmation changes only
+selected-event Worship anchors and scheduling revisions plus shared-operation
+per-changed-event audit rows.
 
 This document owns the batch-planner contract. The broader Worship invariants
 remain canonical in
@@ -38,7 +39,7 @@ V1 must not duplicate that mature mutation path merely to make the planner look
 symmetrical. The canonical separation is:
 
 1. **Change one Sunday only:** use the existing exact-event selector.
-2. **Insert / Shift Later Worship Teams:** use the future Worship Rotation
+2. **Insert / Shift Later Worship Teams:** use the implemented Worship Rotation
    Planner over an explicitly reviewed bounded event chain.
 
 The planner edits explicit `ServiceEvent.rotation_anchor_team` values. It does
@@ -207,7 +208,7 @@ The batch invents no authority. It reuses
 - The preview selection surface remains bounded to events reachable through
   the existing Worship Planning authority predicate; this avoids inventing a
   separate batch-read permission.
-- At preview and again after the future confirmation CAS write barrier, every
+- At preview and again after the implemented confirmation CAS write barrier, every
   event whose selected team would actually change must pass
   `can_change_worship_team` for the current user.
 - If one changed row is unauthorized, the whole proposal/confirmation is
@@ -494,10 +495,10 @@ Normal form, Team Schedule, Admin, cancellation/completion/reactivation,
 member-confirmation parent status, and Lighting paths must converge on this
 contract without changing their authority, notifications, or lifecycle rules.
 
-### Future `1B-B` confirmation CAS
+### Implemented `1B-B` confirmation CAS
 
-Preview after A1 includes each event's expected `scheduling_revision` in
-the signed semantic payload. Future confirmation is:
+Preview includes each event's expected `scheduling_revision` in the signed
+semantic payload. Implemented confirmation is:
 
 1. decode and shape-check the signed payload before mutation logic;
 2. enter `transaction.atomic()` with no scheduling/governance reads before the
@@ -519,7 +520,7 @@ the signed semantic payload. Future confirmation is:
    current-Worship ownership, and downstream/required-team fingerprints;
 6. reject and roll back on any mismatch or conflict;
 7. save only changed Worship Team selections without a second revision bump;
-8. write one future existing-style `LogEntry` per changed event, all sharing
+8. write one existing-style `LogEntry` per changed event, all sharing
    the operation ID; and
 9. commit once.
 
@@ -543,12 +544,12 @@ The bounded target guarantee is therefore optimistic revision plus SQLite
 write-transaction serialization plus current-truth recomputation for supported
 application writes. It is database-wide writer exclusion, not a row-level
 lock. Readers may continue. A competing writer may wait or receive
-`database is locked`; A1 and future B keep transactions short and render retry/error
+`database is locked`; A1 and B keep transactions short and render retry/error
 without false success. Configuration/authority changes committed before the
 first CAS are caught by recomputation; after that CAS, SQLite prevents another
 database writer from committing through the confirmation window.
 
-Before enabling `1B-B`, A1 now includes a real two-connection, file-backed
+A1 includes a real two-connection, file-backed
 SQLite concurrency test—not an in-memory database or ordinary `TestCase`—that
 proves stale CAS, cross-event writer exclusion after the barrier, rollback of
 revision claims, no partial batch commit, and safe retry/error behavior under
@@ -561,11 +562,11 @@ with `select_for_update()`, but must re-audit concurrent global governance/path/
 role mutations because it will not inherit SQLite's database-wide writer
 exclusion. No backend migration is authorized here.
 
-## 13. Future `1B-B` audit and schema decision
+## 13. Implemented `1B-B` audit and schema decision
 
 V1 does not need a durable batch model.
 
-Every actual event change in future `1B-B` uses the established `LogEntry`
+Every actual event change in `1B-B` uses the established `LogEntry`
 shape and adds:
 
 ```text
@@ -577,7 +578,7 @@ new_team_id=<id or None>; new_team=<display>
 `LogEntry.user_id`, object identity, timestamp, and shared operation ID are
 sufficient for limited-trial diagnosis of who shifted which exact events and
 for a later summarized-notification producer to use one stable committed-batch
-identity. Those future actual writes and logs remain in the same transaction.
+identity. Those actual writes and logs remain in the same transaction.
 
 This does not provide one-click rollback, durable preview retention, workflow
 recovery, a unique/query-optimized batch history table, or a batch-history UI.
@@ -590,8 +591,8 @@ The existing contextual Worship Planning page receives a contextual
 `Rotation Planner / 敬拜轮值规划` link. V1 adds no primary/global navigation
 item.
 
-The full contract workflow is below. Steps 1 through 5 are implemented by the
-read-only preview; step 6 remains future `1B-B` behavior:
+The full contract workflow is implemented below. Steps 1 through 5 are the
+read-only preview; step 6 is the explicit `1B-B` confirmation:
 
 1. choose the starting Sunday;
 2. choose the inserted/special Worship Team;
@@ -643,7 +644,7 @@ engineering terms to schedulers.
 ### `MO-S.6D-1D-D-1A` — read-only proposal and preview — IMPLEMENTED
 
 - `ministry.services.worship_rotation_planner` implements the side-effect-free
-  normalized proposal/fingerprint/signing service reusable by future `1B-B`.
+  normalized proposal/fingerprint/signing service reused by `1B-B`.
 - `/events/worship-planning/rotation/` provides the contextual exact-event and
   inserted-team form plus bilingual preview; parallel same-Sunday services
   remain separate explicit choices and are never auto-selected.
@@ -686,29 +687,35 @@ engineering terms to schedulers.
 - Adds real two-connection file-backed SQLite coverage for stale CAS, writer
   exclusion, rollback restoration, busy retry, and atomic multi-event failure.
 - Planner proposal contract version 3 fingerprints each event revision and
-  rejects missing/old tokens. The planner remains preview-only with no
-  confirmation action or batch audit.
+  rejects missing/old tokens. `1B-B` consumes this boundary; A1 remains the
+  scheduling-revision foundation rather than owning confirmation behavior.
 
-### `MO-S.6D-1D-D-1B-B` — Optimistic batch confirmation and audit — FUTURE
+### `MO-S.6D-1D-D-1B-B` — Optimistic batch confirmation and audit — IMPLEMENTED
 
-- Reuse the exact `1A` proposal/revalidation service; do not reimplement shift
-  logic in the view.
-- Add the signed confirmation route, deterministic per-event revision CAS,
-  full current-truth recomputation, all-or-nothing anchor saves, and one
-  `LogEntry` per changed event with the shared operation ID.
-- Test stale/tampered/expired/unauthorized/conflicting rollback, CAS order,
-  tail protection, all-selected/no-op revision advances, no-op audit behavior,
-  audit failure rollback, replay rejection, and zero assignment/audience/
-  roster writes.
+- Reuses the exact `1A` proposal/revalidation service; the view does not
+  reimplement shift logic.
+- Adds a dedicated POST-only signed confirmation route, pure payload extraction
+  before the transaction, ascending expected-revision CAS as the first
+  scheduling/governance database access, full current-truth recomputation,
+  all-or-nothing normal anchor saves, and one `LogEntry` per changed event with
+  the shared signed operation ID.
+- Every selected event advances revision exactly once on success; true no-op
+  events write no anchor or audit row. Replay, stale/busy state, malformed or
+  expired tokens, lost authority, governance/assignment conflicts, displaced
+  tails, save failures, and audit failures fail closed without partial success.
+- Focused tests cover CAS order and first-access discipline, target-like
+  file-backed two-connection behavior, rollback/replay, tail protection, audit
+  semantics, privacy, and zero assignment/audience/roster/notification writes.
+- Rendered English desktop and Chinese mobile QA covers confirmable, blocked,
+  success, replay-safe, responsive, and narrow-authority/privacy states.
 
 Notifications remain a later separately approved slice. They must not be added
 to `1A`, `1B-A1`, or `1B-B`.
 
 ## 17. Decisions and remaining gates
 
-This gate plus the implemented `1A-FU1`, docs-only `1B-A0`, and implemented
-`1B-A1` close the V1 product/architecture and runtime-concurrency prerequisites
-needed before separately approved `1B-B`:
+This gate plus implemented `1A-FU1`, docs-only `1B-A0`, implemented `1B-A1`,
+and implemented `1B-B` close the V1 planner confirmation path:
 exact explicit weekly published-future Sunday
 events, maximum 53, no interior blank, terminal blank or exact-ID cycle-closed
 tail preservation, no arbitrary tail loss, per-destination canonical
@@ -717,8 +724,8 @@ blocker, narrow roster-free downstream impact, 30-minute user-bound signed
 proposal, one event-owned scheduling revision, SQLite optimistic CAS/write-
 barrier semantics, and no BatchRun schema.
 
-The A1 prerequisite is closed: the generated migration, inventoried supported
-paths, and required file-backed SQLite concurrency tests are implemented.
-`1B-B` remains separately unimplemented and unapproved. Any newly discovered supported
-bulk/cascade path outside the one-event revision contract remains a stop
-condition; the downstream stale guarantee must not be weakened silently.
+The A1 prerequisite and B confirmation slice are closed: the migration,
+inventoried supported paths, required file-backed SQLite concurrency tests,
+optimistic confirmation, and shared audit are implemented. Any newly discovered
+supported bulk/cascade path outside the one-event revision contract remains a
+stop condition; the downstream stale guarantee must not be weakened silently.

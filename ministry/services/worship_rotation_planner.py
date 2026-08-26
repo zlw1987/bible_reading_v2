@@ -22,6 +22,10 @@ from .worship_governance import (
     inspect_worship_ownership_consistency,
     resolve_worship_rotation_pool_for_team,
 )
+from .worship_change_notifications import (
+    WorshipTeamChangeFact,
+    emit_worship_rotation_change_notifications,
+)
 
 
 PLANNER_CONTRACT_VERSION = 3
@@ -750,6 +754,7 @@ def confirm_worship_rotation_proposal(*, user, payload):
 
         content_type_id = ContentType.objects.get_for_model(ServiceEvent).pk
         changed_event_ids = []
+        change_facts = []
         for row in current_proposal.rows:
             if not row.changed:
                 continue
@@ -783,6 +788,20 @@ def confirm_worship_rotation_proposal(*, user, payload):
                     "Worship Rotation Planner audit write failed."
                 ) from exc
             changed_event_ids.append(event.pk)
+            change_facts.append(
+                WorshipTeamChangeFact(
+                    event_id=event.pk,
+                    event_start_datetime=event.start_datetime,
+                    old_team_id=getattr(old_team, "pk", None),
+                    new_team_id=getattr(proposed_team, "pk", None),
+                )
+            )
+
+        emit_worship_rotation_change_notifications(
+            change_facts,
+            operation_id=payload["operation_id"],
+            actor=user,
+        )
 
     return WorshipRotationConfirmationResult(
         operation_id=payload["operation_id"],

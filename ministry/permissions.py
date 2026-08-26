@@ -29,6 +29,27 @@ MANAGEMENT_ROLE_TYPE_CODES = (
 )
 
 
+def current_ministry_management_role_assignments(*, target_date=None, team_ids=None):
+    """Canonical current Lead/Coordinator role assignments.
+
+    This is the shared active/date-valid exact-team role-row predicate used by
+    permissions and source-owned operational notification producers. Callers
+    still apply their own user-state requirement. It grants nothing by itself
+    and never consults membership, belonging, or staff state.
+    """
+    target_date = target_date or timezone.localdate()
+    queryset = MinistryTeamRoleAssignment.objects.filter(
+        is_active=True,
+        team__is_active=True,
+        role_type__is_active=True,
+        role_type__code__in=MANAGEMENT_ROLE_TYPE_CODES,
+        start_date__lte=target_date,
+    ).filter(Q(end_date__isnull=True) | Q(end_date__gte=target_date))
+    if team_ids is not None:
+        queryset = queryset.filter(team_id__in=team_ids)
+    return queryset
+
+
 def _active_management_role_assignments(user):
     """Base queryset of the user's date-valid active lead/coordinator role
     assignments on active teams.
@@ -42,18 +63,7 @@ def _active_management_role_assignments(user):
     if not getattr(user, "is_authenticated", False):
         return MinistryTeamRoleAssignment.objects.none()
 
-    today = timezone.localdate()
-    return (
-        MinistryTeamRoleAssignment.objects.filter(
-            user=user,
-            is_active=True,
-            team__is_active=True,
-            role_type__is_active=True,
-            role_type__code__in=MANAGEMENT_ROLE_TYPE_CODES,
-            start_date__lte=today,
-        )
-        .filter(Q(end_date__isnull=True) | Q(end_date__gte=today))
-    )
+    return current_ministry_management_role_assignments().filter(user=user)
 
 
 def user_has_active_ministry_management_role(user, team):

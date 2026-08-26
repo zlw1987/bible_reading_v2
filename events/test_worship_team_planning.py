@@ -5,7 +5,7 @@ from unittest.mock import patch
 from django.contrib import admin
 from django.contrib.admin.models import LogEntry
 from django.contrib.auth.models import User
-from django.test import RequestFactory, TestCase
+from django.test import RequestFactory, TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
@@ -15,6 +15,7 @@ from accounts.permissions import (
     CAP_MANAGE_SERVICE_EVENTS,
     CAP_MANAGE_TEAM_ASSIGNMENTS,
 )
+from core.notification_delivery import notification_sink_override_for_tests
 from events.scheduling_revision import (
     RevisionClaimState,
     SchedulingRevisionBusyError,
@@ -386,6 +387,53 @@ class WorshipTeamSelectorTests(WorshipTeamPlanningTestBase):
         self.assertEqual(entry.user_id, self.planner.id)
         self.assertIn(f"new_team_id={self.c1.id!r}", entry.change_message)
 
+    def test_actual_change_emits_after_saved_log_with_exact_payload_identity(self):
+        self.event.rotation_anchor_team = self.c1
+        self.event.save(update_fields=["rotation_anchor_team", "updated_at"])
+        recipient = User.objects.create_user(username="old_team_lead")
+        self.role(recipient, self.c1)
+        payloads = []
+        data = self.selector_post_data(self.c2)
+
+        with notification_sink_override_for_tests(payloads.append):
+            with self.captureOnCommitCallbacks(execute=True) as callbacks:
+                response = self.client.post(
+                    reverse("change_worship_team", args=[self.event.pk]), data
+                )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(len(callbacks), 1)
+        self.assertEqual(len(payloads), 1)
+        entry = LogEntry.objects.get(object_id=str(self.event.pk))
+        payload = payloads[0]
+        self.assertEqual(payload.recipient, recipient)
+        self.assertEqual(
+            payload.dedupe_key,
+            f"ministry:worship_team_change:log:{entry.pk}",
+        )
+        self.assertEqual(payload.target_url, reverse("my_serving"))
+
+    @override_settings(CMS_ENABLED_MODULES=[])
+    def test_actual_change_still_succeeds_when_notifications_are_disabled(self):
+        self.event.rotation_anchor_team = self.c1
+        self.event.save(update_fields=["rotation_anchor_team", "updated_at"])
+        recipient = User.objects.create_user(username="disabled_old_lead")
+        self.role(recipient, self.c1)
+        payloads = []
+
+        with notification_sink_override_for_tests(payloads.append):
+            with self.captureOnCommitCallbacks(execute=True) as callbacks:
+                response = self.client.post(
+                    reverse("change_worship_team", args=[self.event.pk]),
+                    self.selector_post_data(self.c2),
+                )
+
+        self.event.refresh_from_db()
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(self.event.rotation_anchor_team, self.c2)
+        self.assertEqual(payloads, [])
+        self.assertEqual(callbacks, [])
+
     def test_team_to_team_and_clear_work_without_assignment(self):
         self.event.rotation_anchor_team = self.c1
         self.event.save(update_fields=["rotation_anchor_team", "updated_at"])
@@ -673,17 +721,22 @@ class WorshipTeamSelectorTests(WorshipTeamPlanningTestBase):
     def test_audit_failure_rolls_back_anchor_change(self):
         data = self.selector_post_data(self.c1)
         initial_revision = self.event.scheduling_revision
-        with patch(
-            "events.views.LogEntry.objects.log_action",
-            side_effect=RuntimeError("audit unavailable"),
-        ), self.assertRaises(RuntimeError):
-            self.client.post(
-                reverse("change_worship_team", args=[self.event.id]), data
-            )
+        payloads = []
+        with notification_sink_override_for_tests(payloads.append):
+            with self.captureOnCommitCallbacks(execute=True) as callbacks:
+                with patch(
+                    "events.views.LogEntry.objects.log_action",
+                    side_effect=RuntimeError("audit unavailable"),
+                ), self.assertRaises(RuntimeError):
+                    self.client.post(
+                        reverse("change_worship_team", args=[self.event.id]), data
+                    )
         self.event.refresh_from_db()
         self.assertIsNone(self.event.rotation_anchor_team)
         self.assertEqual(self.event.scheduling_revision, initial_revision)
         self.assertEqual(LogEntry.objects.count(), 0)
+        self.assertEqual(payloads, [])
+        self.assertEqual(callbacks, [])
 
     def test_unauthorized_direct_url_and_cancelled_event_are_denied(self):
         self.client.force_login(self.ordinary)

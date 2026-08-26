@@ -19,8 +19,8 @@ the MO-S.6D-0A workbook/readiness investigation plus MO-S.6D-0A-FU1/FU2
 multi-campus Worship rotation governance closure. Planner confirmation/audit is
 implemented through runtime revision foundation `1B-A1` and optimistic batch
 confirmation/shared audit `1B-B`. The docs-only `NOTIFY.1G-0A` Direct Worship
-Team Change Notification Contract is complete while `NOTIFY.1G` runtime is
-unimplemented; remaining MO-S.6D runtime slices remain
+Team Change Notification Contract and bounded `NOTIFY.1G` runtime are
+implemented; remaining MO-S.6D runtime slices remain
 separately scoped and require explicit approval.
 
 ## 1. Purpose
@@ -141,10 +141,10 @@ Sunday Board without false coverage. `MO-S.6D-1D-D-1A` now provides the
 read-only Worship Rotation Planner proposal/preview, and `1A-FU1`
 distinguishes terminal blank, exact-ID cycle-closed, and true displaced tail
 outcomes without adding preview writes. The system now provides optimistic
-planner confirmation/shared audit and a closed docs-only direct-change
-notification contract, but still does not provide the `NOTIFY.1G` producer, Excel
-dependency/parser/import runtime, or the MO-S.6E roster-change staleness
-mechanism.
+planner confirmation/shared audit, a closed docs-only direct-change
+notification contract, and the bounded `NOTIFY.1G` producer. It still does not
+provide Excel dependency/parser/import runtime or the MO-S.6E roster-change
+staleness mechanism.
 
 ## 3. Real-world Sunday workflow
 
@@ -769,7 +769,7 @@ tests and limited-trial review pass.
   docs-only `NOTIFY.1G-0A` contract now defines the separate ministry-owned
   post-commit producer for direct old/new/downstream leadership notices,
   summarized once per recipient from that recipient's qualifying batch-event
-  subset. `NOTIFY.1G` remains unimplemented. This is distinct from MO-S.6E
+  subset. `NOTIFY.1G` is implemented. This is distinct from MO-S.6E
   roster-change staleness detection.
 - Copy: scheduler-facing UI should use Worship Team / 敬拜团队 rather than the
   engineering term rotation anchor.
@@ -927,7 +927,7 @@ tests and limited-trial review pass.
 
 ### NOTIFY.1G-0A — Direct Worship Team Change Notification Contract
 
-- Status: docs complete; `NOTIFY.1G` runtime is unimplemented.
+- Status: docs complete; `NOTIFY.1G` runtime is implemented.
 - Trigger: actual committed selected-team changes through the exact selector or
   `1B-B` only; no-op, preview, stale/blocked/failed, replay, rollback, and
   unsupported write paths emit nothing.
@@ -1366,8 +1366,8 @@ permission, privacy, idempotency, and exception handling are observed to work.
 These are genuine future decisions, not hidden implementation assumptions:
 
 The direct Worship Team change notification is not an open architecture item:
-`NOTIFY.1G-0A` closed its contract. Runtime still requires separate task
-approval, but no further product or architecture decision precedes that slice.
+`NOTIFY.1G-0A` closed its contract and `NOTIFY.1G` implements that bounded
+runtime. MO-S.6E roster-change staleness remains a separate future problem.
 
 - Which teams participate in the default Sunday board, and how are combined or
   special services represented?

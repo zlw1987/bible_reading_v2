@@ -27,6 +27,10 @@ from ministry.services.worship_governance import (
     eligible_worship_team_candidates,
     inspect_worship_ownership_consistency,
 )
+from ministry.services.worship_change_notifications import (
+    WorshipTeamChangeFact,
+    emit_worship_team_change_notifications,
+)
 from ministry.services.worship_rotation_planner import (
     PlannerBlocker,
     SignedProposalError,
@@ -965,7 +969,7 @@ def change_worship_team(request, event_id):
             update_fields=["rotation_anchor_team", "updated_at"],
             _skip_scheduling_revision=True,
         )
-        LogEntry.objects.log_action(
+        log_entry = LogEntry.objects.log_action(
             user_id=request.user.pk,
             content_type_id=ContentType.objects.get_for_model(
                 ServiceEvent
@@ -981,6 +985,16 @@ def change_worship_team(request, event_id):
                 f"new_team_id={getattr(proposed_team, 'pk', None)!r}; "
                 f"new_team={getattr(proposed_team, 'name', None)!r}."
             ),
+        )
+        emit_worship_team_change_notifications(
+            WorshipTeamChangeFact(
+                event_id=locked_event.pk,
+                event_start_datetime=locked_event.start_datetime,
+                old_team_id=getattr(old_team, "pk", None),
+                new_team_id=getattr(proposed_team, "pk", None),
+            ),
+            logentry_id=log_entry.pk,
+            actor=request.user,
         )
 
     messages.success(request, event_ui_text(language, "worship_saved"))

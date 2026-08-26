@@ -1,8 +1,8 @@
 # Notification V0 Plan
 
-Status: runtime current through `NOTIFY.1F`, plus the docs-only
+Status: runtime current through implemented `NOTIFY.1G`, following the docs-only
 `NOTIFY.1G-0A` Direct Worship Team Change Notification Contract. The
-`NOTIFY.1G` producer remains unimplemented. The app/model/admin/Core delivery-port
+app/model/admin/Core delivery-port
 foundation, recipient-scoped Notification Center/bell UI, the ministry-owned
 explicit ServiceEvent serving-assignment producer, and the studies-owned
 explicit Bible Study meeting-role producer, and the Community Activities-owned
@@ -14,12 +14,12 @@ This document is the implementation boundary for Notification V0. The completed
 background jobs, external delivery, and permission changes still require
 separate approval.
 
-`NOTIFY.1G-0A` closes the architecture contract for a later ministry-owned
-producer covering actual committed `ServiceEvent.rotation_anchor_team` changes
-through the governed exact-event selector and Worship Rotation Planner batch
-confirmation only. It adds no producer runtime, model, migration, signal,
-route, UI, permission, or data change. `NOTIFY.1G` remains a separately
-approved implementation slice.
+`NOTIFY.1G-0A` closed the architecture contract and `NOTIFY.1G` now implements
+the ministry-owned producer for actual committed
+`ServiceEvent.rotation_anchor_team` changes through the governed exact-event
+selector and Worship Rotation Planner batch confirmation only. The contract
+slice itself added no runtime; the implementation adds no model, migration,
+signal, route, UI, permission, or source-domain data behavior.
 
 ## 1. Status
 
@@ -165,7 +165,7 @@ unapproved.
 ### `NOTIFY.1G-0A` Direct Worship Team Change Contract — DOCS COMPLETE
 
 `NOTIFY.1G-0A` defines the exact contract below. `NOTIFY.1G` is
-**UNIMPLEMENTED**.
+**IMPLEMENTED**.
 
 #### Ownership, dependency, and trigger boundary
 
@@ -1051,7 +1051,7 @@ surface integration.
 
 ### NOTIFY.1G-0A Direct Worship Team Change Contract
 
-Status: docs complete; `NOTIFY.1G` runtime is unimplemented.
+Status: docs complete; `NOTIFY.1G` runtime is implemented.
 
 This docs-only gate closes the ministry-owned trigger, exact active/date-valid
 Lead/Coordinator recipient classes, current-operational downstream status
@@ -1061,16 +1061,22 @@ localized bounded snapshots, source references, actor, and post-commit timing.
 It adds no Python, template, model, migration, test, route, permission, or data
 change.
 
-### NOTIFY.1G Direct Worship Team Change Producer
+### NOTIFY.1G Direct Worship Team Change Producer — IMPLEMENTED
 
-Status: unimplemented; requires separate explicit implementation approval.
+`ministry/services/worship_change_notifications.py` now consumes immutable
+actual-change facts from only the governed exact-event selector and successful
+`1B-B` confirmation. One shared resolver selects active/date-valid exact-team
+Lead/Coordinator recipients across old/new, required downstream, and current-
+operational additional downstream teams, excluding canonically resolved
+Worship teams from the downstream classes. It deduplicates exact users and
+builds recipient-specific batch subsets before Core on-commit registration.
 
-The bounded future slice should add one ministry-owned helper (for example,
-`ministry/services/worship_change_notifications.py`), integrate it only at the
-governed exact-event selector and successful `1B-B` confirmation seams, and add
-focused source-domain tests through the Core test sink. It requires no
-Notification schema, source permission, new UI route/template, background job,
-or external delivery.
+Single delivery uses the saved selector `LogEntry` identity; batch delivery uses
+the shared operation UUID. Both target exactly My Serving and store only bounded
+recipient-language date/old-team/new-team snapshots. Disabled Notifications is
+a safe no-op and persistence failure remains contained after the source commit.
+This adds no Notification schema, source permission, route/template, UI,
+background job, external delivery, or MO-S.6E roster-staleness behavior.
 
 Fable 5 should be reserved for hard architecture/planning questions. It is not
 needed for routine docs, model, simple UI, or focused producer slices.
@@ -1086,9 +1092,8 @@ completes the current limited-trial V0 recipient read/open and pagination polish
 with a retain-for-now policy. None changes target permission, audience,
 belonging, or source serving semantics.
 
-`NOTIFY.1G-0A` is docs complete and closes the architecture decision for the
-direct Worship Team change producer; `NOTIFY.1G` remains unimplemented and
-separately approvable. Additional producers may be added one at a time only in
+`NOTIFY.1G-0A` is docs complete and `NOTIFY.1G` implements that exact direct
+Worship Team change producer contract. Additional producers may be added one at a time only in
 separately approved later slices. Each producer must prove
 recipient selection, idempotency, disabled-module behavior, and permission
 neutrality in its own focused tests before another producer is added.

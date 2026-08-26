@@ -6,9 +6,9 @@ Status: `MO-S.6D-1D-D-0A` docs-only architecture gate,
 `MO-S.6D-1D-D-1B-A0` SQLite optimistic scheduling-concurrency decision are
 complete. `MO-S.6D-1D-D-1B-A1` Scheduling Revision Foundation and
 `MO-S.6D-1D-D-1B-B` optimistic batch confirmation/shared audit are also
-implemented. Docs-only `NOTIFY.1G-0A` now closes the notification contract that
-may consume the shared batch identity; `NOTIFY.1G` runtime remains
-unimplemented. The contextual planner route builds an explicit exact-event
+implemented. Docs-only `NOTIFY.1G-0A` closes the notification contract and
+implemented `NOTIFY.1G` consumes the shared batch identity only after all
+changed-event audits succeed. The contextual planner route builds an explicit exact-event
 chain, projects the deterministic shift and privacy-limited downstream impact,
 and produces a 30-minute user-bound signed normalized proposal without writing
 state; an explicit confirm action may then apply that exact proposal atomically.
@@ -713,9 +713,9 @@ engineering terms to schedulers.
 - Rendered English desktop and Chinese mobile QA covers confirmable, blocked,
   success, replay-safe, responsive, and narrow-authority/privacy states.
 
-`NOTIFY.1G-0A` is docs complete; the `NOTIFY.1G` producer remains a later
-separately approved runtime slice. It must not be retroactively added to `1A`,
-`1B-A1`, or `1B-B`.
+`NOTIFY.1G-0A` is docs complete and `NOTIFY.1G` is implemented as the separate
+ministry-owned producer integration after successful `1B-B` changed-event
+audits. It does not alter `1A`, `1B-A1`, or `1B-B` CAS/revalidation semantics.
 
 ## 17. Decisions and remaining gates
 

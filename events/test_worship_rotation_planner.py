@@ -13,7 +13,7 @@ from django.contrib.auth.models import User
 from django.core import signing
 from django.core.management import call_command
 from django.db import connection, connections
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from django.utils import timezone
@@ -23,6 +23,8 @@ from core.notification_delivery import notification_sink_override_for_tests
 from ministry.models import (
     MinistryTeam,
     MinistryTeamParentLink,
+    MinistryTeamRoleAssignment,
+    MinistryTeamRoleType,
     TeamAssignment,
     TeamAssignmentMember,
     TeamMembership,
@@ -796,6 +798,105 @@ class WorshipRotationConfirmationTests(WorshipRotationPlannerTestBase):
             set(LogEntry.objects.values_list("object_id", flat=True)),
             {str(events[1].pk), str(events[2].pk)},
         )
+
+    def test_batch_emits_once_per_recipient_and_excludes_noop_context(self):
+        events = [
+            self.event(0, self.c1),
+            self.event(1, self.c2),
+            self.event(2, self.c1),
+        ]
+        proposal = self.preview(events, inserted=self.c1)
+        recipient = User.objects.create_user(username="batch_c1_lead")
+        lead_type = MinistryTeamRoleType.objects.create(
+            code=MinistryTeamRoleType.CODE_LEAD,
+            name="Lead",
+            name_en="Lead",
+        )
+        MinistryTeamRoleAssignment.objects.create(
+            team=self.c1,
+            role_type=lead_type,
+            user=recipient,
+            start_date=timezone.localdate(),
+        )
+        payloads = []
+
+        with notification_sink_override_for_tests(payloads.append):
+            with self.captureOnCommitCallbacks(execute=True) as callbacks:
+                response = self.confirm(proposal)
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(len(callbacks), 1)
+        self.assertEqual(len(payloads), 1)
+        payload = payloads[0]
+        self.assertEqual(payload.recipient, recipient)
+        self.assertEqual(payload.notification_type, "worship_rotation.changed")
+        self.assertEqual(
+            payload.dedupe_key,
+            f"ministry:worship_rotation:{proposal.operation_id}",
+        )
+        self.assertEqual(payload.metadata["recipient_relevant_event_count"], 2)
+        self.assertNotIn("3 Sundays", payload.body)
+
+    def test_notification_persistence_failure_does_not_reverse_batch_commit(self):
+        events = [self.event(0, self.c1), self.event(1, None)]
+        proposal = self.preview(events)
+        recipient = User.objects.create_user(username="failing_sink_lead")
+        lead_type = MinistryTeamRoleType.objects.create(
+            code=MinistryTeamRoleType.CODE_LEAD,
+            name="Lead",
+            name_en="Lead",
+        )
+        MinistryTeamRoleAssignment.objects.create(
+            team=self.c1,
+            role_type=lead_type,
+            user=recipient,
+            start_date=timezone.localdate(),
+        )
+
+        def failing_sink(_payload):
+            raise RuntimeError("notification persistence unavailable")
+
+        with notification_sink_override_for_tests(failing_sink):
+            with self.assertLogs("core.notification_delivery", level="ERROR"):
+                with self.captureOnCommitCallbacks(execute=True):
+                    response = self.confirm(proposal)
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(
+            self.event_truth(events),
+            [(self.c2.pk, 1), (self.c1.pk, 1)],
+        )
+        self.assertEqual(LogEntry.objects.count(), 2)
+
+    @override_settings(CMS_ENABLED_MODULES=[])
+    def test_batch_still_succeeds_when_notifications_are_disabled(self):
+        events = [self.event(0, self.c1), self.event(1, None)]
+        proposal = self.preview(events)
+        recipient = User.objects.create_user(username="disabled_batch_lead")
+        lead_type = MinistryTeamRoleType.objects.create(
+            code=MinistryTeamRoleType.CODE_LEAD,
+            name="Lead",
+            name_en="Lead",
+        )
+        MinistryTeamRoleAssignment.objects.create(
+            team=self.c1,
+            role_type=lead_type,
+            user=recipient,
+            start_date=timezone.localdate(),
+        )
+        payloads = []
+
+        with notification_sink_override_for_tests(payloads.append):
+            with self.captureOnCommitCallbacks(execute=True) as callbacks:
+                response = self.confirm(proposal)
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(
+            self.event_truth(events),
+            [(self.c2.pk, 1), (self.c1.pk, 1)],
+        )
+        self.assertEqual(payloads, [])
+        self.assertEqual(callbacks, [])
 
     def test_displaced_and_interior_blank_signed_proposals_cannot_confirm(self):
         team_a = self.team("Chinese Worship Team A", self.cm_pool)

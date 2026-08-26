@@ -127,6 +127,28 @@ class MinistryTeam(models.Model):
             return self.description_en or self.description
         return self.description
 
+    def delete(self, *args, **kwargs):
+        """Advance surviving events before supported team-assignment cascades."""
+
+        from events.scheduling_revision import advance_scheduling_revisions
+
+        using = kwargs.get("using") or self._state.db or DEFAULT_DB_ALIAS
+        current_statuses = (
+            TeamAssignment.STATUS_SCHEDULED,
+            TeamAssignment.STATUS_CONFIRMED,
+            TeamAssignment.STATUS_PREPARED,
+        )
+        with transaction.atomic(using=using):
+            event_ids = tuple(
+                TeamAssignment.objects.using(using)
+                .filter(ministry_team_id=self.pk, status__in=current_statuses)
+                .values_list("service_event_id", flat=True)
+                .distinct()
+            )
+            if event_ids:
+                advance_scheduling_revisions(event_ids, using=using)
+            return super().delete(*args, **kwargs)
+
     # ----------------------------------------------------------------------
     # MINISTRY-STRUCTURE.1B read-only structure helpers.
     #
@@ -463,22 +485,170 @@ class TeamAssignment(models.Model):
             raise ValidationError(errors)
 
     def save(self, *args, **kwargs):
+        from events.scheduling_revision import (
+            SchedulingMutationStaleError,
+            advance_scheduling_revisions,
+        )
         from .services.worship_assignment_guard import (
             lock_service_events_for_worship_assignment_write,
         )
 
+        skip_revision = kwargs.pop("_skip_scheduling_revision", False)
+        post_revision_validate = kwargs.pop(
+            "_post_scheduling_revision_validate", None
+        )
         using = kwargs.get("using") or self._state.db or DEFAULT_DB_ALIAS
         with transaction.atomic(using=using):
+            persisted = None
+            if self.pk and not self._state.adding:
+                persisted = (
+                    type(self).objects.using(using)
+                    .filter(pk=self.pk)
+                    .values("service_event_id", "ministry_team_id", "status")
+                    .first()
+                )
+                if persisted is None:
+                    raise SchedulingMutationStaleError(
+                        "Team assignment no longer exists."
+                    )
+                loaded = getattr(self, "_scheduling_loaded_fingerprint", None)
+                baseline_fingerprint = (
+                    persisted["service_event_id"],
+                    persisted["ministry_team_id"],
+                    persisted["status"],
+                )
+                if loaded is not None and loaded != baseline_fingerprint:
+                    raise SchedulingMutationStaleError(
+                        "Team assignment changed after it was loaded."
+                    )
+
+            proposed_fingerprint = (
+                self.service_event_id,
+                self.ministry_team_id,
+                self.status,
+            )
+            current_statuses = {
+                self.STATUS_SCHEDULED,
+                self.STATUS_CONFIRMED,
+                self.STATUS_PREPARED,
+            }
+            affected_event_ids = set()
+            if not skip_revision:
+                if persisted and persisted["status"] in current_statuses:
+                    if proposed_fingerprint != (
+                        persisted["service_event_id"],
+                        persisted["ministry_team_id"],
+                        persisted["status"],
+                    ):
+                        affected_event_ids.add(persisted["service_event_id"])
+                if self.status in current_statuses:
+                    if persisted is None or proposed_fingerprint != (
+                        persisted["service_event_id"],
+                        persisted["ministry_team_id"],
+                        persisted["status"],
+                    ):
+                        affected_event_ids.add(self.service_event_id)
+                if affected_event_ids:
+                    advance_scheduling_revisions(affected_event_ids, using=using)
+                    if persisted:
+                        current = (
+                            type(self).objects.using(using)
+                            .filter(pk=self.pk)
+                            .values("service_event_id", "ministry_team_id", "status")
+                            .first()
+                        )
+                        if current != persisted:
+                            raise SchedulingMutationStaleError(
+                                "Team assignment changed while the scheduling write began."
+                            )
+
+            if self.status in {
+                self.STATUS_SCHEDULED,
+                self.STATUS_CONFIRMED,
+                self.STATUS_PREPARED,
+            }:
+                from events.models import ServiceEvent
+
+                self.service_event = ServiceEvent.objects.using(using).get(
+                    pk=self.service_event_id
+                )
+
+            if affected_event_ids and post_revision_validate is not None:
+                post_revision_validate(self)
+
             locked_events = lock_service_events_for_worship_assignment_write(
                 self,
                 using=using,
             )
             if self.service_event_id in locked_events:
-                # Rebind the related object so full_clean() and the governance
-                # inspection consume the locked-current ServiceEvent state.
+                # Rebind so validation consumes current ServiceEvent state. On
+                # SQLite, scheduling_revision is the serialization guarantee;
+                # select_for_update() only adds locks on supporting backends.
                 self.service_event = locked_events[self.service_event_id]
             self.full_clean()
-            return super().save(*args, **kwargs)
+            saved = super().save(*args, **kwargs)
+            self._scheduling_loaded_fingerprint = proposed_fingerprint
+            return saved
+
+    @classmethod
+    def from_db(cls, db, field_names, values):
+        instance = super().from_db(db, field_names, values)
+        required = {"service_event_id", "ministry_team_id", "status"}
+        instance._scheduling_loaded_fingerprint = (
+            (
+                instance.service_event_id,
+                instance.ministry_team_id,
+                instance.status,
+            )
+            if required.issubset(field_names)
+            else None
+        )
+        return instance
+
+    def refresh_from_db(self, *args, **kwargs):
+        refreshed = super().refresh_from_db(*args, **kwargs)
+        self._scheduling_loaded_fingerprint = (
+            self.service_event_id,
+            self.ministry_team_id,
+            self.status,
+        )
+        return refreshed
+
+    def delete(self, *args, **kwargs):
+        from events.scheduling_revision import (
+            SchedulingMutationStaleError,
+            advance_scheduling_revisions,
+        )
+
+        using = kwargs.get("using") or self._state.db or DEFAULT_DB_ALIAS
+        with transaction.atomic(using=using):
+            persisted = (
+                type(self).objects.using(using)
+                .filter(pk=self.pk)
+                .values("service_event_id", "ministry_team_id", "status")
+                .first()
+            )
+            if persisted is None:
+                return (0, {})
+            if persisted["status"] in {
+                self.STATUS_SCHEDULED,
+                self.STATUS_CONFIRMED,
+                self.STATUS_PREPARED,
+            }:
+                advance_scheduling_revisions(
+                    (persisted["service_event_id"],), using=using
+                )
+                current = (
+                    type(self).objects.using(using)
+                    .filter(pk=self.pk)
+                    .values("service_event_id", "ministry_team_id", "status")
+                    .first()
+                )
+                if current != persisted:
+                    raise SchedulingMutationStaleError(
+                        "Team assignment changed while deletion began."
+                    )
+            return super().delete(*args, **kwargs)
 
     def is_cancelled(self):
         return self.status == self.STATUS_CANCELLED

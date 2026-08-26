@@ -444,6 +444,11 @@ class WorshipRotationSigningTests(WorshipRotationPlannerTestBase):
         )
         self.assertEqual(payload, self.proposal_value.normalized_payload)
         self.assertEqual(payload["contract_version"], PLANNER_CONTRACT_VERSION)
+        self.assertEqual(PLANNER_CONTRACT_VERSION, 3)
+        self.assertEqual(
+            payload["fingerprints"][0]["event"]["scheduling_revision"],
+            self.events[0].scheduling_revision,
+        )
         self.assertEqual(payload["tail_resolution"], "terminal_blank")
         with self.assertRaises(SignedProposalUserMismatch):
             decode_signed_worship_rotation_proposal(
@@ -465,6 +470,26 @@ class WorshipRotationSigningTests(WorshipRotationPlannerTestBase):
         )
         with self.assertRaises(SignedProposalError):
             decode_signed_worship_rotation_proposal(wrong, user=self.staff)
+
+        missing_revision = dict(self.proposal_value.normalized_payload)
+        missing_revision["fingerprints"] = [
+            {
+                **fingerprint,
+                "event": {
+                    key: value
+                    for key, value in fingerprint["event"].items()
+                    if key != "scheduling_revision"
+                },
+            }
+            for fingerprint in missing_revision["fingerprints"]
+        ]
+        missing_revision_token = signing.dumps(
+            missing_revision, compress=True, salt=PLANNER_SIGNING_SALT
+        )
+        with self.assertRaises(SignedProposalError):
+            decode_signed_worship_rotation_proposal(
+                missing_revision_token, user=self.staff
+            )
 
     def test_inconsistent_tail_resolution_is_rejected(self):
         payload = dict(self.proposal_value.normalized_payload)
@@ -503,6 +528,11 @@ class WorshipRotationPlannerViewTests(WorshipRotationPlannerTestBase):
             "structure_memberships": ChurchStructureMembership.objects.count(),
             "logs": LogEntry.objects.count(),
             "notifications": Notification.objects.count(),
+            "scheduling_revisions": tuple(
+                ServiceEvent.objects.order_by("pk").values_list(
+                    "pk", "scheduling_revision"
+                )
+            ),
         }
 
     def test_contextual_entry_and_bilingual_copy(self):

@@ -387,6 +387,7 @@ class AssignmentNotificationProducerTests(TestCase):
 
         # Confirmation has its own explicit POST path and is deliberately not a
         # NOTIFY.1C producer.
+        assignment.refresh_from_db()
         assignment.status = TeamAssignment.STATUS_SCHEDULED
         assignment.save()
         retained.confirmed_at = None
@@ -558,9 +559,11 @@ class AssignmentNotificationProducerTests(TestCase):
 
         self.event.status = ServiceEvent.STATUS_DRAFT
         self.event.save(update_fields=["status", "updated_at"])
+        assignment.refresh_from_db()
         self.assertEqual(self._emit_direct(assignment, empty_state), [])
         self.event.status = ServiceEvent.STATUS_CANCELLED
         self.event.save(update_fields=["status", "updated_at"])
+        assignment.refresh_from_db()
         self.assertEqual(self._emit_direct(assignment, empty_state), [])
 
     def test_team_schedule_uses_same_create_add_notes_and_display_rules(self):

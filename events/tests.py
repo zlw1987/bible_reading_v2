@@ -955,6 +955,7 @@ class ServiceEventFoundationTests(TestCase):
         self.assertEqual(event.title, "更新后的聚会")
         self.assertEqual(event.title_en, "Updated Event")
         self.assertIsNotNone(event.published_at)
+        self.assertEqual(event.scheduling_revision, 1)
 
     def test_manager_edit_replaces_required_teams(self):
         self.set_language("en")
@@ -977,6 +978,7 @@ class ServiceEventFoundationTests(TestCase):
             set(event.required_teams.values_list("id", flat=True)),
             {self.other_required_team.id},
         )
+        self.assertEqual(event.scheduling_revision, 1)
         self.assertEqual(TeamAssignment.objects.count(), 0)
         self.assertEqual(TeamAssignmentMember.objects.count(), 0)
 
@@ -1000,6 +1002,7 @@ class ServiceEventFoundationTests(TestCase):
         self.assertEqual(response.status_code, 302)
         event.refresh_from_db()
         self.assertEqual(list(event.get_audience_scope_units()), [second_unit])
+        self.assertEqual(event.scheduling_revision, 1)
 
     def test_manager_edit_clearing_audience_preserves_existing_rows(self):
         self.set_language("en")
@@ -1156,6 +1159,7 @@ class ServiceEventFoundationTests(TestCase):
         self.assertEqual(response.status_code, 302)
         event.refresh_from_db()
         self.assertEqual(event.status, ServiceEvent.STATUS_CANCELLED)
+        self.assertEqual(event.scheduling_revision, 1)
 
     def test_cancel_event_cancels_scheduled_team_assignment(self):
         self.set_language("en")
@@ -1170,6 +1174,8 @@ class ServiceEventFoundationTests(TestCase):
 
         assignment.refresh_from_db()
         self.assertEqual(assignment.status, TeamAssignment.STATUS_CANCELLED)
+        event.refresh_from_db()
+        self.assertEqual(event.scheduling_revision, 2)
 
     def test_cancel_event_cancels_prepared_team_assignment(self):
         self.set_language("en")
@@ -2625,6 +2631,36 @@ class ServiceEventAdminAudienceIntegrityTests(TestCase):
         self.assertEqual(event.title, "Replaced Inactive Audience")
         self.assertEqual(list(event.get_audience_scope_units()), [self.group_unit])
         self.assertEqual(ServiceEventAudienceScope.objects.count(), 1)
+
+    def test_admin_inline_only_audience_and_required_team_change_advances_once(self):
+        event = self.create_event(title="Inline Only", title_en="Inline Only")
+        scope = ServiceEventAudienceScope.objects.create(
+            service_event=event,
+            unit=self.group_unit,
+        )
+
+        response = self.client.post(
+            self.admin_change_url(event),
+            self.event_admin_post_data(
+                title="Inline Only",
+                title_en="Inline Only",
+                initial_audience=[scope],
+                audience_units=[self.other_group_unit],
+                required_team_ids=[self.required_team.id],
+            ),
+        )
+
+        self.assertEqual(response.status_code, 302)
+        event.refresh_from_db()
+        self.assertEqual(event.scheduling_revision, 1)
+        self.assertEqual(
+            set(event.get_audience_scope_units()),
+            {self.group_unit, self.other_group_unit},
+        )
+        self.assertEqual(
+            set(event.required_teams.all()),
+            {self.required_team},
+        )
 
     def test_admin_change_can_replace_district_with_descendant_in_one_save(self):
         event = self.create_event(title="Replace District")

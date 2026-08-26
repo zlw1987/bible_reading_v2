@@ -25,7 +25,7 @@ from .worship_governance import (
 )
 
 
-PLANNER_CONTRACT_VERSION = 2
+PLANNER_CONTRACT_VERSION = 3
 PLANNER_SIGNING_VERSION = 1
 PLANNER_OPERATION_TYPE = "insert_shift_later"
 PLANNER_SIGNING_SALT = "ministry.worship-rotation-planner.v1"
@@ -184,6 +184,7 @@ def _fingerprints(event, inspection, downstream_fingerprint):
     return {
         "event": {
             "event_id": event.pk,
+            "scheduling_revision": event.scheduling_revision,
             "updated_at": event.updated_at.isoformat(),
             "status": event.status,
             "event_type": event.event_type,
@@ -461,6 +462,12 @@ def decode_signed_worship_rotation_proposal(
         or not len(event_ids) == len(before_ids) == len(proposed_ids) == len(fingerprints)
         or any(value is not None and not isinstance(value, int) for value in team_id_values)
         or any(not isinstance(item, dict) for item in fingerprints)
+        or any(
+            not isinstance(item.get("event"), dict)
+            or not isinstance(item["event"].get("scheduling_revision"), int)
+            or item["event"]["scheduling_revision"] < 0
+            for item in fingerprints
+        )
     ):
         raise SignedProposalError("Invalid proposal shape.")
     tail_resolution_is_consistent = (

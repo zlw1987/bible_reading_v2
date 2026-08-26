@@ -76,6 +76,11 @@ from .services.assignment_coverage import (
     build_assignment_coverage,
     events_with_coverage_queryset,
 )
+from events.scheduling_revision import (
+    SchedulingMutationStaleError,
+    SchedulingRevisionError,
+    advance_scheduling_revisions,
+)
 from .services.assignment_notifications import (
     capture_assignment_notification_state,
     emit_assignment_notifications,
@@ -162,6 +167,9 @@ def ministry_ui_text(language, key):
             "board_no_permission": (
                 "You do not have permission to view the Sunday Schedule Board."
             ),
+            "scheduling_retry": (
+                "Scheduling changed or is busy. Reload the current state and try again."
+            ),
         },
         "zh": {
             "no_permission": "你没有管理事工团队的权限。",
@@ -198,6 +206,7 @@ def ministry_ui_text(language, key):
             "duplicate_schedule_conflict": "这个聚会已经有重复的本团队排班。请先清理重复排班，再使用建议。",
             "team_not_assignable": "这个事工单位目前不可用于服事排班。",
             "board_no_permission": "你没有查看主日服事排班总览的权限。",
+            "scheduling_retry": "排班资料已有变化或系统正忙。请刷新当前状态后重试。",
         },
     }
     return labels.get(language, labels["en"])[key]
@@ -664,6 +673,13 @@ def sync_assignment_members(assignment, memberships):
                 assignment=assignment,
                 membership=membership,
             )
+
+
+def _validate_current_assignment_authority(user, assignment):
+    if not can_manage_team_assignment_for_team(user, assignment.ministry_team):
+        raise SchedulingMutationStaleError(
+            "Team-assignment management authority changed before the write."
+        )
 
 
 def assignment_form_initial_from_query(request):
@@ -1602,7 +1618,13 @@ def team_schedule(request, team_id):
                     assignment.created_by = request.user
                 try:
                     with transaction.atomic():
-                        assignment.save()
+                        assignment.save(
+                            _post_scheduling_revision_validate=lambda current: (
+                                _validate_current_assignment_authority(
+                                    request.user, current
+                                )
+                            )
+                        )
                         sync_assignment_members(
                             assignment,
                             active_form.cleaned_data["assigned_members"],
@@ -1616,6 +1638,11 @@ def team_schedule(request, team_id):
                     active_form.add_error(
                         None,
                         ministry_ui_text(language, "worship_assignment_invalid"),
+                    )
+                except SchedulingRevisionError:
+                    active_form.add_error(
+                        None,
+                        ministry_ui_text(language, "scheduling_retry"),
                     )
                 else:
                     messages.success(
@@ -2340,7 +2367,13 @@ def create_team_assignment(request):
             assignment.created_by = request.user
             try:
                 with transaction.atomic():
-                    assignment.save()
+                    assignment.save(
+                        _post_scheduling_revision_validate=lambda current: (
+                            _validate_current_assignment_authority(
+                                request.user, current
+                            )
+                        )
+                    )
                     sync_assignment_members(
                         assignment, form.cleaned_data["assigned_members"]
                     )
@@ -2353,6 +2386,11 @@ def create_team_assignment(request):
                 form.add_error(
                     None,
                     ministry_ui_text(language, "worship_assignment_invalid"),
+                )
+            except SchedulingRevisionError:
+                form.add_error(
+                    None,
+                    ministry_ui_text(language, "scheduling_retry"),
                 )
             else:
                 messages.success(
@@ -2403,7 +2441,14 @@ def edit_team_assignment(request, assignment_id):
         if form.is_valid():
             try:
                 with transaction.atomic():
-                    assignment = form.save()
+                    assignment = form.save(commit=False)
+                    assignment.save(
+                        _post_scheduling_revision_validate=lambda current: (
+                            _validate_current_assignment_authority(
+                                request.user, current
+                            )
+                        )
+                    )
                     sync_assignment_members(
                         assignment, form.cleaned_data["assigned_members"]
                     )
@@ -2416,6 +2461,11 @@ def edit_team_assignment(request, assignment_id):
                 form.add_error(
                     None,
                     ministry_ui_text(language, "worship_assignment_invalid"),
+                )
+            except SchedulingRevisionError:
+                form.add_error(
+                    None,
+                    ministry_ui_text(language, "scheduling_retry"),
                 )
             else:
                 messages.success(
@@ -2460,7 +2510,15 @@ def cancel_team_assignment(request, assignment_id):
         return redirect("team_assignment_detail", assignment_id=assignment.id)
 
     assignment.status = TeamAssignment.STATUS_CANCELLED
-    assignment.save()
+    try:
+        assignment.save(
+            _post_scheduling_revision_validate=lambda current: (
+                _validate_current_assignment_authority(request.user, current)
+            )
+        )
+    except SchedulingRevisionError:
+        messages.error(request, ministry_ui_text(language, "scheduling_retry"))
+        return redirect("team_assignment_detail", assignment_id=assignment.id)
     messages.success(request, ministry_ui_text(language, "assignment_cancelled"))
     return redirect("team_assignment_detail", assignment_id=assignment.id)
 
@@ -2478,11 +2536,10 @@ def confirm_team_assignment(request, assignment_id):
         return redirect("team_assignment_detail", assignment_id=assignment.id)
 
     with transaction.atomic():
-        # Keep the governed write order aligned with Worship Team selection and
-        # TeamAssignment.save(): ServiceEvent first, then assignment, then
-        # member.  If a non-Worship row moved between the initial read and these
-        # locks, fail closed rather than acquiring a second event lock in reverse
-        # order or partially confirming against stale identity.
+        # Keep the governed read/write order aligned with Worship Team selection
+        # and TeamAssignment.save(): ServiceEvent first, then assignment, then
+        # member. The scheduling-revision write below, not select_for_update(),
+        # is the target SQLite serialization boundary.
         locked_event = get_object_or_404(
             ServiceEvent.objects.select_for_update(),
             id=assignment.service_event_id,
@@ -2536,12 +2593,93 @@ def confirm_team_assignment(request, assignment_id):
                 "team_assignment_detail", assignment_id=assignment.id
             )
 
+        other_unconfirmed_exists = (
+            assignment.assignment_members.filter(
+                membership__is_active=True,
+                confirmed_at__isnull=True,
+            )
+            .exclude(pk=assignment_member.pk)
+            .exists()
+        )
+        parent_will_confirm = (
+            assignment.status
+            in {
+                TeamAssignment.STATUS_SCHEDULED,
+                TeamAssignment.STATUS_PREPARED,
+            }
+            and not other_unconfirmed_exists
+        )
+        if parent_will_confirm:
+            baseline = (
+                assignment.service_event_id,
+                assignment.ministry_team_id,
+                assignment.status,
+            )
+            try:
+                advance_scheduling_revisions((assignment.service_event_id,))
+            except SchedulingRevisionError:
+                messages.error(
+                    request, ministry_ui_text(language, "scheduling_retry")
+                )
+                transaction.set_rollback(True)
+                return redirect(
+                    "team_assignment_detail", assignment_id=assignment.id
+                )
+            assignment = get_object_or_404(
+                TeamAssignment.objects.select_related(
+                    "service_event",
+                    "service_event__rotation_anchor_team",
+                    "ministry_team",
+                ),
+                pk=assignment.pk,
+            )
+            if (
+                assignment.service_event_id,
+                assignment.ministry_team_id,
+                assignment.status,
+            ) != baseline or not can_confirm_team_assignment(request.user, assignment):
+                messages.error(
+                    request, ministry_ui_text(language, "scheduling_retry")
+                )
+                transaction.set_rollback(True)
+                return redirect(
+                    "team_assignment_detail", assignment_id=assignment.id
+                )
+            try:
+                validate_worship_assignment_write(assignment)
+            except ValidationError:
+                messages.error(
+                    request,
+                    ministry_ui_text(language, "worship_assignment_invalid"),
+                )
+                transaction.set_rollback(True)
+                return redirect(
+                    "team_assignment_detail", assignment_id=assignment.id
+                )
+            assignment_member = assignment.assignment_members.filter(
+                pk=assignment_member.pk,
+                membership__user=request.user,
+                membership__is_active=True,
+            ).first()
+            if assignment_member is None:
+                messages.error(
+                    request,
+                    ministry_ui_text(language, "assignment_not_available"),
+                )
+                transaction.set_rollback(True)
+                return redirect(
+                    "team_assignment_detail", assignment_id=assignment.id
+                )
+
         assignment_member.confirm(
             form.cleaned_data.get("confirmation_note", "")
         )
         if assignment.all_members_confirmed():
             assignment.status = TeamAssignment.STATUS_CONFIRMED
-            assignment.save()
+            assignment.save(
+                update_fields=["status", "updated_at"],
+                _skip_scheduling_revision=parent_will_confirm,
+            )
 
     messages.success(request, ministry_ui_text(language, "assignment_confirmed"))
     next_url = request.POST.get("next")

@@ -1,4 +1,7 @@
 from django.contrib import admin
+from django.db import transaction
+
+from events.scheduling_revision import advance_scheduling_revisions
 
 from .models import (
     MinistryTeam,
@@ -64,6 +67,27 @@ class MinistryTeamAdmin(admin.ModelAdmin):
             return []
         return super().get_inline_instances(request, obj)
 
+    def delete_queryset(self, request, queryset):
+        current_statuses = (
+            TeamAssignment.STATUS_SCHEDULED,
+            TeamAssignment.STATUS_CONFIRMED,
+            TeamAssignment.STATUS_PREPARED,
+        )
+        using = queryset.db
+        with transaction.atomic(using=using):
+            event_ids = tuple(
+                TeamAssignment.objects.using(using)
+                .filter(
+                    ministry_team_id__in=queryset.values("pk"),
+                    status__in=current_statuses,
+                )
+                .values_list("service_event_id", flat=True)
+                .distinct()
+            )
+            if event_ids:
+                advance_scheduling_revisions(event_ids, using=using)
+            queryset.delete()
+
 
 @admin.register(TeamMembership)
 class TeamMembershipAdmin(admin.ModelAdmin):
@@ -96,6 +120,24 @@ class TeamAssignmentAdmin(admin.ModelAdmin):
     list_filter = ("status", "ministry_team", "service_event")
     search_fields = ("service_event__title", "ministry_team__name", "notes")
     readonly_fields = ("created_at", "updated_at")
+
+    def delete_queryset(self, request, queryset):
+        using = queryset.db
+        with transaction.atomic(using=using):
+            event_ids = tuple(
+                queryset.filter(
+                    status__in=(
+                        TeamAssignment.STATUS_SCHEDULED,
+                        TeamAssignment.STATUS_CONFIRMED,
+                        TeamAssignment.STATUS_PREPARED,
+                    )
+                )
+                .values_list("service_event_id", flat=True)
+                .distinct()
+            )
+            if event_ids:
+                advance_scheduling_revisions(event_ids, using=using)
+            queryset.delete()
 
 
 @admin.register(TeamAssignmentMember)

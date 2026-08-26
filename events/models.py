@@ -2,7 +2,7 @@ from datetime import datetime, timedelta
 
 from django.conf import settings
 from django.core.exceptions import ValidationError
-from django.db import models
+from django.db import DEFAULT_DB_ALIAS, models, transaction
 from django.utils import timezone
 
 from accounts.models import ChurchStructureUnit
@@ -110,6 +110,7 @@ class ServiceEvent(models.Model):
         default=STATUS_DRAFT,
     )
     published_at = models.DateTimeField(null=True, blank=True)
+    scheduling_revision = models.PositiveBigIntegerField(default=0, editable=False)
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,
@@ -149,10 +150,70 @@ class ServiceEvent(models.Model):
             raise ValidationError(errors)
 
     def save(self, *args, **kwargs):
-        if self.status == self.STATUS_PUBLISHED and not self.published_at:
-            self.published_at = timezone.now()
-        self.full_clean()
-        return super().save(*args, **kwargs)
+        from .scheduling_revision import (
+            SchedulingMutationStaleError,
+            advance_scheduling_revisions,
+        )
+
+        skip_revision = kwargs.pop("_skip_scheduling_revision", False)
+        post_revision_validate = kwargs.pop(
+            "_post_scheduling_revision_validate", None
+        )
+        using = kwargs.get("using") or self._state.db or DEFAULT_DB_ALIAS
+        with transaction.atomic(using=using):
+            if self.pk and not self._state.adding and not skip_revision:
+                baseline = (
+                    type(self).objects.using(using)
+                    .filter(pk=self.pk)
+                    .values("updated_at", "scheduling_revision")
+                    .first()
+                )
+                if baseline is None:
+                    raise SchedulingMutationStaleError(
+                        "Service event no longer exists."
+                    )
+                loaded_updated_at = getattr(self, "_scheduling_loaded_updated_at", None)
+                if (
+                    loaded_updated_at is not None
+                    and baseline["updated_at"] != loaded_updated_at
+                ):
+                    raise SchedulingMutationStaleError(
+                        "Service event changed after it was loaded."
+                    )
+                result = advance_scheduling_revisions((self.pk,), using=using)[0]
+                current = (
+                    type(self).objects.using(using)
+                    .filter(pk=self.pk)
+                    .values("updated_at", "scheduling_revision")
+                    .first()
+                )
+                if current is None or current["updated_at"] != baseline["updated_at"]:
+                    raise SchedulingMutationStaleError(
+                        "Service event changed while the scheduling write began."
+                    )
+                self.scheduling_revision = result.revision
+                if post_revision_validate is not None:
+                    post_revision_validate(self)
+
+            if self.status == self.STATUS_PUBLISHED and not self.published_at:
+                self.published_at = timezone.now()
+            self.full_clean()
+            saved = super().save(*args, **kwargs)
+            self._scheduling_loaded_updated_at = self.updated_at
+            return saved
+
+    @classmethod
+    def from_db(cls, db, field_names, values):
+        instance = super().from_db(db, field_names, values)
+        instance._scheduling_loaded_updated_at = (
+            instance.updated_at if "updated_at" in field_names else None
+        )
+        return instance
+
+    def refresh_from_db(self, *args, **kwargs):
+        refreshed = super().refresh_from_db(*args, **kwargs)
+        self._scheduling_loaded_updated_at = self.updated_at
+        return refreshed
 
     def get_title(self, language="zh"):
         if language == "en" and self.title_en:

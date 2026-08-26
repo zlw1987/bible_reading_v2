@@ -14,10 +14,11 @@ Worship Rotation Planner contract and implemented read-only proposal/preview
 `MO-S.6D-1D-D-1A`, plus implemented cycle-closed tail refinement
 `MO-S.6D-1D-D-1A-FU1`, plus the docs-only SQLite optimistic scheduling-
 concurrency decision `MO-S.6D-1D-D-1B-A0`, plus
+implemented Scheduling Revision Foundation `MO-S.6D-1D-D-1B-A1`, plus
 the MO-S.6D-0A workbook/readiness investigation plus MO-S.6D-0A-FU1/FU2
 multi-campus Worship rotation governance closure. Planner confirmation/
-audit is now split into runtime revision foundation `1B-A1` and optimistic
-confirmation/audit `1B-B`; both and the remaining MO-S.6D runtime slices remain
+audit is split into implemented runtime revision foundation `1B-A1` and
+unimplemented optimistic confirmation/audit `1B-B`; the latter and remaining MO-S.6D runtime slices remain
 separately scoped and require explicit approval.
 
 ## 1. Purpose
@@ -733,9 +734,9 @@ tests and limited-trial review pass.
   before any member side effect. Target SQLite does not implement
   `select_for_update()` row locks, so FU1's model/domain validation, identity
   rule, atomic rollback, and ordering code remain implemented but do not supply
-  a strict target row-lock guarantee. Docs-only `1B-A0` selects one future
-  event scheduling revision plus SQLite write serialization/recomputation to
-  close that gap in runtime `1B-A1`. Raw SQL and future arbitrary bulk updates
+  a strict target row-lock guarantee. Implemented `1B-A1` now closes that gap
+  with one event scheduling revision plus SQLite write serialization and
+  current-truth recomputation. Raw SQL and future arbitrary bulk updates
   remain outside the application-level claim.
 - Reachability: `MO-S.6D-1D-C` implements the exact current valid selected
   Worship Team as a third operational relevance predicate beside required-team
@@ -759,8 +760,8 @@ tests and limited-trial review pass.
   without a BatchRun schema. Read-only preview `1A` is implemented; the
   attempted row-lock closure `1B-A` stopped without changes because the target
   is SQLite. Docs-only `1B-A0` selects an event-owned scheduling revision,
-  supported-write bump scope, and expected-revision CAS. Runtime `1B-A1` must
-  implement and concurrency-test that foundation before `1B-B` may promise
+  supported-write bump scope, and expected-revision CAS. Runtime `1B-A1` now
+  implements and concurrency-tests that foundation; `1B-B` remains required before it may promise
   downstream-impact staleness. A
   separate ministry-owned
   post-commit producer may send direct old/new/downstream leadership notices,
@@ -770,8 +771,8 @@ tests and limited-trial review pass.
   engineering term rotation anchor.
 - Dependency: after the implemented Campus, pool-configuration,
   event-responsibility, read-only governance, governed single-event mutation,
-  operational-reachability, read-only planner-preview, and docs-only SQLite
-  optimistic-contract foundations, runtime scheduling revision, optimistic
+  operational-reachability, read-only planner-preview, docs-only SQLite
+  optimistic contract, and runtime scheduling revision foundations, optimistic
   batch confirmation, notification, and import slices in the canonical governance plan still
   require separate task approval and focused verification.
 
@@ -798,8 +799,8 @@ tests and limited-trial review pass.
 - Runtime order: read-only proposal/preview `1A` is implemented. Attempted
   row-lock closure `1B-A` stopped without changes on target SQLite; docs-only
   `1B-A0` now closes the optimistic scheduling-revision architecture.
-  Scheduling Revision Foundation `1B-A1` must be implemented and pass real
-  file-backed SQLite concurrency tests before optimistic confirmation/audit
+  Scheduling Revision Foundation `1B-A1` is implemented and passes real
+  file-backed SQLite concurrency tests. Optimistic confirmation/audit
   `1B-B` may make the hard downstream-impact stale claim.
 
 ### MO-S.6D-1D-D-1A — Worship Rotation Planner read-only proposal/preview
@@ -816,8 +817,8 @@ tests and limited-trial review pass.
   signing/decoding.
 - UI: bilingual preview shows before/after/no-op, blockers, downstream impact,
   and displaced tail. It intentionally has no Confirm Shift control.
-- Remaining: `1B-A1` scheduling-revision runtime and `1B-B` optimistic
-  confirmation/audit are unimplemented. Preview remains side-effect free.
+- Remaining: `1B-B` optimistic confirmation/audit is unimplemented and
+  unapproved. Preview remains side-effect free.
 
 ### MO-S.6D-1D-D-1A-FU1 — Cycle-closed shift preview
 
@@ -850,7 +851,7 @@ tests and limited-trial review pass.
   atomic rollback, deterministic ordering code, and member-confirmation parent
   revalidation remain implemented; target SQLite supplies no actual
   ServiceEvent row-lock guarantee.
-- Decision: future A1 adds one internal monotonic
+- Implemented A1 adds one internal monotonic
   `ServiceEvent.scheduling_revision` field. Supported event fingerprint,
   audience/required-team, current-assignment create/edit/status/retarget/delete,
   Admin/cascade, member-confirmation parent-status, and Lighting mutations
@@ -868,14 +869,36 @@ tests and limited-trial review pass.
   revision on success; only actually changed Worship Team rows receive future
   shared-operation `LogEntry` audit. Any stale CAS, recomputation conflict, save,
   or audit failure rolls back every revision claim and change.
-- Test gate: before confirmation is enabled, A1 must prove stale CAS, writer
+- Test gate: A1 proves stale CAS, writer
   exclusion, rollback restoration, and no partial batch commit with two real
   connections to a file-backed SQLite database under target-like journal/
   timeout behavior. Ordinary in-memory/TestCase coverage is insufficient.
-- Runtime split: `1B-A1` owns the field/migration, helpers, supported-write
-  retrofit, and concurrency tests while planner stays preview-only; `1B-B`
+- Runtime split: implemented `1B-A1` owns the field/migration, helpers,
+  supported-write retrofit, and concurrency tests while planner stays preview-only; `1B-B`
   later owns signed confirmation, CAS, recomputation, anchor writes, replay/
   stale handling, and shared audit.
+
+### MO-S.6D-1D-D-1B-A1 — Scheduling Revision Foundation
+
+- Status: implemented. Additive migration `events/0010` introduces the internal
+  non-editable event revision with default zero and no data operation.
+- Supported scheduling writes advance affected event revisions with database
+  expressions inside their mutation transaction, then reload/revalidate current
+  identity, authority where the caller owns it, and Worship governance.
+- Current assignment retargeting advances old and new events in ascending ID
+  order. Rollback covers revision increments, domain writes, audit, and existing
+  on-commit notification behavior. Notes/member-only detail remains non-staling.
+- Admin object/bulk deletion and MinistryTeam cascades are explicitly covered;
+  arbitrary raw SQL, shell/queryset bulk mutation, and newly added write paths
+  remain outside the supported-write guarantee until inventoried.
+- Planner signed proposal contract version 3 includes every selected event's
+  expected revision and rejects old/missing tokens, but remains read-only.
+- Real file-backed, two-connection SQLite tests prove stale CAS, writer
+  exclusion, rollback restoration, busy retry, and no partial multi-event claim.
+  This is optimistic revision plus SQLite database-wide writer exclusion and
+  current-truth recomputation—not a row-level lock or general scalability claim.
+- Prerequisite status: A1 is closed. `1B-B` confirmation/audit is separately
+  unimplemented, unapproved, and supplies no Confirm Shift action yet.
 
 ### MO-S.6D-0A — Workbook Contract & Imported-Sunday Readiness
 
@@ -1292,10 +1315,9 @@ permission, privacy, idempotency, and exception handling are observed to work.
 
 These are genuine future decisions, not hidden implementation assumptions:
 
-- When should the Worship Rotation Planner runtime `1B-A1` scheduling-revision
-  foundation begin? Docs-only A0 has closed the architecture decision, but A1
-  still requires explicit approval and target-like SQLite concurrency proof
-  before separately approved `1B-B` confirmation/audit.
+- When should separately scoped Worship Rotation Planner `1B-B` optimistic
+  confirmation/audit begin? A1 has closed the runtime concurrency prerequisite;
+  B remains unimplemented and requires explicit approval.
 - Which teams participate in the default Sunday board, and how are combined or
   special services represented?
 - Which additional cross-team details, if any, may be added beyond the

@@ -31,6 +31,12 @@ from ministry.services.worship_rotation_planner import (
     build_worship_rotation_proposal,
 )
 
+from .scheduling_revision import (
+    SchedulingMutationStaleError,
+    SchedulingRevisionError,
+    advance_scheduling_revisions,
+)
+
 from .forms import (
     RecurringServiceEventForm,
     ServiceEventForm,
@@ -90,6 +96,9 @@ def event_ui_text(language, key):
                 "cancel the existing Worship assignment before changing the "
                 "Worship Team."
             ),
+            "scheduling_retry": (
+                "Scheduling changed or is busy. Reload the current state and try again."
+            ),
         },
         "zh": {
             "no_permission": "你没有管理聚会事件的权限。",
@@ -110,6 +119,7 @@ def event_ui_text(language, key):
                 "这场聚会已经安排了敬拜服事。请先处理或取消现有敬拜排班，"
                 "再更改敬拜团队。"
             ),
+            "scheduling_retry": "排班资料已有变化或系统正忙。请刷新当前状态后重试。",
         },
     }
     return labels.get(language, labels["en"])[key]
@@ -121,6 +131,13 @@ def can_manage_service_events(user):
         or getattr(user, "is_superuser", False)
         or has_capability(user, CAP_MANAGE_SERVICE_EVENTS)
     )
+
+
+def _validate_current_service_event_authority(user, _event):
+    if not can_manage_service_events(user):
+        raise SchedulingMutationStaleError(
+            "Service-event management authority changed before the write."
+        )
 
 
 def _service_event_edit_context(event, language, user, planner_form=None):
@@ -597,13 +614,23 @@ def edit_service_event(request, event_id):
     if request.method == "POST":
         form = ServiceEventForm(request.POST, instance=event, language=language)
         if form.is_valid():
-            with transaction.atomic():
-                event = form.save(commit=False)
-                event.save()
-                event.required_teams.set(form.cleaned_data["required_teams"])
-                form.save_audience_units(event)
-            messages.success(request, event_ui_text(language, "saved"))
-            return redirect("service_event_detail", event_id=event.id)
+            try:
+                with transaction.atomic():
+                    event = form.save(commit=False)
+                    event.save(
+                        _post_scheduling_revision_validate=lambda current: (
+                            _validate_current_service_event_authority(
+                                request.user, current
+                            )
+                        )
+                    )
+                    event.required_teams.set(form.cleaned_data["required_teams"])
+                    form.save_audience_units(event)
+            except SchedulingRevisionError:
+                form.add_error(None, event_ui_text(language, "scheduling_retry"))
+            else:
+                messages.success(request, event_ui_text(language, "saved"))
+                return redirect("service_event_detail", event_id=event.id)
     else:
         form = ServiceEventForm(instance=event, language=language)
 
@@ -822,10 +849,65 @@ def change_worship_team(request, event_id):
                 ),
             )
 
+        baseline_updated_at = locked_event.updated_at
+        baseline_anchor_team_id = locked_event.rotation_anchor_team_id
+        baseline_revision = locked_event.scheduling_revision
+        try:
+            revision_result = advance_scheduling_revisions((locked_event.pk,))[0]
+        except SchedulingRevisionError:
+            messages.error(request, event_ui_text(language, "scheduling_retry"))
+            transaction.set_rollback(True)
+            return redirect(
+                "change_worship_team", event_id=locked_event.pk
+            )
+        locked_event = (
+            ServiceEvent.objects.select_for_update()
+            .select_related("rotation_anchor_team")
+            .prefetch_related("audience_scope_links__unit")
+            .get(pk=locked_event.pk)
+        )
+        post_barrier_stale = (
+            locked_event.updated_at != baseline_updated_at
+            or locked_event.rotation_anchor_team_id != baseline_anchor_team_id
+            or revision_result.revision != baseline_revision + 1
+        )
+        if post_barrier_stale:
+            messages.error(request, event_ui_text(language, "worship_stale"))
+            transaction.set_rollback(True)
+            return redirect(
+                "change_worship_team", event_id=locked_event.pk
+            )
+
+        if not can_change_worship_team(request.user, locked_event):
+            transaction.set_rollback(True)
+            messages.error(
+                request, event_ui_text(language, "worship_not_available")
+            )
+            return redirect("service_event_list")
+
+        inspection = inspect_worship_ownership_consistency(locked_event)
+        eligible_team_ids = {
+            candidate.team.pk for candidate in inspection.eligible_candidates
+        }
+        if proposed_team_id is not None and proposed_team_id not in eligible_team_ids:
+            form.add_error(
+                "worship_team",
+                event_ui_text(language, "worship_not_available"),
+            )
+        elif inspection.current_worship_assignments:
+            form.add_error(None, event_ui_text(language, "worship_conflict"))
+        if form.errors:
+            messages.error(request, event_ui_text(language, "worship_stale"))
+            transaction.set_rollback(True)
+            return redirect(
+                "change_worship_team", event_id=locked_event.pk
+            )
+
         old_team = locked_event.rotation_anchor_team
         locked_event.rotation_anchor_team = proposed_team
         locked_event.save(
-            update_fields=["rotation_anchor_team", "updated_at"]
+            update_fields=["rotation_anchor_team", "updated_at"],
+            _skip_scheduling_revision=True,
         )
         LogEntry.objects.log_action(
             user_id=request.user.pk,
@@ -981,9 +1063,20 @@ def cancel_service_event(request, event_id):
     if request.method != "POST":
         return redirect("service_event_detail", event_id=event.id)
 
-    with transaction.atomic():
-        event.status = ServiceEvent.STATUS_CANCELLED
-        event.save(update_fields=["status", "updated_at"])
-        cancel_non_final_assignments_for_event(event)
+    try:
+        with transaction.atomic():
+            event.status = ServiceEvent.STATUS_CANCELLED
+            event.save(
+                update_fields=["status", "updated_at"],
+                _post_scheduling_revision_validate=lambda current: (
+                    _validate_current_service_event_authority(
+                        request.user, current
+                    )
+                ),
+            )
+            cancel_non_final_assignments_for_event(event)
+    except SchedulingRevisionError:
+        messages.error(request, event_ui_text(language, "scheduling_retry"))
+        return redirect("service_event_detail", event_id=event.id)
     messages.success(request, event_ui_text(language, "cancelled"))
     return redirect("service_event_list")

@@ -50,11 +50,11 @@ def _persisted_assignment(assignment):
 
 
 def worship_assignment_serialization_event_ids(assignment):
-    """Return ServiceEvent ids that must be locked before a current write.
+    """Return ServiceEvent ids that serialize a current Worship write.
 
     Current writes that touch either side of the Worship boundary serialize on
-    the exact ServiceEvent row(s).  Pure downstream writes and safe transitions
-    out of the current operational set do not acquire Worship locks.
+    the exact ServiceEvent row(s). Pure downstream writes and safe transitions
+    out of the current operational set do not use this Worship-specific step.
     """
 
     if (
@@ -82,7 +82,12 @@ def worship_assignment_serialization_event_ids(assignment):
 
 
 def lock_service_events_for_worship_assignment_write(assignment, *, using):
-    """Lock current Worship-write serialization points in stable id order."""
+    """Read Worship-write serialization points in stable id order.
+
+    ``select_for_update()`` adds row locks on supporting databases. SQLite does
+    not provide that guarantee; the event scheduling-revision write performed
+    by the caller is the target SQLite serialization boundary.
+    """
 
     event_ids = worship_assignment_serialization_event_ids(assignment)
     if not event_ids:

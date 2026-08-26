@@ -4,15 +4,17 @@ Status: `MO-S.6D-1D-D-0A` docs-only architecture gate,
 `MO-S.6D-1D-D-1A` read-only proposal/preview runtime,
 `MO-S.6D-1D-D-1A-FU1` cycle-closed tail refinement, and the docs-only
 `MO-S.6D-1D-D-1B-A0` SQLite optimistic scheduling-concurrency decision are
-complete. The
+complete. `MO-S.6D-1D-D-1B-A1` Scheduling Revision Foundation is also
+implemented. The
 contextual planner route now builds an explicit exact-event chain, projects
 the deterministic shift and privacy-limited downstream impact, and produces a
 30-minute user-bound signed normalized proposal without writing state.
 The attempted `MO-S.6D-1D-D-1B-A` row-lock closure correctly stopped without
 changes because both local and GoDaddy deployment settings use SQLite and
 `connection.features.has_select_for_update` is false. Runtime scheduling-
-revision foundation `1B-A1` and optimistic confirmation/audit `1B-B` remain
-unimplemented. No planner model, migration, dependency, confirmation write,
+revision foundation now supplies the target SQLite concurrency boundary;
+optimistic confirmation/audit `1B-B` remains unimplemented and unapproved. No
+planner model, confirmation write,
 audit write, notification, session proposal, temp file, or data change is
 implemented by `1A`, `1A-FU1`, or docs-only `1B-A0`.
 
@@ -319,7 +321,7 @@ not trust display values from the browser.
 For every selected event:
 
 - event ID;
-- expected `scheduling_revision` after future `1B-A1` implements that field;
+- expected `scheduling_revision` from implemented `1B-A1`;
 - `updated_at`;
 - status and event type;
 - start and end datetimes;
@@ -387,15 +389,15 @@ stored scheduling data.
 
 ### One event-owned revision is sufficient
 
-`MO-S.6D-1D-D-1B-A0` selects one future additive field:
+`MO-S.6D-1D-D-1B-A0` selected one additive field, implemented by `1B-A1`:
 
 ```text
 ServiceEvent.scheduling_revision
     PositiveBigIntegerField(default=0, editable=False)
 ```
 
-The final runtime slice must verify the generated migration, but repository
-truth supports this name and type: it is a monotonic internal concurrency token
+Migration `events/0010_serviceevent_scheduling_revision.py` adds only this
+field, with no data operation. It is a monotonic internal concurrency token
 for operational scheduling truth, not user-visible state, audit history,
 `updated_at` replacement, or a general CMS lost-update version. Existing rows
 may safely start at zero through one normal schema migration with no data
@@ -411,7 +413,7 @@ revision sufficient for the supported V1 boundary.
 
 ### Writes that advance the revision
 
-Future `1B-A1` must advance the affected event revision in the same atomic
+Implemented `1B-A1` advances the affected event revision in the same atomic
 transaction before final validation and mutation for:
 
 - a governed Worship Team selection change;
@@ -439,7 +441,7 @@ later scheduling changes advance it normally.
 Pure member-roster edits, assignment notes, `TeamAssignmentMember.confirmed_at`,
 and confirmation-note detail do not advance the revision solely for planner
 staleness. If the same operation changes the parent assignment's fingerprinted
-status, that parent transition does advance it. Runtime A1 must use narrowly
+status, that parent transition does advance it. A1 uses narrowly
 scoped saves/reloads for these non-revision writes so a stale full-row save
 cannot overwrite fingerprinted current truth. A conservative bump may remain
 for a supported direct full `TeamAssignment.save()` whose intent cannot be
@@ -451,12 +453,12 @@ should avoid needless proposal staleness.
 Current single-event create/edit and recurring creation already save/create
 the owning event before `required_teams.set()` inside one atomic workflow.
 ServiceEvent Admin saves the parent before its required-team and audience
-inline formsets inside Admin's atomic change transaction. A1 must make the
+inline formsets inside Admin's atomic change transaction. A1 makes the
 event-owned revision advance the first scheduling write for existing-event
 replacement, including an inline-only change; new-event related rows remain
 part of initial creation.
 
-There is no normal application TeamAssignment delete route. A1 must cover
+There is no normal application TeamAssignment delete route. A1 covers
 supported direct model delete, TeamAssignment Admin object delete, and Admin
 bulk delete explicitly. The default Admin bulk action calls
 `QuerySet.delete()` and therefore needs a bounded `delete_queryset()` path that
@@ -470,7 +472,7 @@ SQL remain outside the supported-write claim.
 
 ### Ordinary supported mutation barrier
 
-The reusable A1 helper/service contract is:
+The implemented reusable A1 helper/service contract is:
 
 1. enter `transaction.atomic()`;
 2. establish the affected old/proposed event IDs from the persisted baseline
@@ -494,7 +496,7 @@ contract without changing their authority, notifications, or lifecycle rules.
 
 ### Future `1B-B` confirmation CAS
 
-Preview after A1 must include each event's expected `scheduling_revision` in
+Preview after A1 includes each event's expected `scheduling_revision` in
 the signed semantic payload. Future confirmation is:
 
 1. decode and shape-check the signed payload before mutation logic;
@@ -541,12 +543,12 @@ The bounded target guarantee is therefore optimistic revision plus SQLite
 write-transaction serialization plus current-truth recomputation for supported
 application writes. It is database-wide writer exclusion, not a row-level
 lock. Readers may continue. A competing writer may wait or receive
-`database is locked`; A1/B must keep transactions short and render retry/error
+`database is locked`; A1 and future B keep transactions short and render retry/error
 without false success. Configuration/authority changes committed before the
 first CAS are caught by recomputation; after that CAS, SQLite prevents another
 database writer from committing through the confirmation window.
 
-Before enabling `1B-B`, A1 must include a real two-connection, file-backed
+Before enabling `1B-B`, A1 now includes a real two-connection, file-backed
 SQLite concurrency test—not an in-memory database or ordinary `TestCase`—that
 proves stale CAS, cross-event writer exclusion after the barrier, rollback of
 revision claims, no partial batch commit, and safe retry/error behavior under
@@ -673,16 +675,19 @@ engineering terms to schedulers.
 - Adds no field, migration, helper, confirmation action, audit, notification,
   or data change.
 
-### `MO-S.6D-1D-D-1B-A1` — Scheduling Revision Foundation — FUTURE
+### `MO-S.6D-1D-D-1B-A1` — Scheduling Revision Foundation — IMPLEMENTED
 
-- Add `ServiceEvent.scheduling_revision` and its normal additive migration.
-- Add atomic increment/CAS helpers and retrofit supported ServiceEvent,
+- Adds `ServiceEvent.scheduling_revision` and additive migration `events/0010`.
+- Adds typed atomic increment/CAS helpers and retrofits supported ServiceEvent,
   TeamAssignment, required-team/audience, Admin/delete/cascade, confirmation-
   parent-status, and Lighting paths.
-- Correct the runtime SQLite concurrency boundary while preserving authority,
+- Corrects the runtime SQLite concurrency boundary while preserving authority,
   notifications, lifecycle, and Worship identity rules.
-- Add real two-connection file-backed SQLite concurrency coverage. The planner
-  remains preview-only with no confirmation action or batch audit.
+- Adds real two-connection file-backed SQLite coverage for stale CAS, writer
+  exclusion, rollback restoration, busy retry, and atomic multi-event failure.
+- Planner proposal contract version 3 fingerprints each event revision and
+  rejects missing/old tokens. The planner remains preview-only with no
+  confirmation action or batch audit.
 
 ### `MO-S.6D-1D-D-1B-B` — Optimistic batch confirmation and audit — FUTURE
 
@@ -701,8 +706,9 @@ to `1A`, `1B-A1`, or `1B-B`.
 
 ## 17. Decisions and remaining gates
 
-This gate plus the implemented `1A-FU1` refinement and docs-only `1B-A0`
-decision closes the V1 product/architecture decisions needed before `1B-A1`:
+This gate plus the implemented `1A-FU1`, docs-only `1B-A0`, and implemented
+`1B-A1` close the V1 product/architecture and runtime-concurrency prerequisites
+needed before separately approved `1B-B`:
 exact explicit weekly published-future Sunday
 events, maximum 53, no interior blank, terminal blank or exact-ID cycle-closed
 tail preservation, no arbitrary tail loss, per-destination canonical
@@ -711,9 +717,8 @@ blocker, narrow roster-free downstream impact, 30-minute user-bound signed
 proposal, one event-owned scheduling revision, SQLite optimistic CAS/write-
 barrier semantics, and no BatchRun schema.
 
-No remaining product or architecture decision blocks approval of `1B-A1`.
-Runtime A1 must still verify the generated field migration, safely close every
-inventoried supported path, and pass the required file-backed SQLite
-concurrency tests before `1B-B` may be enabled. Any newly discovered supported
+The A1 prerequisite is closed: the generated migration, inventoried supported
+paths, and required file-backed SQLite concurrency tests are implemented.
+`1B-B` remains separately unimplemented and unapproved. Any newly discovered supported
 bulk/cascade path outside the one-event revision contract remains a stop
 condition; the downstream stale guarantee must not be weakened silently.

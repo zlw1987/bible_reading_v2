@@ -15,6 +15,11 @@ from accounts.permissions import (
     CAP_MANAGE_SERVICE_EVENTS,
     CAP_MANAGE_TEAM_ASSIGNMENTS,
 )
+from events.scheduling_revision import (
+    RevisionClaimState,
+    SchedulingRevisionBusyError,
+    SchedulingRevisionResult,
+)
 from ministry.models import (
     MinistryTeam,
     MinistryTeamParentLink,
@@ -362,6 +367,7 @@ class WorshipTeamSelectorTests(WorshipTeamPlanningTestBase):
         self.assertEqual(response.status_code, 302)
         self.event.refresh_from_db()
         self.assertEqual(self.event.rotation_anchor_team, self.c1)
+        self.assertEqual(self.event.scheduling_revision, 1)
         after = ServiceEvent.objects.values(
             "title",
             "event_type",
@@ -396,6 +402,69 @@ class WorshipTeamSelectorTests(WorshipTeamPlanningTestBase):
         self.event.refresh_from_db()
         self.assertIsNone(self.event.rotation_anchor_team)
         self.assertEqual(LogEntry.objects.count(), 2)
+        self.assertEqual(self.event.scheduling_revision, 3)
+
+    def test_no_op_selection_does_not_advance_revision_or_audit(self):
+        self.event.rotation_anchor_team = self.c1
+        self.event.save(update_fields=["rotation_anchor_team", "updated_at"])
+        self.event.refresh_from_db()
+        before_revision = self.event.scheduling_revision
+
+        response = self.client.post(
+            reverse("change_worship_team", args=[self.event.id]),
+            self.selector_post_data(self.c1),
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.event.refresh_from_db()
+        self.assertEqual(self.event.scheduling_revision, before_revision)
+        self.assertEqual(LogEntry.objects.count(), 0)
+
+    @patch("events.views.advance_scheduling_revisions")
+    def test_busy_revision_barrier_renders_retry_without_false_success(
+        self, advance_revisions
+    ):
+        advance_revisions.side_effect = SchedulingRevisionBusyError(
+            "SQLite scheduling write is busy; retry from current state."
+        )
+
+        response = self.client.post(
+            reverse("change_worship_team", args=[self.event.id]),
+            self.selector_post_data(self.c1),
+            follow=True,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Scheduling changed or is busy.")
+        self.event.refresh_from_db()
+        self.assertIsNone(self.event.rotation_anchor_team)
+        self.assertEqual(self.event.scheduling_revision, 0)
+        self.assertEqual(LogEntry.objects.count(), 0)
+
+    @patch("events.views.advance_scheduling_revisions")
+    def test_post_barrier_stale_redirects_after_rollback_without_template_error(
+        self, advance_revisions
+    ):
+        advance_revisions.return_value = (
+            SchedulingRevisionResult(
+                event_id=self.event.pk,
+                state=RevisionClaimState.CLAIMED,
+                revision=2,
+            ),
+        )
+
+        response = self.client.post(
+            reverse("change_worship_team", args=[self.event.id]),
+            self.selector_post_data(self.c1),
+            follow=True,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "changed after you opened the form")
+        self.event.refresh_from_db()
+        self.assertIsNone(self.event.rotation_anchor_team)
+        self.assertEqual(self.event.scheduling_revision, 0)
+        self.assertEqual(LogEntry.objects.count(), 0)
 
     def test_forged_candidate_is_rejected_without_audit(self):
         data = self.selector_post_data(self.c1)
@@ -406,6 +475,7 @@ class WorshipTeamSelectorTests(WorshipTeamPlanningTestBase):
         self.assertEqual(response.status_code, 200)
         self.event.refresh_from_db()
         self.assertIsNone(self.event.rotation_anchor_team)
+        self.assertEqual(self.event.scheduling_revision, 0)
         self.assertEqual(LogEntry.objects.count(), 0)
 
     def test_stale_timestamp_and_stale_old_anchor_are_rejected(self):
@@ -602,6 +672,7 @@ class WorshipTeamSelectorTests(WorshipTeamPlanningTestBase):
 
     def test_audit_failure_rolls_back_anchor_change(self):
         data = self.selector_post_data(self.c1)
+        initial_revision = self.event.scheduling_revision
         with patch(
             "events.views.LogEntry.objects.log_action",
             side_effect=RuntimeError("audit unavailable"),
@@ -611,6 +682,7 @@ class WorshipTeamSelectorTests(WorshipTeamPlanningTestBase):
             )
         self.event.refresh_from_db()
         self.assertIsNone(self.event.rotation_anchor_team)
+        self.assertEqual(self.event.scheduling_revision, initial_revision)
         self.assertEqual(LogEntry.objects.count(), 0)
 
     def test_unauthorized_direct_url_and_cancelled_event_are_denied(self):

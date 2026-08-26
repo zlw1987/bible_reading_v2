@@ -1392,6 +1392,31 @@ class TeamAssignmentV1Tests(TestCase):
         assignment_member = assignment.assignment_members.get(membership=self.membership)
         self.assertIsNotNone(assignment_member.confirmed_at)
         self.assertEqual(assignment_member.confirmation_note, "Confirmed.")
+        assignment.service_event.refresh_from_db()
+        self.assertEqual(assignment.service_event.scheduling_revision, 2)
+
+    def test_nonfinal_member_confirmation_does_not_advance_revision(self):
+        self.set_language("en")
+        assignment = self.create_assignment(
+            members=[self.membership, self.second_membership]
+        )
+        assignment.service_event.refresh_from_db()
+        before_revision = assignment.service_event.scheduling_revision
+        self.client.login(username="regular_assign", password="testpass123")
+
+        response = self.client.post(
+            reverse("confirm_team_assignment", args=[assignment.id]),
+            {"confirmation_note": "First member only."},
+        )
+
+        self.assertEqual(response.status_code, 302)
+        assignment.refresh_from_db()
+        assignment.service_event.refresh_from_db()
+        self.assertEqual(assignment.status, TeamAssignment.STATUS_SCHEDULED)
+        self.assertEqual(
+            assignment.service_event.scheduling_revision,
+            before_revision,
+        )
 
     def test_assigned_member_can_confirm_prepared_assignment(self):
         self.set_language("en")
@@ -4225,6 +4250,8 @@ class LightingPilotImportCommandTests(TestCase):
         team = MinistryTeam.objects.get(name="灯光组")
         self.assertEqual(team.name_en, "Lighting Team")
         self.assertEqual(team.playbook_link, "https://example.com/lighting-playbook")
+        event = ServiceEvent.objects.get()
+        self.assertEqual(event.scheduling_revision, 1)
         self.assertIn("teams_created=1", output)
 
     def test_import_reuses_legacy_lighting_team_and_normalizes_on_real_import(self):

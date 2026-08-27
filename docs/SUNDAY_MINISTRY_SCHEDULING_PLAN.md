@@ -23,10 +23,15 @@ Team Change Notification Contract and bounded `NOTIFY.1G` runtime are
 implemented; remaining MO-S.6D runtime slices remain
 separately scoped and require explicit approval.
 `MO-S.6D-PROFILE.1A` now implements the optional stable
-`ServiceEvent.service_profile_key` identity foundation. It does not resume the
-Excel dependency/parser/read-only-preview slice, which remains unimplemented
-and blocked on this foundation being committed plus explicit target-event setup
-evidence.
+`ServiceEvent.service_profile_key` identity foundation and is committed in the
+current HEAD. It does not resume the Excel dependency/parser/read-only-preview
+slice, which remains unimplemented and blocked on production schema readiness
+plus explicit reviewed target-event setup evidence.
+`MO-S.6D-PROFILE-SETUP.0A` now implements the separate read-only target-event
+readiness audit in the current working tree and remains uncommitted pending
+product-owner review. Its local run found migrations `events/0009`, `0010`,
+and `0011` unapplied, so local ServiceEvent data was deliberately not evaluated
+and no production setup-readiness claim exists.
 
 ## 1. Purpose
 
@@ -957,9 +962,8 @@ tests and limited-trial review pass.
 
 ### MO-S.6D-PROFILE.1A — Stable Service Profile Identity Foundation
 
-- Status: **IMPLEMENTED** as one additive, optional ServiceEvent field and
-  migration; product-owner review/commit remains pending for this working-tree
-  slice.
+- Status: **IMPLEMENTED AND COMMITTED IN CURRENT HEAD** as one additive,
+  optional ServiceEvent field and migration.
 - `ServiceEvent.service_profile_key` is a non-unique, machine-oriented stable
   integration/profile identity for the recurring service profile represented
   by one exact event. Existing rows safely default to an empty key.
@@ -980,9 +984,71 @@ tests and limited-trial review pass.
   This makes later profile-aware proposals stale when identity changes without
   introducing a second counter.
 - Excel dependency/parser/read-only preview remains **UNIMPLEMENTED / BLOCKED
-  ON PROFILE FOUNDATION COMMIT + SETUP EVIDENCE**. After commit, the product
-  owner may separately approve resuming Slice 8; real matching still requires
-  explicitly tagging the intended target ServiceEvents during deployment/setup.
+  ON PRODUCTION SCHEMA + REVIEWED SETUP EVIDENCE**. The separate read-only
+  PROFILE-SETUP.0A audit must first be reviewed/committed, deployed with the
+  current profile foundation as needed, and run against production after
+  migrations through `events/0011` are applied. Real matching still requires
+  separately authorized explicit tagging of the reviewed target ServiceEvents.
+
+### MO-S.6D-PROFILE-SETUP.0A — Bethany 09:30 Target Event Readiness Audit
+
+- Status: **READ-ONLY AUDIT TOOL IMPLEMENTED IN THE CURRENT WORKING TREE;
+  PENDING PRODUCT-OWNER REVIEW/COMMIT**. The command is
+  `audit_service_profile_readiness`; it has no `--apply`, no backfill, no
+  automatic tagging, no Excel/parser dependency, and no mutation mode.
+- The default, documented SVCA contract is profile key `bethany_0930_cm`, local
+  year `2026`, exact configured-local-time `09:30`, and event type
+  `sunday_service`. The expected set is independently constructed as every
+  seven days from `2026-01-04` through `2026-12-27` (52 Sundays); UTC clock
+  time is never used as service-profile identity.
+- Only persisted `ServiceEvent.service_profile_key == "bethany_0930_cm"` is
+  canonical profile identity. Untagged exact-09:30 events are printed only as
+  `UNTAGGED CANDIDATE / HUMAN REVIEW REQUIRED`; multiple candidates require
+  human selection, and title, location, Host / Language, audience, or selected
+  Worship Team resemblance never selects or ranks a target.
+- `--event-type` controls both canonical validation and candidate discovery;
+  the default `sunday_service` contract is unchanged. A supplied profile key
+  longer than the persisted field's 64-character maximum is rejected.
+- Each expected Sunday reports four distinct requested-type categories:
+  canonical requested-profile rows; untagged exact-time candidates; exact-time
+  events already owned by another non-empty profile key; and same-day events at
+  different times. Other-profile exact-time rows are informational parallel-
+  service evidence only, labeled not a candidate, never counted or ranked as a
+  target, and never make the requested profile ready.
+- Canonical rows are classified for wrong type/time/date, lifecycle state,
+  duplicates, out-of-contract rows, and audience readiness. Zero audience rows
+  retain the canonical ordinary-user fail-closed meaning; inactive or
+  ancestor/descendant-overlapping audience evidence blocks readiness but is
+  never repaired.
+- Before querying ServiceEvent data, the audit separately reports migration
+  recorder plus physical-schema evidence for `events/0009`, `0010`, and `0011`.
+  Missing schema stops cleanly before ORM event queries, avoiding a raw missing-
+  column traceback. Optional `--json` prints the same deterministic,
+  privacy-bounded facts to stdout only.
+- `PROFILE SETUP READY` requires one and only one exact, published/completed,
+  audience-ready canonical tagged row on each of all 52 expected Sundays, with
+  no unexpected/duplicate profile rows. Any number of untagged lookalikes is
+  insufficient.
+- The normal local development DB probe reported all three migrations
+  unapplied and their schema targets absent. Result: `Schema: NOT READY`,
+  ServiceEvent data `NOT EVALUATED`, recommendation
+  `NOT READY FOR SLICE 8 REAL-DATA MATCHING`. No migration was applied and no
+  data was changed.
+- After product-owner review/commit of PROFILE-SETUP.0A, deploy the current
+  profile foundation and audit tool as needed, apply production migrations
+  through `events/0011`, and run this read-only command from the GoDaddy
+  application directory:
+
+  ```bash
+  /home/rsnwvvl103hc/virtualenv/app_read/3.11/bin/python manage.py audit_service_profile_readiness
+  ```
+
+  Production output still requires product-owner review. This audit neither
+  authorizes nor performs profile assignment, and a local/test result cannot
+  establish production readiness.
+- Excel Slice 8 remains **UNIMPLEMENTED**. Its real-data readiness remains
+  blocked on production migration/schema readiness, explicit reviewed target-
+  event tagging evidence, and a reviewed `.xlsx` dependency.
 
 ### MO-S.6D-0A — Workbook Contract & Imported-Sunday Readiness
 
@@ -1273,18 +1339,20 @@ authorization/mutation enforcement, and `1D-C` operational reachability are now
 implemented; all other prerequisites remain documentation decisions only.
 
 `MO-S.6D-PROFILE.1A` now supplies the stable field and approves
-`bethany_0930_cm` as the first setup value, but it remains uncommitted in this
-working tree and no target ServiceEvent has been tagged. MO-S.6D import runtime
-therefore remains unapproved until its owning slices and setup evidence:
+`bethany_0930_cm` as the first setup value and is committed in the current
+HEAD. No target ServiceEvent has been tagged. MO-S.6D import runtime therefore
+remains unapproved until this sequence is completed:
 
-1. commit the profile foundation and explicitly tag the intended Bethany 09:30
-   target events with `bethany_0930_cm` through deployment/setup;
-2. choose timestamped signed proposal retention, or state a durable audit need
-   that justifies an `ImportRun` design;
-3. decide whether `LogEntry` plus request/result logging is enough or durable
-   selected-team/batch attribution requires additional schema; and
-4. approve and verify an `.xlsx` dependency in a separate implementation
-   slice.
+1. product-owner review/commit of the read-only PROFILE-SETUP.0A audit;
+2. deploy the current profile foundation and audit tool as needed;
+3. apply production migrations through `events/0011`;
+4. run the read-only production audit;
+5. product-owner review of the exact target-event evidence;
+6. separately authorize and perform explicit `bethany_0930_cm` profile tagging;
+7. only after reviewed setup evidence, separately approve any Slice 8 real-data
+   work together with its signed-proposal/audit decisions and a reviewed
+   `.xlsx` dependency supporting both local Python 3.14.x and deployment Python
+   3.11.15.
 
 Authorization must also preserve the strict sheet/header/date/formula/special-
 row contract, match conflicts, atomic stale revalidation, the first-slice
@@ -1294,9 +1362,10 @@ published zero-audience creation.
 
 ### MO-S.6D — Excel Event + Worship Team Import
 
-- Status: not implemented or authorized; blocked on the PROFILE.1A commit,
-  explicit target-event setup evidence, and remaining importer-owned decisions
-  above.
+- Status: not implemented or authorized; blocked on PROFILE-SETUP.0A
+  review/commit, production migrations and read-only audit, separately
+  authorized explicit target-event tagging evidence, and remaining importer-
+  owned decisions above.
 - Goal: controlled annual Bethany 9:30 workbook input under the approved
   contract and lifecycle, not date-and-anchor import in isolation.
 - Candidate scope after approval: code-versioned template contract,

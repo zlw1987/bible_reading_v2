@@ -20,8 +20,17 @@ It grants no audience, permission, serving, recurrence, location, Host /
 Language, or scheduling-source semantics. Existing rows default empty; the
 first approved workbook setup value is `bethany_0930_cm`, and no event is
 automatically tagged. Excel dependency/parser/read-only preview remains
-unimplemented and blocked on committing this foundation plus explicit target-
-event setup evidence.
+unimplemented and blocked on production schema readiness plus explicit reviewed
+target-event setup evidence. `MO-S.6D-PROFILE.1A` is committed in current HEAD.
+`MO-S.6D-PROFILE-SETUP.0A` now provides a separate
+read-only deterministic audit for that evidence, including migrations
+`events/0009`-`0011`, the 52 expected 2026 local Sundays, canonical tagged rows,
+untagged human-review candidates, exact-time events owned by other profiles,
+different-time parallel services, requested-event-type consistency, and
+audience readiness. The audit slice remains uncommitted in the current working
+tree pending product-owner review.
+Its normal local DB run stopped schema-not-ready because those migrations are
+unapplied; no production profile-setup readiness has been established.
 
 ## 1. Project Identity
 
@@ -640,9 +649,9 @@ Future pieces include:
   notification runtime `NOTIFY.1G` are implemented. The separate
   `MO-S.6D-PROFILE.1A` stable ServiceEvent profile-key foundation is also
   implemented, without tagging existing events; importer runtime and bulk
-  upload remain later slices blocked on the profile-foundation commit and
-  explicit target-event setup evidence, and the `NOTIFY.1G-0A` architecture
-  gate is docs complete.
+  upload remain later slices blocked on production schema readiness and
+  explicit reviewed target-event setup evidence, and the `NOTIFY.1G-0A`
+  architecture gate is docs complete.
   The bounded
   cross-team
   coordination projection replaces the older generic “multi-team dashboard”
@@ -1340,9 +1349,14 @@ implemented with target-like file-backed SQLite concurrency coverage;
 separately approved `1B-B` confirmation/shared audit is implemented.
 `NOTIFY.1G` notification runtime and the separate
 `MO-S.6D-PROFILE.1A` stable ServiceEvent profile-key foundation are
-implemented. Existing events remain untagged; importer runtime and bulk upload
-remain unimplemented and blocked on committing the foundation plus explicit
-target-event setup evidence.
+implemented. The separate `MO-S.6D-PROFILE-SETUP.0A` zero-write target-event
+audit is implemented too; the normal local DB is schema-not-ready through
+`events/0011`, and no production audit or tagging evidence exists yet. Existing
+events remain untagged; importer runtime and bulk upload remain unimplemented
+and blocked on product-owner review/commit of the audit tool, deployment of the
+current foundation and tool as needed, production schema readiness, explicit
+reviewed and separately authorized target-event tagging evidence, and the
+reviewed `.xlsx` dependency.
 Remaining MO-S.6D and later slices are not
 authorized by the governance closure or these foundations. Availability,
 swaps, reminders, automatic
@@ -1397,10 +1411,13 @@ MO-S.6E remain separately deferred.
 
 Short next-candidate list:
 
-- after product-owner review/commit of `MO-S.6D-PROFILE.1A` and explicit
-  `bethany_0930_cm` target-event setup evidence, separately approve any resumed
-  MO-S.6D Excel dependency/parser/read-only-preview runtime; this profile slice
-  does not authorize it;
+- after product-owner review/commit of the read-only
+  `MO-S.6D-PROFILE-SETUP.0A` tool, deploy the current profile foundation and
+  audit tool as needed, apply migrations through `events/0011`, run/review
+  `audit_service_profile_readiness` on production, and obtain separately
+  authorized explicit `bethany_0930_cm` target-event tagging evidence before
+  approving any resumed MO-S.6D Excel dependency/parser/read-only-preview
+  runtime; neither profile slice authorizes tagging or importer work;
 - review Church Calendar limited-trial feedback before separately approving any
   broader calendar behavior such as notifications, external sync, attendance,
   authoring/management, staff dashboards, or CommunityActivity-to-ServiceEvent

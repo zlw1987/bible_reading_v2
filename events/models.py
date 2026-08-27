@@ -2,6 +2,7 @@ from datetime import datetime, timedelta
 
 from django.conf import settings
 from django.core.exceptions import ValidationError
+from django.core.validators import RegexValidator
 from django.db import DEFAULT_DB_ALIAS, models, transaction
 from django.utils import timezone
 
@@ -76,6 +77,26 @@ class ServiceEvent(models.Model):
     description = models.TextField(blank=True, default="")
     description_en = models.TextField(blank=True, default="")
     event_type = models.CharField(max_length=40, choices=EVENT_TYPE_CHOICES)
+    service_profile_key = models.CharField(
+        max_length=64,
+        blank=True,
+        default="",
+        validators=[
+            RegexValidator(
+                regex=r"^[a-z0-9_.-]+$",
+                message=(
+                    "Use only lowercase ASCII letters, digits, underscores, "
+                    "hyphens, and periods."
+                ),
+                code="invalid_service_profile_key",
+            )
+        ],
+        help_text=(
+            "Stable integration/profile key for this exact service event. "
+            "It does not control audience, location, recurrence, serving, or "
+            "permissions."
+        ),
+    )
     start_datetime = models.DateTimeField()
     end_datetime = models.DateTimeField(null=True, blank=True)
     location = models.CharField(max_length=180, blank=True, default="")

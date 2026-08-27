@@ -17,13 +17,15 @@ SQLite optimistic scheduling-concurrency decision, plus implemented
 `MO-S.6D-1D-D-1B-A1` Scheduling Revision Foundation, plus implemented
 `MO-S.6D-1D-D-1B-B` optimistic batch confirmation/shared audit, plus the
 docs-only `NOTIFY.1G-0A` Direct Worship Team Change Notification Contract, plus
-implemented `NOTIFY.1G` runtime. Governance FU2 finalizes the required
+implemented `NOTIFY.1G` runtime, plus implemented
+`MO-S.6D-PROFILE.1A` stable ServiceEvent profile identity foundation.
+Governance FU2 finalizes the required
 event-planner
 prerequisite and Worship-specific pool semantics. The Campus, pool-
 configuration, event-responsibility, read-only governance, and governed
-single-event mutation, operational-reachability, and planner-confirmation
-foundations are implemented; notification and import slices below require
-separate explicit approval.
+single-event mutation, operational-reachability, planner-confirmation, and the
+bounded direct-change notification runtime are implemented; import and any
+broader later notification expansion below require separate explicit approval.
 
 ## 1. Problem and decisions owned here
 
@@ -104,10 +106,8 @@ The current code provides:
   writes nothing, and grants no authority; and
 - no `updated_by` field.
 
-The current code does **not** provide:
-
-- direct Worship Team change notification producer runtime; or
-- a declared `.xlsx` dependency or annual-workbook importer.
+The current code does **not** provide a declared `.xlsx` dependency or annual-
+workbook importer.
 
 `created_by` is creation attribution, not durable planner responsibility or
 runtime authority. `MinistryTeamParentLink.parent_church_unit` is a display/
@@ -837,7 +837,8 @@ The strict MO-S.6D-0A workbook decisions remain:
 
 - known code-owned `.xlsx` contract; only `All 930` A:B for the Bethany 9:30
   profile in the first importer;
-- explicit code-owned service-profile mapping;
+- exact `ServiceEvent.service_profile_key` matching, with the first approved
+  workbook setup value `bethany_0930_cm`;
 - exact local date/time/type/profile identity;
 - no fuzzy event or team matching, no hard-coded PKs, and no user/team creation;
 - no formula evaluation; cached date results only under the recorded structural
@@ -931,6 +932,7 @@ Each slice is separately approvable and must verify repository truth again.
 | 5 | **Worship Team operational reachability — IMPLEMENTED (`MO-S.6D-1D-C`; projection corrections `MO-S.6D-1D-C-FU1/FU2`)** | Team Schedule/Board queryset and projection change only; exact-team assignment permission unchanged; canonical eligibility fails closed; invalid raw selection never suppresses independent generic required/assignment participation; canonical ownership conflicts/ambiguity are review-only and non-actionable; no migration | selected-team-only rows, empty-coverage presentation, valid-selection de-dup, invalid required/assignment projection, off-team/out-of-scope conflict, multiple/duplicate ambiguity, global/exact-team behavior, planner/pool-Lead boundary, change/removal, privacy, no coverage/assignment/required-team writes | Rendered English desktop and Chinese mobile Team Schedule/Board QA completed in the implementation slice; FU1/FU2 are focused projection-only and test-verified |
 | 6 | **Worship Rotation Planner — IMPLEMENTED THROUGH `1B-B`** | Existing selector retains one-Sunday changes; `1A/FU1` remain side-effect-free; `1B-A1` owns the event revision/barriers/fingerprint-v3 foundation; `1B-B` adds POST-only signed confirmation and shared audit; no rule engine, roster mutation, notification, or BatchRun schema | expected-revision CAS first, full recomputation, stale/all-or-nothing rollback, all-selected revision advance, changed-only shared-operation LogEntry audit, replay/tail/privacy/zero-cross-domain-write coverage, and target-like file-backed SQLite proof | Rendered English desktop and Chinese mobile confirmable/blocked/success/replay/narrow-authority QA completed; deployment QA remains separate |
 | 7 | **Direct Worship Team change notification producer — IMPLEMENTED (`NOTIFY.1G`)** | Ministry-owned post-commit producer through Core port; no notification permission/schema inference; recipient-specific summarized batch delivery | exact role/date recipients, current-operational required/additional downstream bounds, Worship exclusion, dedupe, subset privacy, language/snapshot safety, disabled-module no-op, rollback/no-emission | Focused source/persistence tests complete; deployment QA remains separate |
+| 7A | **Stable ServiceEvent profile identity — IMPLEMENTED (`MO-S.6D-PROFILE.1A`)** | One optional, non-unique, validated `service_profile_key`; Admin-only technical setup; existing rows default empty; grants no audience/permission/serving/recurrence meaning | lexical validation, duplicate profile reuse, ordinary-form exclusion, scheduling-revision advance/rollback, zero cross-domain side effects | No browser QA; no non-Admin surface changed |
 | 8 | **Excel dependency/parser + preview** | Reviewed `.xlsx` dependency and read-only upload/preview; staff/superuser only; no data write or migration expected | contract/header/date/cache/token/profile/identity classification, roster/downstream impact, size/privacy/tamper/expiry tests | Required for upload and preview |
 | 9 | **Excel exact match/update confirmation** | Atomic existing-event selected-team writes only; no new event/required team/assignment; no schema if signed proposal remains sufficient | reauthorization, target locking/fingerprint, roster conflict, stale rollback, idempotency, eligible mapping, unsupported rows, audit attribution | Required for confirmation/result UX |
 | 10 | **Later assignment import** | Deferred; would write TeamAssignment/member data and needs exact-team plus bulk authority and identity proof | unresolved/ambiguous people, explicit aliases, team ownership, no user creation, rollback/idempotency | Required; only after operational evidence |
@@ -945,7 +947,9 @@ read-only ownership facts; 4B enforces them for supported writes. Implemented
 slice 5 now ensures an imported Worship Team can be operationally reachable
 without false required coverage before slice 9. Implemented slice 6 precedes
 using annual import as a batch rotation tool. Slice 7 follows a proven change
-path. Slice 8 precedes 9. Slice 10 remains later.
+path. PROFILE.1A supplies Slice 8's stable field but must be committed and
+accompanied by explicit target-event setup evidence before Slice 8 resumes.
+Slice 8 precedes 9. Slice 10 remains later.
 
 ## 18. Permission, privacy, and data invariants
 
@@ -971,7 +975,9 @@ path. Slice 8 precedes 9. Slice 10 remains later.
 Architecture is closed enough for the proposed slices. The following details
 remain for their owning implementation approval:
 
-1. the exact Bethany 9:30 persisted location/Host profile mapping;
+1. commit `MO-S.6D-PROFILE.1A` and explicitly assign the approved
+   `bethany_0930_cm` key to the intended target ServiceEvents; the field does
+   not infer or backfill setup data;
 2. whether signed request-scoped import proposals are sufficient or durable
    `ImportRun` retention is required; and
 3. the reviewed `.xlsx` library/version compatible with local and deployment

@@ -14,6 +14,15 @@ overlays through `CHURCH-CALENDAR.2B`. Calendar remains read-only and does not
 change Today, My Serving, serving authority, notification, attendance/check-in,
 authoring/management, or external-sync behavior.
 
+`MO-S.6D-PROFILE.1A` implements one optional validated
+`ServiceEvent.service_profile_key` as stable technical service-profile identity.
+It grants no audience, permission, serving, recurrence, location, Host /
+Language, or scheduling-source semantics. Existing rows default empty; the
+first approved workbook setup value is `bethany_0930_cm`, and no event is
+automatically tagged. Excel dependency/parser/read-only preview remains
+unimplemented and blocked on committing this foundation plus explicit target-
+event setup evidence.
+
 ## 1. Project Identity
 
 This project is a lightweight church spiritual life and ministry workflow system.
@@ -628,9 +637,12 @@ Future pieces include:
   docs-only `MO-S.6D-1D-D-1B-A0` closes the target SQLite optimistic
   scheduling-concurrency decision. Runtime scheduling-revision foundation
   `1B-A1`, optimistic confirmation/shared audit `1B-B`, and bounded direct-
-  notification runtime `NOTIFY.1G` are implemented; importer runtime and bulk
-  upload remain later slices, and the `NOTIFY.1G-0A` architecture gate is docs
-  complete.
+  notification runtime `NOTIFY.1G` are implemented. The separate
+  `MO-S.6D-PROFILE.1A` stable ServiceEvent profile-key foundation is also
+  implemented, without tagging existing events; importer runtime and bulk
+  upload remain later slices blocked on the profile-foundation commit and
+  explicit target-event setup evidence, and the `NOTIFY.1G-0A` architecture
+  gate is docs complete.
   The bounded
   cross-team
   coordination projection replaces the older generic “multi-team dashboard”
@@ -1326,8 +1338,11 @@ docs-only `1B-A0` now closes the one-event scheduling-revision, SQLite writer-
 barrier, supported-write, CAS, and A1/B split decisions. Runtime `1B-A1` is
 implemented with target-like file-backed SQLite concurrency coverage;
 separately approved `1B-B` confirmation/shared audit is implemented.
-`NOTIFY.1G` notification runtime is implemented; importer runtime and bulk
-upload remain unimplemented.
+`NOTIFY.1G` notification runtime and the separate
+`MO-S.6D-PROFILE.1A` stable ServiceEvent profile-key foundation are
+implemented. Existing events remain untagged; importer runtime and bulk upload
+remain unimplemented and blocked on committing the foundation plus explicit
+target-event setup evidence.
 Remaining MO-S.6D and later slices are not
 authorized by the governance closure or these foundations. Availability,
 swaps, reminders, automatic
@@ -1382,11 +1397,10 @@ MO-S.6E remain separately deferred.
 
 Short next-candidate list:
 
-- after separate product review and explicit task approval, implement the
-  remaining ordered prerequisites in
-  `docs/WORSHIP_ROTATION_GOVERNANCE_PLAN.md` before
-  considering MO-S.6D Excel Event + Worship Team Import; documentation closure
-  does not authorize any prerequisite or importer runtime;
+- after product-owner review/commit of `MO-S.6D-PROFILE.1A` and explicit
+  `bethany_0930_cm` target-event setup evidence, separately approve any resumed
+  MO-S.6D Excel dependency/parser/read-only-preview runtime; this profile slice
+  does not authorize it;
 - review Church Calendar limited-trial feedback before separately approving any
   broader calendar behavior such as notifications, external sync, attendance,
   authoring/management, staff dashboards, or CommunityActivity-to-ServiceEvent

@@ -22,6 +22,11 @@ confirmation/shared audit `1B-B`. The docs-only `NOTIFY.1G-0A` Direct Worship
 Team Change Notification Contract and bounded `NOTIFY.1G` runtime are
 implemented; remaining MO-S.6D runtime slices remain
 separately scoped and require explicit approval.
+`MO-S.6D-PROFILE.1A` now implements the optional stable
+`ServiceEvent.service_profile_key` identity foundation. It does not resume the
+Excel dependency/parser/read-only-preview slice, which remains unimplemented
+and blocked on this foundation being committed plus explicit target-event setup
+evidence.
 
 ## 1. Purpose
 
@@ -777,9 +782,10 @@ tests and limited-trial review pass.
   governance, governed single-event mutation, operational reachability,
   read-only planner preview, docs-only SQLite optimistic contract, `1B-A1`
   scheduling revision foundation, and `1B-B` optimistic batch confirmation/
-  shared audit are implemented. The direct notification architecture gate is
-  docs complete, but notification runtime and import slices remain
-  separately scoped and require separate task approval and focused verification.
+  shared audit are implemented. The direct notification architecture gate and
+  bounded `NOTIFY.1G` runtime are implemented. Import and other genuinely future
+  runtime slices remain separately scoped and require separate task approval
+  and focused verification.
 
 ### MO-S.6D-1D-D-0A — Worship Rotation Planner contract and audit decision
 
@@ -949,6 +955,35 @@ tests and limited-trial review pass.
 - Scope: no schema, permission, new route/UI, background job, external delivery,
   or relationship to later roster-context staleness in `MO-S.6E`.
 
+### MO-S.6D-PROFILE.1A — Stable Service Profile Identity Foundation
+
+- Status: **IMPLEMENTED** as one additive, optional ServiceEvent field and
+  migration; product-owner review/commit remains pending for this working-tree
+  slice.
+- `ServiceEvent.service_profile_key` is a non-unique, machine-oriented stable
+  integration/profile identity for the recurring service profile represented
+  by one exact event. Existing rows safely default to an empty key.
+- Non-empty keys accept only lowercase ASCII letters, digits, underscore,
+  hyphen, and period. The field is deliberately absent from ordinary
+  ServiceEvent and recurring-event forms; Django Admin is the narrow technical
+  setup surface.
+- The key grants no audience, visibility, permission, Campus, Host / Language,
+  location, recurrence, serving, RequiredTeam, assignment, Calendar,
+  notification, or future-event-creation meaning. It is not a scheduling source
+  of truth.
+- The first approved SVCA workbook setup value is `bethany_0930_cm`. This value
+  is deployment/setup data, not a global CMS semantic. No existing event is
+  inferred or tagged from title, location, Host / Language, time, audience, or
+  selected Worship Team.
+- Existing-event key changes use the existing ServiceEvent save barrier and
+  advance `scheduling_revision`; validation failure rolls back that advance.
+  This makes later profile-aware proposals stale when identity changes without
+  introducing a second counter.
+- Excel dependency/parser/read-only preview remains **UNIMPLEMENTED / BLOCKED
+  ON PROFILE FOUNDATION COMMIT + SETUP EVIDENCE**. After commit, the product
+  owner may separately approve resuming Slice 8; real matching still requires
+  explicitly tagging the intended target ServiceEvents during deployment/setup.
+
 ### MO-S.6D-0A — Workbook Contract & Imported-Sunday Readiness
 
 - Status: docs-only investigation complete. MO-S.6D implementation remains
@@ -1051,14 +1086,13 @@ parallel same-day services. The candidate identity is:
 `contract/service profile + local service date + exact local 09:30 start +`
 `sunday_service event type + configured persisted profile discriminator`.
 
-The profile discriminator must be an explicitly selected canonical location
-and/or `host_language_unit` resolved by a stable structure code, never a
-database primary key. The workbook does not supply the exact CMS location or
-host/language value, so product must approve the Bethany 9:30 profile-to-CMS
-mapping before creation is safe. Title is validation/mutable display metadata,
-not identity. End time and annotations are also not identity. Location or
-host/language may be identity evidence only after that explicit mapping;
-`host_language_unit` remains display-only and never supplies audience.
+`MO-S.6D-PROFILE.1A` supersedes the earlier location/Host candidate with the
+explicit optional `ServiceEvent.service_profile_key`. The supported workbook
+contract expects `bethany_0930_cm`; this church-specific expectation is not a
+global CMS semantic. Title, location, `host_language_unit`, end time, audience,
+annotations, and selected Worship Team are not profile identity and must not
+infer or auto-tag the key. `host_language_unit` remains display-only and never
+supplies audience.
 
 Matching must use the configured local timezone and require exactly one
 non-cancelled candidate with the exact minute, event type, and profile
@@ -1214,11 +1248,13 @@ bulk authority, but assignments are outside MO-S.6D.
 
 No xlsx reader is declared in `requirements.txt` or installed in the repository
 virtual environment. The current local environment is Python 3.14/Django 5.2,
-while the deployment tooling targets Python 3.11. A future 6D slice therefore
-requires a separately reviewed xlsx dependency and verification against both
-supported environments and cPanel deployment. A suitable parser can read xlsx
-server-side without Excel/LibreOffice, but no package/version was selected or
-verified in this investigation.
+and the product owner reports that the deployed Python runtime is now 3.14.
+Repository `deploy_godaddy.sh` still names the former Python 3.11 virtualenv;
+that deployment-script mismatch is separate from this profile-field slice and
+must be reconciled before relying on the script. A future 6D slice still
+requires a separately reviewed xlsx dependency and target-environment
+verification. A suitable parser can read xlsx server-side without
+Excel/LibreOffice, but no package/version is added by PROFILE.1A.
 
 #### Decisions and prerequisites before MO-S.6D authorization
 
@@ -1234,10 +1270,13 @@ applicability/candidate/consistency foundation, governed `1D-B`
 authorization/mutation enforcement, and `1D-C` operational reachability are now
 implemented; all other prerequisites remain documentation decisions only.
 
-MO-S.6D import runtime remains unapproved until its owning slices:
+`MO-S.6D-PROFILE.1A` now supplies the stable field and approves
+`bethany_0930_cm` as the first setup value, but it remains uncommitted in this
+working tree and no target ServiceEvent has been tagged. MO-S.6D import runtime
+therefore remains unapproved until its owning slices and setup evidence:
 
-1. define the Bethany 9:30 profile's exact local time and persisted CMS
-   discriminator, including its stable structure/location mapping;
+1. commit the profile foundation and explicitly tag the intended Bethany 09:30
+   target events with `bethany_0930_cm` through deployment/setup;
 2. choose timestamped signed proposal retention, or state a durable audit need
    that justifies an `ImportRun` design;
 3. decide whether `LogEntry` plus request/result logging is enough or durable
@@ -1253,8 +1292,9 @@ published zero-audience creation.
 
 ### MO-S.6D — Excel Event + Worship Team Import
 
-- Status: not implemented or authorized; blocked on the prerequisite slices and
-  remaining importer-owned decisions above.
+- Status: not implemented or authorized; blocked on the PROFILE.1A commit,
+  explicit target-event setup evidence, and remaining importer-owned decisions
+  above.
 - Goal: controlled annual Bethany 9:30 workbook input under the approved
   contract and lifecycle, not date-and-anchor import in isolation.
 - Candidate scope after approval: code-versioned template contract,

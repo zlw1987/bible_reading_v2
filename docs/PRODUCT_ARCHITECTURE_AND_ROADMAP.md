@@ -20,17 +20,30 @@ It grants no audience, permission, serving, recurrence, location, Host /
 Language, or scheduling-source semantics. Existing rows default empty; the
 first approved workbook setup value is `bethany_0930_cm`, and no event is
 automatically tagged. Excel dependency/parser/read-only preview remains
-unimplemented and blocked on production schema readiness plus explicit reviewed
-target-event setup evidence. `MO-S.6D-PROFILE.1A` is committed in current HEAD.
-`MO-S.6D-PROFILE-SETUP.0A` now provides a separate
+unimplemented and blocked on explicit reviewed canonical setup evidence plus
+its importer-owned dependency/contract decisions. `MO-S.6D-PROFILE.1A` is
+committed in current HEAD.
+`MO-S.6D-PROFILE-SETUP.0A` provides a separate committed
 read-only deterministic audit for that evidence, including migrations
 `events/0009`-`0011`, the 52 expected 2026 local Sundays, canonical tagged rows,
 untagged human-review candidates, exact-time events owned by other profiles,
 different-time parallel services, requested-event-type consistency, and
-audience readiness. The audit slice remains uncommitted in the current working
-tree pending product-owner review.
-Its normal local DB run stopped schema-not-ready because those migrations are
-unapplied; no production profile-setup readiness has been established.
+audience readiness. `MO-S.6D-PROFILE-SETUP.1A` now implements a separately
+gated, dry-run-by-default command that resets only the explicitly disposable
+ServiceEvent scheduling TEST dataset and atomically creates the 52 canonical
+2026 Bethany 09:30 `bethany_0930_cm` events with explicit CM audience and no
+Worship Team. APPLY remains pending product-owner review and authorization.
+The normal local DB remains schema-not-ready, but production migrations/schema
+through `events/0011` are ready and the product owner has reviewed the production
+audit: zero canonical rows, seven single candidates, 45 missing 09:30 candidates,
+52 missing canonical-profile Sundays, no multiple/other-profile ambiguity, and
+recommendation
+`NOT READY FOR SLICE 8 REAL-DATA MATCHING`. The seven candidates were IDs 38-44
+from `2026-08-16` through `2026-09-27` and were confirmed as Bethany 09:30
+Chinese Worship events. The entire current ServiceEvent/scheduling dataset was
+explicitly declared disposable TEST DATA. Reset APPLY remains pending
+review/commit, deploy, backup, target dry-run/token review, and separate
+authorization.
 
 ## 1. Project Identity
 
@@ -649,8 +662,8 @@ Future pieces include:
   notification runtime `NOTIFY.1G` are implemented. The separate
   `MO-S.6D-PROFILE.1A` stable ServiceEvent profile-key foundation is also
   implemented, without tagging existing events; importer runtime and bulk
-  upload remain later slices blocked on production schema readiness and
-  explicit reviewed target-event setup evidence, and the `NOTIFY.1G-0A`
+  upload remain later slices blocked on reviewed post-reset canonical setup
+  evidence and importer-owned decisions, and the `NOTIFY.1G-0A`
   architecture gate is docs complete.
   The bounded
   cross-team
@@ -1349,14 +1362,17 @@ implemented with target-like file-backed SQLite concurrency coverage;
 separately approved `1B-B` confirmation/shared audit is implemented.
 `NOTIFY.1G` notification runtime and the separate
 `MO-S.6D-PROFILE.1A` stable ServiceEvent profile-key foundation are
-implemented. The separate `MO-S.6D-PROFILE-SETUP.0A` zero-write target-event
-audit is implemented too; the normal local DB is schema-not-ready through
-`events/0011`, and no production audit or tagging evidence exists yet. Existing
-events remain untagged; importer runtime and bulk upload remain unimplemented
-and blocked on product-owner review/commit of the audit tool, deployment of the
-current foundation and tool as needed, production schema readiness, explicit
-reviewed and separately authorized target-event tagging evidence, and the
-reviewed `.xlsx` dependency.
+implemented. The committed `MO-S.6D-PROFILE-SETUP.0A` zero-write target-event
+audit and current-working-tree `MO-S.6D-PROFILE-SETUP.1A` bounded TEST-data
+rebuild command are implemented too; the normal local DB is schema-not-ready
+through `events/0011`. Production is schema-ready and its reviewed pre-reset
+audit found 0 canonical rows, 7 single candidates, 45 missing candidates, and
+no multiple/other-profile ambiguity; the result was not setup-ready. The rows
+are product-owner-declared disposable TEST DATA, but no production setup APPLY
+has occurred. Importer runtime and bulk upload remain unimplemented and blocked
+on review/deployment of the setup command, backup, reviewed target dry-run and
+token, separately authorized maintenance-window APPLY, reviewed post-apply
+audit evidence, and the reviewed `.xlsx` dependency.
 Remaining MO-S.6D and later slices are not
 authorized by the governance closure or these foundations. Availability,
 swaps, reminders, automatic
@@ -1411,13 +1427,14 @@ MO-S.6E remain separately deferred.
 
 Short next-candidate list:
 
-- after product-owner review/commit of the read-only
-  `MO-S.6D-PROFILE-SETUP.0A` tool, deploy the current profile foundation and
-  audit tool as needed, apply migrations through `events/0011`, run/review
-  `audit_service_profile_readiness` on production, and obtain separately
-  authorized explicit `bethany_0930_cm` target-event tagging evidence before
-  approving any resumed MO-S.6D Excel dependency/parser/read-only-preview
-  runtime; neither profile slice authorizes tagging or importer work;
+- for `MO-S.6D-PROFILE-SETUP.1A`: product-owner review/commit; deploy the setup
+  command to GoDaddy; back up production SQLite; run the target dry-run on the
+  already-schema-ready DB; review deletion counts, audience, lifecycle, and
+  reset token; separately authorize maintenance-window APPLY; run with the exact
+  reviewed token; rerun `audit_service_profile_readiness`; and require
+  `PROFILE SETUP READY` before any resumed MO-S.6D Excel dependency/parser/
+  read-only-preview approval. The setup remains separate from importer work and
+  leaves every Worship Team unset;
 - review Church Calendar limited-trial feedback before separately approving any
   broader calendar behavior such as notifications, external sync, attendance,
   authoring/management, staff dashboards, or CommunityActivity-to-ServiceEvent

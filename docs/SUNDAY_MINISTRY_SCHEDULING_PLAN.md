@@ -25,13 +25,17 @@ separately scoped and require explicit approval.
 `MO-S.6D-PROFILE.1A` now implements the optional stable
 `ServiceEvent.service_profile_key` identity foundation and is committed in the
 current HEAD. It does not resume the Excel dependency/parser/read-only-preview
-slice, which remains unimplemented and blocked on production schema readiness
-plus explicit reviewed target-event setup evidence.
-`MO-S.6D-PROFILE-SETUP.0A` now implements the separate read-only target-event
-readiness audit in the current working tree and remains uncommitted pending
-product-owner review. Its local run found migrations `events/0009`, `0010`,
-and `0011` unapplied, so local ServiceEvent data was deliberately not evaluated
-and no production setup-readiness claim exists.
+slice, which remains unimplemented and blocked on reviewed canonical setup
+evidence plus its importer-owned dependency and contract decisions.
+`MO-S.6D-PROFILE-SETUP.0A` is committed in current HEAD as the separate read-
+only target-event readiness audit. Its production run was reviewed: migrations
+and schema through `events/0011` were ready, but zero canonical rows meant the
+result was `NOT READY FOR SLICE 8 REAL-DATA MATCHING`; it found seven single
+untagged candidates and 45 Sundays with no 09:30 candidate.
+`MO-S.6D-PROFILE-SETUP.1A` now implements the bounded, dry-run-by-default TEST
+ServiceEvent reset and canonical 2026 Bethany 09:30 setup command in the current
+working tree; review/commit, deployment, target dry-run, and separately
+authorized APPLY remain pending.
 
 ## 1. Purpose
 
@@ -984,16 +988,15 @@ tests and limited-trial review pass.
   This makes later profile-aware proposals stale when identity changes without
   introducing a second counter.
 - Excel dependency/parser/read-only preview remains **UNIMPLEMENTED / BLOCKED
-  ON PRODUCTION SCHEMA + REVIEWED SETUP EVIDENCE**. The separate read-only
-  PROFILE-SETUP.0A audit must first be reviewed/committed, deployed with the
-  current profile foundation as needed, and run against production after
-  migrations through `events/0011` are applied. Real matching still requires
-  separately authorized explicit tagging of the reviewed target ServiceEvents.
+  ON REVIEWED SETUP EVIDENCE**. Production migrations/schema through
+  `events/0011` are already ready. The committed PROFILE-SETUP.0A audit found
+  no canonical target dataset; the separately reviewed/applied PROFILE-SETUP.1A
+  command must establish it. The setup command is not importer runtime.
 
 ### MO-S.6D-PROFILE-SETUP.0A — Bethany 09:30 Target Event Readiness Audit
 
-- Status: **READ-ONLY AUDIT TOOL IMPLEMENTED IN THE CURRENT WORKING TREE;
-  PENDING PRODUCT-OWNER REVIEW/COMMIT**. The command is
+- Status: **READ-ONLY AUDIT TOOL IMPLEMENTED AND COMMITTED IN CURRENT HEAD**.
+  The command is
   `audit_service_profile_readiness`; it has no `--apply`, no backfill, no
   automatic tagging, no Excel/parser dependency, and no mutation mode.
 - The default, documented SVCA contract is profile key `bethany_0930_cm`, local
@@ -1034,21 +1037,82 @@ tests and limited-trial review pass.
   ServiceEvent data `NOT EVALUATED`, recommendation
   `NOT READY FOR SLICE 8 REAL-DATA MATCHING`. No migration was applied and no
   data was changed.
-- After product-owner review/commit of PROFILE-SETUP.0A, deploy the current
-  profile foundation and audit tool as needed, apply production migrations
-  through `events/0011`, and run this read-only command from the GoDaddy
-  application directory:
+- The product owner subsequently ran and reviewed this audit on GoDaddy.
+  Production reported migrations `events/0009`, `0010`, and `0011` applied and
+  physically present (`Schema: READY`), 52 expected Sundays, zero canonical
+  tagged rows/ready exact matches, 52 missing canonical-profile Sundays, seven
+  single untagged exact-09:30 candidate Sundays, 45 Sundays with no 09:30
+  candidate, zero multiple-candidate Sundays, and zero other-profile exact-time
+  events. The recommendation was
+  `NOT READY FOR SLICE 8 REAL-DATA MATCHING`.
+- The seven candidates were event IDs 38-44, covering `2026-08-16` through
+  `2026-09-27`. Product-owner review confirmed they were Bethany 09:30 Chinese
+  Sunday Worship events, then explicitly declared the current ServiceEvent/
+  scheduling dataset disposable TEST DATA and approved reset/rebuild rather
+  than in-place tagging.
+- The reviewed production command was run from the GoDaddy application
+  directory:
 
   ```bash
   /home/rsnwvvl103hc/virtualenv/app_read/3.11/bin/python manage.py audit_service_profile_readiness
   ```
 
-  Production output still requires product-owner review. This audit neither
-  authorizes nor performs profile assignment, and a local/test result cannot
-  establish production readiness.
+  This completed production audit still did not authorize profile assignment
+  or reset APPLY; it established the reviewed pre-reset production truth only.
 - Excel Slice 8 remains **UNIMPLEMENTED**. Its real-data readiness remains
-  blocked on production migration/schema readiness, explicit reviewed target-
-  event tagging evidence, and a reviewed `.xlsx` dependency.
+  blocked on reviewed post-reset canonical setup evidence and a reviewed
+  `.xlsx` dependency.
+
+### MO-S.6D-PROFILE-SETUP.1A — Canonical Bethany 09:30 Test-Data Rebuild
+
+- Status: **SETUP COMMAND IMPLEMENTED; APPLY PENDING PRODUCT-OWNER REVIEW**.
+  `rebuild_bethany_0930_service_events` is read-only by default; mutation
+  requires `--apply`, `--confirm-test-data-reset`, and
+  `--expected-reset-token <token>` and must run in a maintenance window. No
+  APPLY was run during implementation.
+- The product owner explicitly declared the current ServiceEvent/scheduling
+  rows disposable TEST DATA. The reset deletes all `ServiceEvent` rows and the
+  event-owned audience, required-team, planner, TeamAssignment, and assignment-
+  member rows reached by their existing cascade semantics. A linked
+  `BibleStudyMeeting` survives with its nullable `service_event` link cleared.
+  Generic Notification and `LogEntry` history is retained.
+- The reset does not delete the database or unrelated users/admin accounts,
+  Church Structure or belonging, Ministry Teams/memberships/hierarchy/roles,
+  Worship pools, permissions, Bible Study rows, Reading, Prayer, Community
+  Activities, Announcements, or unrelated notifications.
+- The intended audience is resolved without PK/name guessing as exactly one
+  active persisted `CHURCH -> campus -> CM` path. Missing, inactive, wrong-
+  shape, or ambiguous structure blocks before deletion; no structure row is
+  created.
+- One atomic transaction rechecks schema/structure/current reset scope, deletes
+  the approved test dataset, creates exactly the 52 Sundays from `2026-01-04`
+  through `2026-12-27` at configured-local `09:30`, creates exactly one CM
+  audience row per event, and verifies all postconditions through
+  `audit_service_profile_readiness` before commit. Any failure rolls back the
+  deletion and partial rebuild.
+- Every new event is `sunday_service`, titled `主日崇拜` / `Sunday Service`, and
+  has profile `bethany_0930_cm`, blank location/link/descriptions, CM Host /
+  Language display, `rotation_anchor_team = NULL`, and creation-time
+  `scheduling_revision = 0`. Sundays strictly before APPLY's local date are
+  completed; all others are published. No assignment, roster, planner,
+  required-team, notification, or synthetic audit history is created.
+- An already exact dataset is a no-op for the same local-date lifecycle truth;
+  it never appends a second 52-event series. The command emits a preflight
+  fingerprint, exact deletion/dependent counts, all existing event rows, all 52
+  proposed replacements, retained-history counts, and explicit preserved-
+  domain boundaries.
+- The dry-run emits a 16-character lowercase hexadecimal reset approval token,
+  derived from a full canonical SHA-256 payload binding the reset-surface
+  fingerprint, resolved persisted audience path (unit/ancestor PK, parent,
+  code, and type), local `today`, timezone, profile key, year, local time, and
+  event type. The token is stale-state/reviewed-state binding, not an
+  authentication credential. APPLY recomputes it inside the transaction before
+  deletion; any mismatch stops zero-write and requires a new reviewed dry-run.
+- This is explicit setup data only. The importer still does not create
+  ServiceEvents or assign Worship Teams. Excel Slice 8 remains
+  **UNIMPLEMENTED** until this setup is reviewed/applied and its result is
+  reviewed with the readiness audit and the importer-owned dependency/contract
+  decisions.
 
 ### MO-S.6D-0A — Workbook Contract & Imported-Sunday Readiness
 
@@ -1338,18 +1402,23 @@ applicability/candidate/consistency foundation, governed `1D-B`
 authorization/mutation enforcement, and `1D-C` operational reachability are now
 implemented; all other prerequisites remain documentation decisions only.
 
-`MO-S.6D-PROFILE.1A` now supplies the stable field and approves
-`bethany_0930_cm` as the first setup value and is committed in the current
-HEAD. No target ServiceEvent has been tagged. MO-S.6D import runtime therefore
-remains unapproved until this sequence is completed:
+`MO-S.6D-PROFILE.1A` supplies the stable field and approves
+`bethany_0930_cm` as the first setup value. `PROFILE-SETUP.0A` is committed,
+and `PROFILE-SETUP.1A` implements the bounded TEST-data rebuild in the current
+working tree with APPLY still pending. MO-S.6D import runtime remains
+unapproved until this sequence is completed:
 
-1. product-owner review/commit of the read-only PROFILE-SETUP.0A audit;
-2. deploy the current profile foundation and audit tool as needed;
-3. apply production migrations through `events/0011`;
-4. run the read-only production audit;
-5. product-owner review of the exact target-event evidence;
-6. separately authorize and perform explicit `bethany_0930_cm` profile tagging;
-7. only after reviewed setup evidence, separately approve any Slice 8 real-data
+1. product-owner review/commit of PROFILE-SETUP.1A;
+2. deploy the setup command to GoDaddy;
+3. back up the production SQLite database;
+4. run the target dry-run on the already-schema-ready production DB;
+5. product-owner review of deletion counts, resolved audience, replacement
+   lifecycle, and reset approval token;
+6. separately authorize maintenance-window APPLY;
+7. run APPLY with the exact reviewed token;
+8. rerun `audit_service_profile_readiness` and require
+   `PROFILE SETUP READY`;
+9. only after reviewed setup evidence, separately approve any Slice 8 real-data
    work together with its signed-proposal/audit decisions and a reviewed
    `.xlsx` dependency supporting both local Python 3.14.x and deployment Python
    3.11.15.
@@ -1362,10 +1431,10 @@ published zero-audience creation.
 
 ### MO-S.6D — Excel Event + Worship Team Import
 
-- Status: not implemented or authorized; blocked on PROFILE-SETUP.0A
-  review/commit, production migrations and read-only audit, separately
-  authorized explicit target-event tagging evidence, and remaining importer-
-  owned decisions above.
+- Status: not implemented or authorized; blocked on PROFILE-SETUP.1A review and
+  reviewed-token APPLY, a post-reset `PROFILE SETUP READY` audit, and remaining
+  importer-owned decisions above. Production migrations/schema through
+  `events/0011` are already ready.
 - Goal: controlled annual Bethany 9:30 workbook input under the approved
   contract and lifecycle, not date-and-anchor import in isolation.
 - Candidate scope after approval: code-versioned template contract,

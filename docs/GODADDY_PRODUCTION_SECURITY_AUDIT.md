@@ -1,7 +1,19 @@
 # GoDaddy Production Security Safe Audit
 
 Status: local static repository audit for `GODADDY-PRODUCTION-SECURITY.0A-SAFE-AUDIT`
-(August 2026). Live hosting state remains unverified.
+(August 2026). Live hosting state remains unverified except for the later
+product-owner Python App verification recorded below.
+
+> **Current-state supersession — `DEPLOY-PYTHON.1A`:** after this static audit,
+> the product owner directly verified that the GoDaddy/cPanel Python App
+> `AMAXTW.COM/APP_READ` runs Python 3.11.15, that
+> `/home/rsnwvvl103hc/virtualenv/app_read/` contains the existing `3.11`
+> virtualenv directory, and that the available cPanel selector does not offer
+> Python 3.14. The existing `deploy_godaddy.sh` Python path is aligned with that
+> production configuration, so no script change was required. Local development
+> uses Python 3.14.7. This supersedes only the earlier unverified Python
+> version/path question; the audit chronology and all other live-hosting
+> limitations remain unchanged.
 
 ## 1. Executive summary
 
@@ -71,7 +83,7 @@ Any conclusion requiring those facts is classified as
 | Source repo path | `deploy_godaddy.sh` expects `/home/rsnwvvl103hc/repositories/app_read`. | Hosting-specific |
 | Application/deploy path | `deploy_godaddy.sh` syncs into `/home/rsnwvvl103hc/app_read`. | Hosting-specific |
 | Passenger entry point | `deploy_godaddy.sh` verifies `passenger_wsgi.py`; `passenger_wsgi.py` creates the WSGI `application`. | Hosting-specific |
-| Python runtime | `deploy_godaddy.sh` expects `/home/rsnwvvl103hc/virtualenv/app_read/3.11/bin/python`. | Hosting-specific |
+| Python runtime | Product-owner direct cPanel verification confirms Python 3.11.15 and the existing `3.11` virtualenv; `deploy_godaddy.sh` expects the aligned `/home/rsnwvvl103hc/virtualenv/app_read/3.11/bin/python`. | Verified for the current cPanel Python App |
 | App mount path | `settings_godaddy.py` sets `FORCE_SCRIPT_NAME = "/app_read"`, cookie paths under `/app_read/`, and static/media URLs under `/app_read/`. | Hosting-specific |
 | Static files | `settings_godaddy.py` sets `STATIC_URL = "/app_read/static/"` and `STATIC_ROOT` under `BASE_DIR.parent / "public_html" / "app_read" / "static"`. `deploy_godaddy.sh` runs collectstatic. | Hosting-specific |
 | Media files | `settings_godaddy.py` sets `MEDIA_URL = "/app_read/media/"` and `MEDIA_ROOT = BASE_DIR / "media"`. Serving behavior depends on cPanel/web-server configuration. | Manual verification required |
@@ -232,8 +244,11 @@ No repository-proven web stack-trace or debug-toolbar exposure was found.
 - `typing_extensions==4.15.0`;
 - `tzdata==2026.2`.
 
-`deploy_godaddy.sh` expects Python 3.11 at a GoDaddy virtualenv path. No obvious
-development-only runtime package is listed in `requirements.txt`.
+`deploy_godaddy.sh` expects Python 3.11 at the GoDaddy virtualenv path now
+verified for the current Python 3.11.15 cPanel application. Local development
+uses Python 3.14.7, so a future dependency must be reviewed against both runtime
+lines. No obvious development-only runtime package is listed in
+`requirements.txt`.
 
 This phase did not perform internet-based CVE or package research and did not
 upgrade dependencies.
@@ -245,7 +260,7 @@ upgrade dependencies.
 | cPanel runs `.cpanel.yml` | `.cpanel.yml` invokes `deploy_godaddy.sh`. | Whether live cPanel still uses this hook. | Deploy automation may stop. |
 | Repository path is `/home/rsnwvvl103hc/repositories/app_read` | Hard-coded in `deploy_godaddy.sh`. | Whether account path remains current. | Deploy script may fail before copying. |
 | App root is `/home/rsnwvvl103hc/app_read` | Hard-coded as `DEPLOYPATH`. | Whether Passenger app root matches it. | Passenger may load stale or missing code. |
-| Python is `/home/rsnwvvl103hc/virtualenv/app_read/3.11/bin/python` | Hard-coded in deploy script. | Whether cPanel virtualenv still matches. | Management commands may fail. |
+| Python is `/home/rsnwvvl103hc/virtualenv/app_read/3.11/bin/python` | Hard-coded in the deploy script; later product-owner cPanel verification confirms Python 3.11.15 and the existing `3.11` virtualenv. | Verified for the current cPanel Python App; Python 3.14 is not offered by the observed selector. | Changing this path without a separately verified cPanel runtime migration could break management commands. |
 | Passenger entry point is `passenger_wsgi.py` | Deploy script requires it; file sets production settings. | Whether cPanel startup file points there. | App could use wrong settings or fail startup. |
 | Settings module is `config.settings_godaddy` | `passenger_wsgi.py`, helpers, and deploy script select it. | Whether live environment overrides it. | Wrong settings could enable development behavior. |
 | URL mount is `/app_read` | `FORCE_SCRIPT_NAME`, cookie paths, static/media URLs use it. | Whether domain mapping still requires the prefix. | Routing, cookies, CSRF, static files, or links could break. |
@@ -274,7 +289,9 @@ upgrade dependencies.
   variables if still present.
 - Inspect configured cPanel application root.
 - Inspect configured startup file/module.
-- Inspect configured Python version/virtualenv path.
+- Python version/virtualenv-path inspection is complete for
+  `DEPLOY-PYTHON.1A`: Python 3.11.15 and the existing `3.11` virtualenv are
+  verified; the observed selector does not offer Python 3.14.
 - Inspect domain mapping and document root.
 - Visually confirm the production URL uses HTTPS.
 - Inspect whether any live `.htaccess` exists and record its purpose without
@@ -307,8 +324,9 @@ Do not perform in this phase. In a separately approved phase:
 
 ## 17. Risk-ordered future fix slices
 
-1. Manual observation slice: record cPanel app root, startup file, Python
-   version, environment variable names, domain mapping, and HTTPS topology.
+1. Remaining manual observation slice: record cPanel app root, startup file,
+   environment variable names, domain mapping, and HTTPS topology. Python
+   version/path observation is complete under `DEPLOY-PYTHON.1A`.
 2. HTTPS/header decision slice: only after topology evidence, decide whether
    Django or GoDaddy should own HTTPS redirects, proxy headers, HSTS, and related
    headers.
@@ -337,19 +355,23 @@ Do not modify without separate approval and rollback planning:
 
 ## 19. What this audit does not prove
 
-This audit does not prove broad launch readiness, end-to-end hosting safety,
-deployment correctness, or live GoDaddy state.
+This audit and the later narrow Python verification do not prove broad launch
+readiness, end-to-end hosting safety, deployment correctness, or general live
+GoDaddy state.
 
-It proves only that no repository-proven BLOCKER or HIGH finding was found in
-the inspected source-controlled deployment configuration. Live hosting state
-remains unverified.
+The audit proves only that no repository-proven BLOCKER or HIGH finding was
+found in the inspected source-controlled deployment configuration. The later
+product-owner evidence additionally verifies the current Python 3.11.15 cPanel
+application and aligned `3.11` virtualenv path; other live hosting state remains
+unverified.
 
 ## 20. Recommendation for the next step
 
-Proceed with the Tier 1 manual observation checklist only, with no changes to
-runtime, config, deployment, data, credentials, Passenger, `.htaccess`, or
-domain/TLS state. Use the results of that observation to decide whether any
-future HTTPS/header/host/static hardening slice is needed.
+Proceed only with the remaining Tier 1 manual observation checklist, with no
+changes to runtime, config, deployment, data, credentials, Passenger,
+`.htaccess`, or domain/TLS state. The Python version/path item is closed without
+a script change. Use the results of the remaining observation to decide whether
+any future HTTPS/header/host/static hardening slice is needed.
 
 ## Repository state captured for this audit
 

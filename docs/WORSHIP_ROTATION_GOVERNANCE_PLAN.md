@@ -980,8 +980,8 @@ remain for their owning implementation approval:
    not infer or backfill setup data;
 2. whether signed request-scoped import proposals are sufficient or durable
    `ImportRun` retention is required; and
-3. the reviewed `.xlsx` library/version compatible with local and deployment
-   Python runtimes.
+3. the reviewed `.xlsx` library/version compatible with both local Python
+   3.14.x and the verified GoDaddy deployment Python 3.11.15 runtime.
 
 Multi-anchor pool semantics, a dedicated bulk-import capability, dedicated
 anchor version/audit schema, explicit roster-conflict resolution, and assignment

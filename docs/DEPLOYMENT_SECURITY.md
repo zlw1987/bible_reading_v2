@@ -3,6 +3,26 @@
 Status: canonical deployment-security and release-hygiene guidance, current
 through `RELEASE-HYGIENE.1A` (August 2026).
 
+## Current Python runtime boundary
+
+`DEPLOY-PYTHON.1A — CLOSED, NO SCRIPT CHANGE REQUIRED` records the product
+owner's direct cPanel verification of the current split runtime:
+
+- local development uses Python 3.14.7; and
+- the GoDaddy/cPanel Python App `AMAXTW.COM/APP_READ` uses Python 3.11.15.
+
+The cPanel virtualenv root contains the existing `3.11` environment, and the
+available cPanel Python selector does not offer Python 3.14. The repository
+`deploy_godaddy.sh` path
+`/home/rsnwvvl103hc/virtualenv/app_read/3.11/bin/python` therefore remains
+aligned with the verified production application and was not changed.
+
+Any future `.xlsx` dependency for MO-S.6D Slice 8 must be reviewed and verified
+against both local Python 3.14.x and deployment Python 3.11.15. No dependency,
+virtualenv, deployment, Passenger, migration, or data change was made by this
+closeout. This records the Python runtime boundary only; it is not broad hosting
+or deployment QA.
+
 `RELEASE-HYGIENE.0A` secured the administrator bootstrap helper, expanded
 repository ignore coverage for local secrets/databases/backups/logs/audit and
 agent artifacts, and removed previously committed local ServiceEvent audit

@@ -1247,14 +1247,16 @@ that writes assignments would additionally require corresponding exact-team and
 bulk authority, but assignments are outside MO-S.6D.
 
 No xlsx reader is declared in `requirements.txt` or installed in the repository
-virtual environment. The current local environment is Python 3.14/Django 5.2,
-and the product owner reports that the deployed Python runtime is now 3.14.
-Repository `deploy_godaddy.sh` still names the former Python 3.11 virtualenv;
-that deployment-script mismatch is separate from this profile-field slice and
-must be reconciled before relying on the script. A future 6D slice still
-requires a separately reviewed xlsx dependency and target-environment
-verification. A suitable parser can read xlsx server-side without
-Excel/LibreOffice, but no package/version is added by PROFILE.1A.
+virtual environment. Local development uses Python 3.14.7/Django 5.2. Direct
+product-owner cPanel verification confirms that the GoDaddy Python App
+`AMAXTW.COM/APP_READ` uses Python 3.11.15, retains the existing `3.11`
+virtualenv, and has no Python 3.14 option in the observed selector. Therefore
+the Python 3.11 path in `deploy_godaddy.sh` remains aligned with production;
+`DEPLOY-PYTHON.1A` is closed with no script change required. A future MO-S.6D
+Slice 8 must select and target-verify an `.xlsx` dependency that supports both
+local Python 3.14.x and deployment Python 3.11.15. A suitable parser can read
+xlsx server-side without Excel/LibreOffice, but no package/version is added by
+PROFILE.1A or `DEPLOY-PYTHON.1A`.
 
 #### Decisions and prerequisites before MO-S.6D authorization
 

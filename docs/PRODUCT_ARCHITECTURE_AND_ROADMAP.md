@@ -19,9 +19,11 @@ authoring/management, or external-sync behavior.
 It grants no audience, permission, serving, recurrence, location, Host /
 Language, or scheduling-source semantics. Existing rows default empty; the
 first approved workbook setup value is `bethany_0930_cm`, and no event is
-automatically tagged. Excel dependency/parser/read-only preview remains
-unimplemented but is now unblocked for its own dependency, parser, and preview
-implementation work. `MO-S.6D-PROFILE.1A` is
+automatically tagged. `MO-S.6D-SLICE8.1A/FU1` now implements the declared
+strict XLSX dependency/parser, bounded OOXML ZIP resource preflight, and staff/
+superuser-only zero-write preview with exact persisted-profile matching,
+present-token mapping controls, and blocked partial-mapping evidence.
+`MO-S.6D-PROFILE.1A` is
 committed in current HEAD.
 `MO-S.6D-PROFILE-SETUP.0A` provides a separate committed
 read-only deterministic audit for that evidence, including migrations
@@ -38,8 +40,9 @@ reviewed dependent scheduling rows, then created exactly 52 canonical events
 and 52 exact CM audience rows. The final production audit reported schema ready,
 52 expected Sundays, 52 canonical tagged rows, 52 ready exact matches, no
 missing/duplicate/invalid/ambiguous target rows, and recommendation
-`PROFILE SETUP READY`. The Slice 8 target-event setup prerequisite is closed;
-Slice 8 remains unimplemented and Slice 9 confirmation remains separate.
+`PROFILE SETUP READY`. The Slice 8 target-event setup prerequisite is closed
+and Slice 8 is implemented; Slice 9 confirmation remains separate and
+unauthorized.
 
 ## 1. Project Identity
 
@@ -657,10 +660,11 @@ Future pieces include:
   `1B-A1`, optimistic confirmation/shared audit `1B-B`, and bounded direct-
   notification runtime `NOTIFY.1G` are implemented. The separate
   `MO-S.6D-PROFILE.1A` stable ServiceEvent profile-key foundation is also
-  implemented, without automatically tagging existing events; importer runtime
-  and bulk upload remain unimplemented but are unblocked for the separately
-  scoped Slice 8 dependency/parser/read-only-preview work, and the `NOTIFY.1G-0A`
-  architecture gate is docs complete.
+  implemented, without automatically tagging existing events;
+  `MO-S.6D-SLICE8.1A/FU1` implements the separately scoped strict dependency/
+  parser, bounded archive preflight, and staff/superuser-only partial zero-write
+  upload/preview, and the `NOTIFY.1G-0A`
+  architecture gate is docs complete. Slice 9 confirmation remains separate.
   The bounded
   cross-team
   coordination projection replaces the older generic “multi-team dashboard”
@@ -1365,9 +1369,12 @@ Production is schema-ready, and the product-owner-reviewed production reset and
 post-reset audit are complete. Exactly 52 canonical 2026 Bethany 09:30
 `bethany_0930_cm` events have exact CM audience; the audit returned 52/52 ready
 exact matches, zero missing/duplicate/invalid/ambiguous target rows, and
-`PROFILE SETUP READY`. Importer runtime and bulk upload remain unimplemented
-but are now unblocked for their own Slice 8 dependency/parser/read-only-preview
-implementation. Slice 9 confirmation is not authorized by this closeout.
+`PROFILE SETUP READY`. Slice 8/FU1 strict dependency/parser, bounded archive
+preflight, and staff/superuser-only partial bulk upload/read-only preview are
+implemented without schema or data writes. Observed real-workbook token counts
+are acceptance evidence, not a runtime invariant; unresolved or ineligible
+mapping choices remain visible as blocked rows.
+Slice 9 confirmation is not authorized by this implementation.
 Remaining MO-S.6D and later slices are not
 authorized by the governance closure or these foundations. Availability,
 swaps, reminders, automatic
@@ -1422,13 +1429,11 @@ MO-S.6E remain separately deferred.
 
 Short next-candidate list:
 
-- for MO-S.6D Slice 8: select and verify an `.xlsx` dependency/version for local
-  Python 3.14.x and GoDaddy Python 3.11.15; implement the strict known-workbook
-  parser and staff/superuser-only read-only upload/preview; match only exact
-  persisted-profile ServiceEvents; resolve A/C1/C2/C3 through explicit reviewed
-  mapping to current eligible canonical Worship teams; preserve zero event/
-  audience/RequiredTeam/TeamAssignment/serving/assignment-member mutation
-  during preview; and defer confirmation to separately authorized Slice 9;
+- for MO-S.6D after implemented Slice 8: run the exact GoDaddy Python 3.11
+  virtualenv dependency import smoke during deployment verification, then scope
+  Slice 9 confirmation separately if the product owner authorizes it; preserve
+  current-truth reauthorization, stale rollback, selected-team-only mutation,
+  and audit boundaries without expanding into assignment/member import;
 - review Church Calendar limited-trial feedback before separately approving any
   broader calendar behavior such as notifications, external sync, attendance,
   authoring/management, staff dashboards, or CommunityActivity-to-ServiceEvent

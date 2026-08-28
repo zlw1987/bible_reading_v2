@@ -32,6 +32,20 @@
 </section>
 {% endif %}
 
+{% if worship_workbook_preview_available %}
+<section class="card">
+    <h2 class="card-title">{% if language == "zh" %}年度工作簿预览{% else %}Annual Workbook Preview{% endif %}</h2>
+    <p class="muted">
+        {% if language == "zh" %}上传受支持的 2026 XLSX 总表，明确映射 A/C1/C2/C3，并在不写入排班资料的情况下检查结果。{% else %}Upload the supported 2026 XLSX master, explicitly map A/C1/C2/C3, and review the result without writing scheduling data.{% endif %}
+    </p>
+    <div class="actions">
+        <a class="button" href="{% url 'worship_workbook_preview' %}">
+            {% if language == "zh" %}打开工作簿预览{% else %}Open Workbook Preview{% endif %}
+        </a>
+    </div>
+</section>
+{% endif %}
+
 {% if planning_rows %}
 <div class="stack">
     {% for row in planning_rows %}

@@ -1,0 +1,155 @@
+{% extends "base.html" %}
+{% load event_extras %}
+{% load datetime_extras %}
+
+{% block title %}{% if language == "zh" %}敬拜工作簿预览{% else %}Worship Workbook Preview{% endif %} | {{ ui.site_title }}{% endblock %}
+
+{% block content %}
+<p>
+    <a href="{% url 'worship_planning' %}">← {% if language == "zh" %}返回敬拜安排{% else %}Back to Worship Planning{% endif %}</a>
+</p>
+
+<div class="page-header">
+    <h1 class="page-title">{% if language == "zh" %}敬拜工作簿预览{% else %}Worship Workbook Preview{% endif %}</h1>
+    <p class="page-subtitle">{% if language == "zh" %}严格检查受支持的 2026 Bethany 09:30 总表。{% else %}Strict review of the supported 2026 Bethany 09:30 master workbook.{% endif %}</p>
+</div>
+
+<div class="card workbook-preview-notice" role="note">
+    <strong>{% if language == "zh" %}仅预览——尚未修改任何排班数据。{% else %}Preview only — no scheduling data has been changed.{% endif %}</strong>
+    <p class="muted">{% if language == "zh" %}此页面没有确认或应用操作。{% else %}This page has no confirm or apply action.{% endif %}</p>
+</div>
+
+<form method="post" enctype="multipart/form-data" class="card">
+    {% csrf_token %}
+    {{ upload_form.non_field_errors }}
+    <div class="form-row">
+        {{ upload_form.workbook.label_tag }}
+        {{ upload_form.workbook }}
+        {{ upload_form.workbook.errors }}
+        <p id="xlsx-upload-help" class="helptext">
+            {% if language == "zh" %}只接受 .xlsx；上限 5 MiB。文件不会被永久保存。{% else %}XLSX only; 5 MiB maximum. The source file is not stored permanently.{% endif %}
+        </p>
+    </div>
+    <div class="actions">
+        <button type="submit">{% if language == "zh" %}上传并检查{% else %}Upload and Validate{% endif %}</button>
+    </div>
+</form>
+
+{% if parsed %}
+<section class="card" aria-labelledby="workbook-summary-heading">
+    <h2 id="workbook-summary-heading" class="card-title">{% if language == "zh" %}工作簿摘要{% else %}Workbook Summary{% endif %}</h2>
+    <dl class="workbook-summary-grid">
+        <div><dt>{% if language == "zh" %}解析契约{% else %}Parser contract{% endif %}</dt><dd>{{ parser_contract }}</dd></div>
+        <div><dt>{% if language == "zh" %}文件名{% else %}Filename{% endif %}</dt><dd>{{ parsed.filename }}</dd></div>
+        <div><dt>SHA-256</dt><dd class="workbook-hash">{{ parsed.sha256 }}</dd></div>
+        <div><dt>{% if language == "zh" %}支持的工作表{% else %}Supported sheet{% endif %}</dt><dd>{{ supported_sheet }}</dd></div>
+        <div><dt>{% if language == "zh" %}支持的主日行{% else %}Supported Sunday rows{% endif %}</dt><dd>{{ parsed.rows|length }}</dd></div>
+        <div><dt>{% if language == "zh" %}不导入的信息行{% else %}Unsupported/informational rows{% endif %}</dt><dd>{{ parsed.unsupported_rows|length }}</dd></div>
+        {% if preview %}
+        <div><dt>{% if language == "zh" %}完全匹配的目标{% else %}Exact matched targets{% endif %}</dt><dd>{{ preview.matched_target_count }}</dd></div>
+        <div><dt>{% if language == "zh" %}无需更改{% else %}No-op{% endif %}</dt><dd>{{ preview.no_op_count }}</dd></div>
+        <div><dt>{% if language == "zh" %}建议更改{% else %}Proposed changes{% endif %}</dt><dd>{{ preview.proposed_change_count }}</dd></div>
+        <div><dt>{% if language == "zh" %}已阻止{% else %}Blocked{% endif %}</dt><dd>{{ preview.blocked_count }}</dd></div>
+        <div><dt>{% if language == "zh" %}代码映射状态{% else %}Token mapping status{% endif %}</dt><dd>{% if preview.mapping_complete %}{% if language == "zh" %}已完成{% else %}Complete{% endif %}{% else %}{% if language == "zh" %}未完成 / 已阻止{% else %}Incomplete / blocked{% endif %}{% endif %}</dd></div>
+        {% else %}
+        <div><dt>{% if language == "zh" %}代码映射状态{% else %}Token mapping status{% endif %}</dt><dd>{% if language == "zh" %}等待明确选择{% else %}Awaiting explicit selection{% endif %}</dd></div>
+        {% endif %}
+    </dl>
+</section>
+
+{% if mapping_form %}
+<form method="post" class="card" aria-labelledby="mapping-heading">
+    {% csrf_token %}
+    {{ mapping_form.signed_workbook }}
+    {{ mapping_form.non_field_errors }}
+    <h2 id="mapping-heading" class="card-title">{% if language == "zh" %}工作簿代码映射{% else %}Workbook Token Mapping{% endif %}</h2>
+    <p class="muted">{% if language == "zh" %}代码仅属于此工作簿。必须明确选择团队；系统不会根据名称、编号或备注猜测。{% else %}Tokens belong only to this workbook. Select teams explicitly; the system does not guess from names, IDs, or annotations.{% endif %}</p>
+    <div class="workbook-mapping-grid">
+        {% for item in mapping_rows %}
+        <div class="form-row">
+            {{ item.field.label_tag }}
+            {{ item.field }}
+            {{ item.field.errors }}
+            {% if item.field.help_text %}<p class="helptext">{{ item.field.help_text }}</p>{% endif %}
+        </div>
+        {% endfor %}
+    </div>
+    <div class="actions">
+        <button type="submit">{% if language == "zh" %}生成只读预览{% else %}Build Read-Only Preview{% endif %}</button>
+    </div>
+</form>
+{% endif %}
+{% endif %}
+
+{% if preview %}
+<section aria-labelledby="row-preview-heading">
+    <div class="page-header">
+        <h2 id="row-preview-heading" class="page-title">{% if language == "zh" %}主日逐行预览{% else %}Sunday Row Preview{% endif %}</h2>
+        <p class="page-subtitle"><strong>{% if language == "zh" %}仅预览——尚未修改任何排班数据。{% else %}Preview only — no scheduling data has been changed.{% endif %}</strong></p>
+    </div>
+    <div class="card workbook-table-wrap">
+        <table class="workbook-preview-table">
+            <thead>
+                <tr>
+                    <th>{% if language == "zh" %}行{% else %}Row{% endif %}</th>
+                    <th>{% if language == "zh" %}主日日期{% else %}Sunday date{% endif %}</th>
+                    <th>{% if language == "zh" %}日期来源{% else %}Date source{% endif %}</th>
+                    <th>{% if language == "zh" %}代码{% else %}Token{% endif %}</th>
+                    <th>{% if language == "zh" %}映射团队{% else %}Mapped team{% endif %}</th>
+                    <th>{% if language == "zh" %}目标聚会{% else %}Exact target event{% endif %}</th>
+                    <th>{% if language == "zh" %}当前团队{% else %}Current team{% endif %}</th>
+                    <th>{% if language == "zh" %}建议团队{% else %}Proposed team{% endif %}</th>
+                    <th>{% if language == "zh" %}分类{% else %}Classification{% endif %}</th>
+                    <th>{% if language == "zh" %}后续影响{% else %}Downstream impact{% endif %}</th>
+                    <th>{% if language == "zh" %}原因{% else %}Reason{% endif %}</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in preview_rows %}
+                {% with row=item.row %}
+                <tr>
+                    <td>{{ row.source.source_row }}</td>
+                    <td>{{ row.source.local_date|date:"Y-m-d" }}</td>
+                    <td>{% if row.source.date_kind == "literal" %}{% if language == "zh" %}直接日期{% else %}Literal{% endif %}{% else %}{% if language == "zh" %}公式缓存{% else %}Cached formula{% endif %}{% endif %}</td>
+                    <td>{{ row.source.token }}</td>
+                    <td>{% if row.proposed_team %}{{ row.proposed_team|ministry_team_name:language }}{% else %}—{% endif %}</td>
+                    <td>{% if row.event %}{{ row.event|event_title:language }}{% else %}—{% endif %}</td>
+                    <td>{% if row.current_team %}{{ row.current_team|ministry_team_name:language }}{% else %}—{% endif %}</td>
+                    <td>{% if row.proposed_team %}{{ row.proposed_team|ministry_team_name:language }}{% else %}—{% endif %}</td>
+                    <td><strong>{{ item.classification_label }}</strong></td>
+                    <td>
+                        {% if row.downstream_impacts %}
+                        <ul class="workbook-impact-list">
+                            {% for impact in row.downstream_impacts %}
+                            <li><strong>{{ impact.team|ministry_team_name:language }}</strong> — {% if impact.participation == "required" %}{% if language == "zh" %}需要{% else %}Required{% endif %}{% else %}{% if language == "zh" %}额外{% else %}Additional{% endif %}{% endif %}; {% if impact.assignment_state == "none" %}{% if language == "zh" %}无当前排班{% else %}No current assignment{% endif %}{% elif impact.assignment_state == "duplicate" %}{% if language == "zh" %}重复排班{% else %}Duplicate assignments{% endif %}{% else %}{{ impact.statuses.0 }}{% endif %}</li>
+                            {% endfor %}
+                        </ul>
+                        {% else %}—{% endif %}
+                    </td>
+                    <td>{{ item.blocker_label|default:"—" }}{% if row.parallel_evidence_count %}<span class="muted"> {% if language == "zh" %}同日另有 {{ row.parallel_evidence_count }} 场非目标聚会。{% else %}{{ row.parallel_evidence_count }} same-date non-target event{{ row.parallel_evidence_count|pluralize }} observed.{% endif %}</span>{% endif %}</td>
+                </tr>
+                {% endwith %}
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+{% endif %}
+
+<style>
+.workbook-preview-notice { border-left: 0.35rem solid var(--accent, #226a5d); }
+.workbook-summary-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.8rem 1.25rem; }
+.workbook-summary-grid div { min-width: 0; }
+.workbook-summary-grid dt { font-weight: 700; }
+.workbook-summary-grid dd { margin: 0.2rem 0 0; overflow-wrap: anywhere; }
+.workbook-hash { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 0.88rem; }
+.workbook-mapping-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.75rem 1rem; }
+.workbook-table-wrap { overflow-x: auto; }
+.workbook-preview-table { min-width: 1180px; width: 100%; border-collapse: collapse; }
+.workbook-preview-table th, .workbook-preview-table td { padding: 0.65rem; text-align: left; vertical-align: top; border-bottom: 1px solid var(--border, #ddd); overflow-wrap: anywhere; }
+.workbook-impact-list { margin: 0; padding-left: 1.1rem; }
+@media (max-width: 620px) {
+    .workbook-summary-grid, .workbook-mapping-grid { grid-template-columns: 1fr; }
+}
+</style>
+{% endblock %}

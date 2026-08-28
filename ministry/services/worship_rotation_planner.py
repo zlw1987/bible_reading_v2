@@ -190,6 +190,12 @@ def _downstream_projection(event):
     return tuple(impacts), fingerprint
 
 
+def build_worship_downstream_projection(event):
+    """Public read-only planner projection for bounded downstream impact."""
+
+    return _downstream_projection(event)
+
+
 def _fingerprints(event, inspection, downstream_fingerprint):
     assignment_statuses = dict(
         TeamAssignment.objects.filter(
@@ -242,6 +248,14 @@ def _fingerprints(event, inspection, downstream_fingerprint):
         ),
         "downstream": downstream_fingerprint,
     }
+
+
+def build_worship_preview_fingerprints(
+    event, inspection, downstream_fingerprint
+):
+    """Public normalized stale-state facts shared by read-only previews."""
+
+    return _fingerprints(event, inspection, downstream_fingerprint)
 
 
 def _unique(values):

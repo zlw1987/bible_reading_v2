@@ -112,7 +112,14 @@ def _unit_evidence(unit):
     }
 
 
-def _audience_evidence(event):
+def service_event_audience_readiness(event):
+    """Return the canonical audience-readiness evidence for one event.
+
+    This public, side-effect-free helper keeps profile setup audits and later
+    exact-profile read-only consumers on the same zero-row, inactive-unit, and
+    ancestor/descendant-overlap semantics.
+    """
+
     units = [link.unit for link in event.audience_scope_links.all()]
     units.sort(key=lambda unit: (unit.code, unit.pk))
     selected_ids = {unit.pk for unit in units}
@@ -153,7 +160,7 @@ def _event_evidence(
     tagged,
 ):
     local_start = _local_datetime(event.start_datetime)
-    audience = _audience_evidence(event)
+    audience = service_event_audience_readiness(event)
     identity_issues = []
     if event.event_type != expected_event_type:
         identity_issues.append("wrong_event_type")
@@ -230,7 +237,7 @@ def _other_profile_exact_time_evidence(event):
         "title": event.title,
         "location": event.location,
         "host_language_unit": _unit_evidence(host) if host else None,
-        "audience": _audience_evidence(event),
+        "audience": service_event_audience_readiness(event),
         "service_profile_key": event.service_profile_key,
         "classification": (
             "EXACT-TIME EVENT OWNED BY ANOTHER PROFILE — NOT A CANDIDATE"

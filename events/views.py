@@ -2,12 +2,13 @@ from django.contrib import messages
 from django.contrib.admin.models import CHANGE, LogEntry
 from django.contrib.auth.decorators import login_required
 from django.contrib.contenttypes.models import ContentType
+from django.core.exceptions import PermissionDenied
 from django.db import transaction
 from django.db.models import Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
-from django.views.decorators.http import require_POST
+from django.views.decorators.http import require_http_methods, require_POST
 
 from accounts.language import get_user_language
 from accounts.permissions import CAP_MANAGE_SERVICE_EVENTS, has_capability
@@ -39,6 +40,21 @@ from ministry.services.worship_rotation_planner import (
     confirm_worship_rotation_proposal,
     decode_signed_worship_rotation_proposal,
 )
+from ministry.services.worship_xlsx_preview import (
+    CONTRACT_REVISION,
+    SUPPORTED_SHEET,
+    MappingValidationError,
+    PreviewBlocker,
+    PreviewClassification,
+    SignedWorkbookStateError,
+    WorkbookContractError,
+    WorkbookErrorCode,
+    build_worship_import_preview,
+    decode_parsed_workbook,
+    mapping_candidate_teams,
+    parse_known_worship_workbook,
+    sign_parsed_workbook,
+)
 
 from .scheduling_revision import (
     SchedulingMutationStaleError,
@@ -53,6 +69,8 @@ from .forms import (
     WorshipRotationConfirmationForm,
     WorshipRotationPlannerForm,
     WorshipTeamSelectionForm,
+    WorshipWorkbookMappingForm,
+    WorshipWorkbookUploadForm,
 )
 from .models import (
     ServiceEvent,
@@ -148,6 +166,17 @@ def can_manage_service_events(user):
         getattr(user, "is_staff", False)
         or getattr(user, "is_superuser", False)
         or has_capability(user, CAP_MANAGE_SERVICE_EVENTS)
+    )
+
+
+def can_preview_worship_workbook(user):
+    return bool(
+        getattr(user, "is_authenticated", False)
+        and getattr(user, "is_active", False)
+        and (
+            getattr(user, "is_staff", False)
+            or getattr(user, "is_superuser", False)
+        )
     )
 
 
@@ -695,7 +724,250 @@ def worship_planning(request):
         {
             "planning_rows": worship_planning_rows(request.user, language),
             "rotation_planner_available": len(planner_events) >= 2,
+            "worship_workbook_preview_available": can_preview_worship_workbook(
+                request.user
+            ),
         },
+    )
+
+
+def _workbook_error_text(language, error):
+    labels = {
+        "en": {
+            WorkbookErrorCode.INVALID_XLSX: "Invalid XLSX workbook.",
+            WorkbookErrorCode.ENCRYPTED_XLSX: (
+                "Password-protected or encrypted workbooks are not supported."
+            ),
+            WorkbookErrorCode.CONTRACT_MISMATCH: (
+                "Workbook contract mismatch. Use the supported 2026 master workbook."
+            ),
+            WorkbookErrorCode.SHEET_MISSING: "Required sheet 'All 930' is missing.",
+            WorkbookErrorCode.HEADER_MISMATCH: (
+                "Workbook title or operational headers do not match."
+            ),
+            WorkbookErrorCode.DATE_MISMATCH: (
+                "A supported Sunday date does not match the frozen contract."
+            ),
+            WorkbookErrorCode.FORMULA_CACHE_MISMATCH: (
+                "A formula-backed date or its cached result does not match."
+            ),
+            WorkbookErrorCode.UNSUPPORTED_TOKEN: (
+                "A supported Sunday row has an unrecognized rotation token."
+            ),
+            WorkbookErrorCode.RESOURCE_LIMIT: (
+                "The XLSX archive exceeds the supported resource limits."
+            ),
+        },
+        "zh": {
+            WorkbookErrorCode.INVALID_XLSX: "XLSX 工作簿无效。",
+            WorkbookErrorCode.ENCRYPTED_XLSX: "不支持有密码或加密的工作簿。",
+            WorkbookErrorCode.CONTRACT_MISMATCH: "工作簿结构不符合支持的 2026 总表。",
+            WorkbookErrorCode.SHEET_MISSING: "缺少必需的“All 930”工作表。",
+            WorkbookErrorCode.HEADER_MISMATCH: "工作簿标题或操作栏标题不符合要求。",
+            WorkbookErrorCode.DATE_MISMATCH: "支持的主日日期不符合固定契约。",
+            WorkbookErrorCode.FORMULA_CACHE_MISMATCH: "公式日期或其缓存结果不一致。",
+            WorkbookErrorCode.UNSUPPORTED_TOKEN: "主日行包含不支持的轮值代码。",
+            WorkbookErrorCode.RESOURCE_LIMIT: "XLSX 压缩包超过支持的资源上限。",
+        },
+    }
+    base = labels.get(language, labels["en"])[error.code]
+    return f"{base} {error.detail}" if language == "en" else base
+
+
+def _workbook_row_labels(language, row):
+    classification = {
+        "en": {
+            PreviewClassification.NO_OP: "No-op",
+            PreviewClassification.PROPOSED_CHANGE: "Proposed change",
+            PreviewClassification.BLOCKED: "Blocked",
+        },
+        "zh": {
+            PreviewClassification.NO_OP: "无需更改",
+            PreviewClassification.PROPOSED_CHANGE: "建议更改",
+            PreviewClassification.BLOCKED: "已阻止",
+        },
+    }
+    blockers = {
+        "en": {
+            PreviewBlocker.TARGET_MISSING: "No exact target event.",
+            PreviewBlocker.TARGET_AMBIGUOUS: "Multiple exact target events.",
+            PreviewBlocker.TARGET_LIFECYCLE: "Exact target is draft or cancelled.",
+            PreviewBlocker.TARGET_AUDIENCE: "Exact target audience is not ready.",
+            PreviewBlocker.MAPPING_UNRESOLVED: (
+                "Mapping unresolved — select an eligible Worship Team."
+            ),
+            PreviewBlocker.TEAM_INELIGIBLE: (
+                "Mapped team is not eligible for this exact event."
+            ),
+            PreviewBlocker.OWNERSHIP_CONFLICT: (
+                "Current Worship ownership needs review."
+            ),
+            PreviewBlocker.CURRENT_WORSHIP_ASSIGNMENT: (
+                "A current Worship assignment blocks an ordinary team change."
+            ),
+        },
+        "zh": {
+            PreviewBlocker.TARGET_MISSING: "没有完全匹配的目标聚会。",
+            PreviewBlocker.TARGET_AMBIGUOUS: "存在多个完全匹配的目标聚会。",
+            PreviewBlocker.TARGET_LIFECYCLE: "目标聚会是草稿或已取消。",
+            PreviewBlocker.TARGET_AUDIENCE: "目标聚会的适用范围尚未就绪。",
+            PreviewBlocker.MAPPING_UNRESOLVED: (
+                "映射尚未完成——请选择符合条件的敬拜团队。"
+            ),
+            PreviewBlocker.TEAM_INELIGIBLE: "所选团队不适用于这场聚会。",
+            PreviewBlocker.OWNERSHIP_CONFLICT: "当前敬拜归属需要检查。",
+            PreviewBlocker.CURRENT_WORSHIP_ASSIGNMENT: "现有敬拜排班阻止一般团队更改。",
+        },
+    }
+    return {
+        "row": row,
+        "classification_label": classification.get(language, classification["en"])[
+            row.classification
+        ],
+        "blocker_label": (
+            blockers.get(language, blockers["en"])[row.blocker]
+            if row.blocker
+            else ""
+        ),
+    }
+
+
+def _workbook_preview_context(
+    *, language, upload_form=None, parsed=None, mapping_form=None, preview=None
+):
+    mapping_rows = []
+    if mapping_form is not None and parsed is not None:
+        for token in parsed.token_counts:
+            mapping_rows.append(
+                {
+                    "token": token,
+                    "count": parsed.token_counts[token],
+                    "field": mapping_form[f"mapping_{token.lower()}"],
+                    "selected_team": (
+                        preview.mappings.get(token) if preview is not None else None
+                    ),
+                }
+            )
+    return {
+        "upload_form": upload_form
+        or WorshipWorkbookUploadForm(language=language),
+        "parsed": parsed,
+        "mapping_form": mapping_form,
+        "mapping_rows": mapping_rows,
+        "preview": preview,
+        "preview_rows": (
+            [_workbook_row_labels(language, row) for row in preview.rows]
+            if preview is not None
+            else []
+        ),
+        "parser_contract": CONTRACT_REVISION,
+        "supported_sheet": SUPPORTED_SHEET,
+    }
+
+
+@login_required
+@require_http_methods(["GET", "POST"])
+def worship_workbook_preview(request):
+    """Staff/superuser-only, request-scoped, zero-write XLSX preview."""
+
+    if not can_preview_worship_workbook(request.user):
+        raise PermissionDenied
+    language = get_user_language(request)
+    if request.method == "GET":
+        return render(
+            request,
+            "events/worship_workbook_preview.html",
+            _workbook_preview_context(language=language),
+        )
+
+    if request.FILES:
+        upload_form = WorshipWorkbookUploadForm(
+            request.POST, request.FILES, language=language
+        )
+        if not upload_form.is_valid():
+            return render(
+                request,
+                "events/worship_workbook_preview.html",
+                _workbook_preview_context(
+                    language=language, upload_form=upload_form
+                ),
+            )
+        uploaded = upload_form.cleaned_data["workbook"]
+        try:
+            parsed = parse_known_worship_workbook(
+                uploaded.read(), filename=uploaded.name
+            )
+        except WorkbookContractError as exc:
+            upload_form.add_error("workbook", _workbook_error_text(language, exc))
+            return render(
+                request,
+                "events/worship_workbook_preview.html",
+                _workbook_preview_context(
+                    language=language, upload_form=upload_form
+                ),
+            )
+        signed_workbook = sign_parsed_workbook(parsed, user=request.user)
+        candidate_teams = mapping_candidate_teams(parsed)
+        mapping_form = WorshipWorkbookMappingForm(
+            language=language,
+            token_counts=parsed.token_counts,
+            candidate_teams=candidate_teams,
+            initial={"signed_workbook": signed_workbook},
+        )
+        return render(
+            request,
+            "events/worship_workbook_preview.html",
+            _workbook_preview_context(
+                language=language,
+                upload_form=upload_form,
+                parsed=parsed,
+                mapping_form=mapping_form,
+            ),
+        )
+
+    signed_workbook = request.POST.get("signed_workbook", "")
+    try:
+        parsed = decode_parsed_workbook(signed_workbook, user=request.user)
+    except SignedWorkbookStateError:
+        upload_form = WorshipWorkbookUploadForm(language=language)
+        upload_form.add_error(
+            None,
+            "预览状态无效或已过期，请重新上传工作簿。"
+            if language == "zh"
+            else "Preview state is invalid or expired. Upload the workbook again.",
+        )
+        return render(
+            request,
+            "events/worship_workbook_preview.html",
+            _workbook_preview_context(language=language, upload_form=upload_form),
+        )
+
+    candidate_teams = mapping_candidate_teams(parsed)
+    mapping_form = WorshipWorkbookMappingForm(
+        request.POST,
+        language=language,
+        token_counts=parsed.token_counts,
+        candidate_teams=candidate_teams,
+    )
+    preview = None
+    if mapping_form.is_valid():
+        try:
+            preview = build_worship_import_preview(
+                parsed=parsed,
+                mapping=mapping_form.selected_mapping(),
+                user=request.user,
+            )
+        except MappingValidationError as exc:
+            mapping_form.add_error(None, str(exc))
+    return render(
+        request,
+        "events/worship_workbook_preview.html",
+        _workbook_preview_context(
+            language=language,
+            parsed=parsed,
+            mapping_form=mapping_form,
+            preview=preview,
+        ),
     )
 
 

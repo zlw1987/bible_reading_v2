@@ -19,6 +19,11 @@ urlpatterns = [
         views.worship_rotation_planner_confirm,
         name="worship_rotation_planner_confirm",
     ),
+    path(
+        "events/worship-planning/workbook-preview/",
+        views.worship_workbook_preview,
+        name="worship_workbook_preview",
+    ),
     path("events/new/", views.create_service_event, name="create_service_event"),
     path(
         "events/recurring/new/",

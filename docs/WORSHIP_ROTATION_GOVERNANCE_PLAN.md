@@ -31,8 +31,10 @@ in-place tagging.
 `MO-S.6D-PROFILE-SETUP.1A` is **PRODUCTION APPLY COMPLETE / VERIFIED**. The
 product-owner-reviewed reset created exactly 52 canonical 2026 Bethany 09:30
 `bethany_0930_cm` ServiceEvents with exact CM audience, and the post-reset
-production audit returned `PROFILE SETUP READY`. Slice 8 remains unimplemented
-but its canonical target-event setup blocker is closed.
+production audit returned `PROFILE SETUP READY`. `MO-S.6D-SLICE8.1A/FU1` now
+implements the strict dependency/parser, bounded OOXML ZIP preflight, and
+staff/superuser-only zero-write preview with blocked partial mappings. Slice 9
+confirmation remains separate and unauthorized.
 Governance FU2 finalizes the required
 event-planner
 prerequisite and Worship-specific pool semantics. The Campus, pool-
@@ -120,8 +122,12 @@ The current code provides:
   writes nothing, and grants no authority; and
 - no `updated_by` field.
 
-The current code does **not** provide a declared `.xlsx` dependency or annual-
-workbook importer.
+The current code declares `openpyxl==3.1.5` and provides the bounded Slice 8
+annual-workbook parser/upload/preview. Counts are derived from present allowed
+tokens, incomplete mappings and business blockers remain previewable, and an
+OOXML ZIP preflight rejects encrypted or excessive archives before openpyxl.
+It provides no confirmation endpoint, selected-team write, durable import-run
+schema, or assignment import.
 
 `created_by` is creation attribution, not durable planner responsibility or
 runtime authority. `MinistryTeamParentLink.parent_church_unit` is a display/
@@ -857,24 +863,28 @@ The strict MO-S.6D-0A workbook decisions remain:
 - no fuzzy event or team matching, no hard-coded PKs, and no user/team creation;
 - no formula evaluation; cached date results only under the recorded structural
   and weekly-sequence validation;
-- preview before confirmation, expiring signed normalized proposal,
-  confirmation-time reauthorization/revalidation, atomic fail-closed writes,
-  idempotent no-op behavior, and visible classification of special/unsupported
-  rows; and
+- implemented read-only preview with expiring signed normalized state, partial
+  mapping blockers, target-before-mapping-before-governance blocker precedence,
+  and visible classification of special/unsupported rows; and
 - no assignment/member import in the first importer.
+
+If separately approved, Slice 9 owns confirmation-time reauthorization/
+revalidation, atomic fail-closed selected-team writes, audit/result handling,
+rollback, and idempotency. None of those write-path claims describe Slice 8.
 
 Revised first lifecycle:
 
 - match/update one exact existing, non-draft, non-cancelled,
   audience-ready ServiceEvent;
-- resolve each workbook token by explicit preview mapping to a current eligible
-  candidate from that event's applicable configured Worship-pool union;
+- resolve each present allowed workbook token by explicit preview mapping to a
+  current eligible candidate from that event's applicable configured Worship-
+  pool union; retain unresolved/ineligible rows as blocked preview evidence;
 - classify any current Worship assignment for a different team, or any ordinary
   anchor change while a current Worship assignment exists, as a blocking
   conflict rather than moving or retagging a roster;
 - surface existing downstream assignments as review impact without changing
   them;
-- update `rotation_anchor_team` only; and
+- in a separately authorized Slice 9, update `rotation_anchor_team` only; and
 - never infer audience, Campus, Ministry Context, required teams, assignments,
   or serving from the workbook.
 
@@ -885,11 +895,12 @@ coverage merely because a team owns the rotation.
 
 Single-event authority and bulk import authority remain separate. A Worship-pool
 Lead or event planner may be allowed to change one applicable event; that does
-not authorize an annual workbook. The safest first upload/preview/confirm
-boundary is staff/superuser only, rechecked at both preview and confirmation. A
-later dedicated bulk-import capability may be considered after trial evidence;
-do not reuse pool role, exact-team assignment authority, or audience as bulk
-authority.
+not authorize an annual workbook. Implemented Slice 8 upload/preview is staff/
+superuser only and rechecked at preview. Any separately authorized Slice 9
+confirmation must use the same first-workflow boundary and recheck authority at
+confirmation. A later dedicated bulk-import capability may be considered after
+trial evidence; do not reuse pool role, exact-team assignment authority, or
+audience as bulk authority.
 
 ## 16. Rejected alternatives
 
@@ -949,7 +960,7 @@ Each slice is separately approvable and must verify repository truth again.
 | 7A | **Stable ServiceEvent profile identity — IMPLEMENTED (`MO-S.6D-PROFILE.1A`)** | One optional, non-unique, validated `service_profile_key`; Admin-only technical setup; existing rows default empty; grants no audience/permission/serving/recurrence meaning | lexical validation, duplicate profile reuse, ordinary-form exclusion, scheduling-revision advance/rollback, zero cross-domain side effects | No browser QA; no non-Admin surface changed |
 | 7B | **Profile target-event readiness audit — IMPLEMENTED, COMMITTED, AND RUN ON PRODUCTION (`MO-S.6D-PROFILE-SETUP.0A`, READ-ONLY)** | Independent 52-Sunday local-date contract; persisted-key-only canonical identity; requested-event-type candidate discovery; migration/schema gate; tagged-row, audience, untagged candidate, other-profile exact-time, and different-time parallel-service evidence; deterministic text/JSON stdout | exact/invalid/duplicate/out-of-contract tagged rows, untagged none/single/multiple review cases, other-profile non-candidate separation, different-time service isolation, profile-key length bound, schema-not-ready stop, privacy, full zero-write model/callback proof | Local DB remains schema-not-ready; final production post-reset audit is setup-ready: 52 expected, 52 canonical, 52 ready exact matches, and zero missing/duplicate/invalid/ambiguous target rows |
 | 7C | **Canonical Bethany 09:30 TEST-data rebuild — PRODUCTION APPLY COMPLETE / VERIFIED (`MO-S.6D-PROFILE-SETUP.1A/FU1`)** | Dry-run default; three-part destructive gate including reviewed-state token; all-ServiceEvent/event-owned reset only; exact active `CHURCH -> campus -> CM`; atomic 52-Sunday setup; audit postcondition; no importer or Worship selection | deletion/cascade/preservation inventory, deterministic token, missing/malformed/wrong/stale rejection, exact local/DST contract, lifecycle-date/path binding, rollback, no-op repeat, post-reset `PROFILE SETUP READY` | Product-owner-reviewed production reset created 52 canonical events plus 52 exact CM audience rows; final audit returned 52/52 ready and `PROFILE SETUP READY` |
-| 8 | **Excel dependency/parser + preview — UNIMPLEMENTED / NOW UNBLOCKED FOR IMPLEMENTATION** | Select and verify the `.xlsx` dependency; implement strict known-workbook parsing and staff/superuser-only read-only upload/preview; no data write or migration expected | contract/header/date/cache/token/profile/identity classification, roster/downstream impact, size/privacy/tamper/expiry tests | Canonical target-event setup blocker closed; dependency/parser/preview work remains in Slice 8 |
+| 8 | **Excel dependency/parser + preview — IMPLEMENTED (`MO-S.6D-SLICE8.1A/FU1`)** | `openpyxl==3.1.5`; strict known-workbook parser; fixed A/C1/C2/C3 vocabulary with counts and mapping controls derived from present tokens; blocked partial-mapping preview; exact persisted-profile target classification; signed user-bound normalized state; pre-openpyxl 5 MiB upload, 128-member, 20 MiB total-uncompressed, and 8 MiB single-member OOXML limits plus encrypted-member rejection; staff/superuser-only read-only upload/preview; no confirm route, data write, or migration | contract/header/geometry/date/formula/cache/token/profile/identity classification, altered/absent-token distributions, archive member/count/resource/encryption boundaries, signed semantic tamper, target-before-mapping precedence, incomplete/no-candidate/per-destination mapping blockers, lifecycle/audience/parallel evidence, roster/downstream impact, privacy/expiry, permission, and full zero-write tests | Real workbook SHA-256 `186735DC723979AA49D209C92D4155BE533D6AFE9253CDB5D8B809A77C8B07AA` accepted on local Python 3.14.7: 257,609 bytes, 46 members, 2,291,811 declared uncompressed bytes, 631,391-byte largest member, and observed A/C1/C2/C3 counts 12/13/13/14 (evidence, not an invariant); package metadata covers Python 3.11; exact production virtualenv import smoke and deployment QA remain separate |
 | 9 | **Excel exact match/update confirmation** | Atomic existing-event selected-team writes only; no new event/required team/assignment; no schema if signed proposal remains sufficient | reauthorization, target locking/fingerprint, roster conflict, stale rollback, idempotency, eligible mapping, unsupported rows, audit attribution | Required for confirmation/result UX |
 | 10 | **Later assignment import** | Deferred; would write TeamAssignment/member data and needs exact-team plus bulk authority and identity proof | unresolved/ambiguous people, explicit aliases, team ownership, no user creation, rollback/idempotency | Required; only after operational evidence |
 
@@ -968,10 +979,11 @@ committed zero-write evidence tool, and PROFILE-SETUP.1A supplies the separately
 gated canonical TEST-data setup command. Production migrations/schema through
 `events/0011` are ready. The product-owner-reviewed production reset and post-
 apply audit are complete: 52/52 canonical targets are ready and the result is
-`PROFILE SETUP READY`. The target-event setup prerequisite is therefore closed;
-Slice 8 is unimplemented but unblocked for its own dependency/parser/read-only-
-preview implementation.
-Slice 8 precedes 9. Slice 10 remains later.
+`PROFILE SETUP READY`. The target-event setup prerequisite is therefore closed.
+Slice 8/FU1 dependency, parser, bounded archive preflight, and partial zero-
+write preview are implemented; exact
+production dependency smoke remains a deployment check. Slice 8 precedes the
+still-separate and unauthorized Slice 9. Slice 10 remains later.
 
 ## 18. Permission, privacy, and data invariants
 
@@ -994,18 +1006,15 @@ Slice 8 precedes 9. Slice 10 remains later.
 
 ## 19. Remaining bounded product decisions
 
-Architecture is closed enough for the proposed slices. The following details
-remain for their owning implementation approval:
+Architecture is closed enough for the proposed slices. Slice 8 selected
+`openpyxl==3.1.5`, implemented strict exact-profile parsing/matching and the
+staff/superuser-only zero-write preview, and retained signed request-scoped
+normalized proposals without `ImportRun` schema. Remaining bounded work is:
 
-1. select and verify the `.xlsx` library/version compatible with both local
-   Python 3.14.x and verified GoDaddy Python 3.11.15;
-2. implement the strict known-workbook parser and staff/superuser-only read-only
-   upload/preview in Slice 8, using exact persisted-profile event matching;
-3. preserve no ServiceEvent, audience, RequiredTeam, TeamAssignment, serving,
-   or assignment/member creation or mutation during preview;
-4. whether signed request-scoped import proposals are sufficient or durable
-   `ImportRun` retention is required; and
-5. separately scope and authorize Slice 9 confirmation only after Slice 8.
+1. run the exact production Python 3.11 virtualenv dependency import smoke as
+   part of deployment verification; and
+2. separately scope and authorize Slice 9 confirmation, including current-truth
+   reauthorization, stale handling, atomic selected-team writes, and audit.
 
 Multi-anchor pool semantics, a dedicated bulk-import capability, dedicated
 anchor version/audit schema, explicit roster-conflict resolution, and assignment

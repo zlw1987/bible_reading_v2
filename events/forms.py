@@ -11,6 +11,10 @@ from accounts.ordering import (
     structure_unit_sibling_sort_key,
 )
 from ministry.models import MinistryTeam
+from ministry.services.worship_xlsx_preview import (
+    MAX_UPLOAD_BYTES,
+    TOKEN_ORDER,
+)
 
 from .models import (
     ServiceEvent,
@@ -536,6 +540,98 @@ class WorshipRotationPlannerForm(forms.Form):
 
 class WorshipRotationConfirmationForm(forms.Form):
     proposal = forms.CharField(widget=forms.HiddenInput)
+
+
+class WorshipWorkbookUploadForm(forms.Form):
+    workbook = forms.FileField()
+
+    def __init__(self, *args, language="en", **kwargs):
+        super().__init__(*args, **kwargs)
+        self.language = language
+        self.fields["workbook"].label = (
+            "上传 XLSX 工作簿" if language == "zh" else "Upload XLSX workbook"
+        )
+        self.fields["workbook"].widget.attrs.update(
+            {"accept": ".xlsx", "aria-describedby": "xlsx-upload-help"}
+        )
+
+    def clean_workbook(self):
+        uploaded = self.cleaned_data["workbook"]
+        if not uploaded.name.lower().endswith(".xlsx"):
+            raise ValidationError(
+                "只接受 .xlsx 文件。"
+                if self.language == "zh"
+                else "Only .xlsx files are accepted."
+            )
+        if uploaded.size > MAX_UPLOAD_BYTES:
+            raise ValidationError(
+                "文件超过 5 MiB 上限。"
+                if self.language == "zh"
+                else "The file exceeds the 5 MiB upload limit."
+            )
+        if uploaded.size <= 0:
+            raise ValidationError(
+                "上传的文件为空。"
+                if self.language == "zh"
+                else "The uploaded file is empty."
+            )
+        return uploaded
+
+
+class WorshipWorkbookMappingForm(forms.Form):
+    signed_workbook = forms.CharField(widget=forms.HiddenInput)
+
+    def __init__(
+        self,
+        *args,
+        language="en",
+        token_counts=None,
+        candidate_teams=None,
+        **kwargs,
+    ):
+        super().__init__(*args, **kwargs)
+        self.language = language
+        token_counts = token_counts or {}
+        candidate_teams = candidate_teams or {}
+        for token in TOKEN_ORDER:
+            count = token_counts.get(token, 0)
+            if not count:
+                continue
+            teams = tuple(candidate_teams.get(token, ()))
+            field = MinistryTeamChoiceField(
+                queryset=MinistryTeam.objects.filter(
+                    pk__in=[team.pk for team in teams]
+                ).order_by("name", "name_en", "id"),
+                required=False,
+                language=language,
+            )
+            field.label = (
+                f"工作簿代码 {token} — {count} 个主日"
+                if language == "zh"
+                else f"Workbook token {token} — {count} Sundays"
+            )
+            field.empty_label = (
+                "请选择符合条件的敬拜团队"
+                if language == "zh"
+                else "Select an eligible Worship Team"
+            )
+            if not teams:
+                field.help_text = (
+                    "目前没有可供此代码选择的有效敬拜团队；相关行将无法完成映射。"
+                    if language == "zh"
+                    else (
+                        "No current canonical Worship candidate is available "
+                        "for this token's matched destinations."
+                    )
+                )
+            self.fields[f"mapping_{token.lower()}"] = field
+
+    def selected_mapping(self):
+        return {
+            token: self.cleaned_data.get(f"mapping_{token.lower()}")
+            for token in TOKEN_ORDER
+            if f"mapping_{token.lower()}" in self.fields
+        }
 
 
 class PlannerUserChoiceField(forms.ModelChoiceField):

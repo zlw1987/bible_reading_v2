@@ -38,8 +38,9 @@ untagged candidates and 45 Sundays with no 09:30 candidate.
 product-owner-reviewed reset created exactly 52 canonical 2026 Bethany 09:30
 `bethany_0930_cm` ServiceEvents with exact CM audience, and the production
 post-reset audit returned `PROFILE SETUP READY`. The Slice 8 target-event setup
-prerequisite is closed; Slice 8 is implemented and Slice 9 confirmation remains
-separate and unauthorized.
+prerequisite is closed; Slice 8 is implemented. Docs/read-only
+`MO-S.6D-SLICE9.0A` now freezes the separately approved confirmation-write
+contract and repository audit, while Slice 9 runtime remains unimplemented.
 
 ## 1. Purpose
 
@@ -1001,7 +1002,8 @@ tests and limited-trial review pass.
   mapping state contain only tokens actually present in the accepted workbook;
   an omitted or ineligible selection remains visible as a blocked row rather
   than preventing preview. The setup command remains separate from importer
-  runtime, and Slice 9 confirmation remains unauthorized.
+  runtime. `MO-S.6D-SLICE9.0A` freezes the confirmation-write contract, while
+  confirmation runtime remains unimplemented and separately authorized.
 
 ### MO-S.6D-PROFILE-SETUP.0A — Bethany 09:30 Target Event Readiness Audit
 
@@ -1464,9 +1466,314 @@ extracted.
 
 Slice 8 preserves the strict sheet/header/date/formula/special-row contract,
 match conflicts, the staff/superuser bulk boundary, no assignment/person/team
-creation, zero writes, and no notifications. If separately approved, Slice 9
-owns confirmation-time reauthorization and stale checks, atomic selected-team
+creation, zero writes, and no notifications. Under the docs-complete
+`MO-S.6D-SLICE9.0A` contract, a separately authorized Slice 9 runtime owns
+confirmation-time reauthorization and stale checks, atomic selected-team
 writes/rollback, attribution, audit/result handling, and idempotency.
+
+### MO-S.6D-SLICE9.0A — Excel Confirmation Write Contract / Repository Audit
+
+Status: **CONFIRMATION WRITE CONTRACT / REPOSITORY AUDIT COMPLETE**.
+
+This is a docs/read-only architecture decision. Slice 9 runtime remains
+**UNIMPLEMENTED**. This decision adds no confirmation route, form, template,
+service, test, dependency, schema, migration, data command, notification, or
+application/data write.
+
+#### Approved V1 authority and mutation boundary
+
+Both the successful preview and future confirmation require an authenticated,
+active staff user or superuser. Pool Lead/Coordinator, exact-event planner,
+exact-team Lead/Coordinator, global assignment manager, audience membership,
+Church Structure belonging, serving, and ordinary ServiceEvent management do
+not grant annual-import authority. Confirmation must reload and recheck the
+actor's active staff/superuser state after the scheduling-revision CAS barrier.
+
+V1 operates on exactly the 52 supported existing events carried by one
+reviewed proposal. Published and completed canonical events are accepted;
+draft, cancelled, missing, duplicate, or otherwise no-longer-ready targets
+block the whole batch. The only business-field write is:
+
+```text
+ServiceEvent.rotation_anchor_team
+```
+
+Every successful selected event also advances its existing internal
+`scheduling_revision` exactly once as the concurrency claim. V1 creates,
+deletes, or changes no ServiceEvent, audience row, RequiredTeam row, planner
+row, TeamAssignment, TeamAssignmentMember, MinistryTeam, Church Structure,
+membership, serving row, user, or assignment/member import record. It adds no
+`ImportRun` schema and emits no notification.
+
+#### Audited Slice 8 signed state and distinct confirmation proposal
+
+Slice 8 currently signs two 30-minute, timestamped, user-bound states with its
+dedicated salt/version:
+
+1. `parsed_workbook` binds parser contract revision, generated time, user,
+   sanitized filename, workbook SHA-256, supported sheet, exactly 52 normalized
+   source rows (`source_row`, `source_cell`, local date, literal/cached date
+   kind, workbook token), and derived present-token counts.
+2. `normalized_preview` binds parser contract revision, generated time, user,
+   filename/hash/sheet, explicit present-token-to-MinistryTeam IDs, and one row
+   containing source row/cell/date/date-kind/token, target classification,
+   exact ServiceEvent ID, expected current and proposed team IDs, preview
+   classification/blocker, ownership state, parallel-event evidence count, and
+   planner-style event/governance/current-Worship/downstream fingerprints.
+
+The nested event fingerprint already includes the exact event ID, nonnegative
+expected `scheduling_revision`, lifecycle/type/start/end/updated timestamps,
+and expected current anchor. Governance fingerprints include active audience
+IDs, applicable pool/anchor pairs, eligible team/owning-pool pairs, selected-
+team eligibility, and ownership state. Current-Worship and bounded downstream
+assignment fingerprints are also present. The exact persisted profile key is
+not stored in that fingerprint; exact profile matching was represented by the
+server-derived target classification and must be recomputed from current data.
+
+The existing normalized-preview decoder validates the signature, expiry, user,
+top-level state/version, row count, allowed row keys, token vocabulary/count,
+mapping keys, and mapping-ID types. It does not provide the planner decoder's
+full confirmation-grade validation of every row's canonical source semantics,
+enum/value types, cross-field relationships, event/revision/team IDs, or
+fingerprint shapes. Server-signed preview classifications and fingerprints are
+review evidence, not current confirmation truth.
+
+Slice 9 V1 therefore mints a **distinct, versioned confirmation proposal** only
+from a successful, confirmable Slice 8 preview. It uses a dedicated confirmation
+salt/type/version and retains the current 30-minute maximum age and exact user
+binding. It does not re-upload, retain, or reparse the workbook at confirmation.
+The minimal confirmation payload is privacy-bounded and contains:
+
+- confirmation contract version/type and parser contract revision;
+- one random operation UUID minted with the reviewed proposal;
+- timestamp, previewing user ID, sanitized filename, and workbook SHA-256;
+- the complete explicit present-token-to-team ID mapping; and
+- exactly 52 canonical rows, each binding source row, local date, workbook
+  token, exact event ID, expected pre-claim scheduling revision, expected-before
+  anchor team ID, and proposed team ID.
+
+The exact profile key `bethany_0930_cm`, exact local 09:30 time, event type,
+supported dates/rows/token vocabulary, and 52-row total remain code-owned
+parser/confirmation contract constants and are recomputed/shape-checked; they
+need not be repeated as trusted DB classifications. Operation UUID and the
+distinct confirmation contract/version are the only new semantic fields not
+already bound by the current successful preview. The confirmation payload may
+drop preview-only display classifications/fingerprints rather than treating
+them as authorization or current truth.
+
+The future preview exposes a functional confirmation action only when all of
+these are true: structurally valid workbook; exactly 52 supported rows; exactly
+52 exact canonical targets; complete explicit mapping for every present token;
+zero blocked rows; at least one proposed change; and current staff/superuser
+authority. Zero proposed changes renders `Already matches / nothing to apply`
+and no write action. The future endpoint is POST-only and CSRF-protected.
+
+#### Reusable 1B-A1 / 1B-B primitives and prohibited planner reuse
+
+Slice 9 directly reuses `events.scheduling_revision.claim_scheduling_revisions`.
+It already sorts exact `(event_id, expected_revision)` claims by event ID,
+performs conditional database-expression updates, translates SQLite busy
+errors, and rolls back earlier claims when any row is stale or missing. The
+first successful update establishes the proven SQLite single-writer boundary;
+this is not a row lock.
+
+Changed anchors use the same supported post-claim save primitive as planner
+`1B-B`:
+
+```python
+event.save(
+    update_fields=["rotation_anchor_team", "updated_at"],
+    _skip_scheduling_revision=True,
+)
+```
+
+This preserves model validation while preventing an accidental second revision
+advance. No-op rows are not saved. The future service also follows the proven
+`transaction.atomic()`, reload-after-claim, changed-only `LogEntry`, shared
+operation UUID, and exception-to-zero-write patterns.
+
+Importer code must not call or copy planner-specific
+`build_worship_rotation_proposal`, `confirm_worship_rotation_proposal`,
+`extract_expected_scheduling_revisions`, tail/shift validation, future-only
+published weekly-chain rules, per-event `can_change_worship_team` authority, or
+planner notification emission. Its signing decoder needs its own strict shape
+validator. Small positive/optional-ID, datetime, UUID, and exact-key validation
+patterns may be mirrored or narrowly extracted only if that reduces duplication
+without coupling the two product contracts. Canonical current-truth helpers
+`service_event_audience_readiness` and
+`inspect_worship_ownership_consistency` are reused directly.
+
+#### Atomic confirmation order
+
+The future write service follows this exact order:
+
+1. Before a transaction, authenticate, require active staff/superuser, decode
+   and fully shape-check the distinct signed proposal, enforce expiry/user
+   binding, validate the UUID and exact canonical 52-row cross-field shape, and
+   perform no scheduling mutation. Reject a payload that was not confirmable or
+   has no proposed change.
+2. Enter one `transaction.atomic()` block.
+3. As the first scheduling/governance database access, call
+   `claim_scheduling_revisions` for all 52 unique exact event IDs and their
+   signed expected revisions. Claims occur in ascending event-ID order. Every
+   selected row, including a signed no-op row, participates.
+4. On stale, missing, or busy claim, abort. Earlier claims roll back; no anchor
+   or audit row is written.
+5. Reload all exact ServiceEvents and the current actor after the successful
+   claim. Require the exact 52 IDs once, no missing/extra/duplicate target, and
+   require current active staff/superuser authority.
+6. For every row, recompute all confirmation facts from current database truth
+   as specified below. Any failure aborts all 52 rows.
+7. For rows whose current anchor differs from the proposed team, save only
+   `rotation_anchor_team` and `updated_at` with the established skip-second-
+   revision primitive. A row whose signed expected-before equals proposed is a
+   no-op: it keeps the successful claim revision but receives no anchor save.
+8. Create all changed-event `LogEntry` rows in the same transaction. Any audit
+   exception aborts the batch.
+9. Commit once and return the request-scoped result. There is no partial
+   success and no notification registration.
+
+#### Current-truth recomputation matrix
+
+| Fact | Confirmation-time rule | Revision coverage and independent check |
+| --- | --- | --- |
+| Exact target identity | Event ID from the reviewed row; persisted profile exactly `bethany_0930_cm`; signed local date; configured-local exact 09:30; `sunday_service` | Normal ServiceEvent profile/time/type saves advance revision; confirmation independently reloads and recomputes every field |
+| Lifecycle | Status is exactly published or completed; draft/cancelled/unknown blocks | Normal ServiceEvent lifecycle saves advance revision; status is independently recomputed |
+| Audience | `service_event_audience_readiness(event)["ready"]` remains true, including nonzero rows, active units, and no ancestor/descendant overlap | Supported audience replacement advances revision; audience rows and Church Structure activity/ancestry are independently recomputed |
+| Proposed mapping | Every signed mapping/row relation is exact; proposed MinistryTeam exists, active, and assignable | MinistryTeam configuration changes do not need new event revision coupling because existence/flags are independently recomputed after the CAS |
+| Governance/applicability | Proposed team remains in the exact event's current eligible candidate union; all pool, anchor, active-primary-path, hierarchy, and applicability rules pass | Pool/team/path/Church Structure changes are independently recomputed after the CAS; no new revision coupling is required |
+| Expected-before anchor | Current `rotation_anchor_team_id` equals the signed expected-before ID, including null | Supported anchor changes advance revision; exact equality is independently required. Equality with the proposed team alone never proves replay |
+| Worship ownership | No invalid/off-team/out-of-scope/multiple/duplicate state; a changed row has no current Worship assignment; a true no-op may retain one exact consistent current assignment | Supported current assignment writes advance revision; assignment rows/status and canonical ownership are independently recomputed to catch unsupported/bulk drift |
+| Bulk authority | Reloaded actor remains active staff or superuser | User/role state is independent of event revision and is rechecked after the CAS |
+| Claim state | Current post-claim revision is the signed expected revision plus one for every target | Enforced by the conditional claim and verified from reloaded rows |
+
+This satisfies the SQLite stale-safety boundary without adding revision coupling
+for pool configuration, team flags, Ministry hierarchy, Church Structure, or
+authority facts that are safely recomputed after the first writer claim. Raw
+SQL and arbitrary future bulk ORM mutation remain outside the supported-write
+inventory, but relevant persisted truth is still fail-closed when the importer
+recomputes it.
+
+#### Audit, replay, and no-ImportRun decisions
+
+V1 uses the existing Django `LogEntry` model. Each actually changed event gets
+one row whose actor is `LogEntry.user`; all rows share the proposal operation
+UUID. The planner's `LogEntry.objects.log_action(...)` and semicolon-delimited
+key/value convention are reusable, but its exact message is not: the annual
+import needs a distinct source and provenance contract and must not emit team
+display names or workbook annotations.
+
+Each annual-import audit message records only:
+
+```text
+source=annual_worship_workbook_import;
+operation_id=<uuid>;
+workbook_sha256=<sha256>;
+parser_contract_revision=<revision>;
+confirmation_contract_revision=<revision>;
+event_id=<id>;
+local_date=<YYYY-MM-DD>;
+old_team_id=<id or None>;
+new_team_id=<id>.
+```
+
+No ignored leader name, arbitrary workbook cell, roster/member data, note,
+contact, or private source text is logged. No-op rows receive no audit. Audit
+failure rolls back anchors, revisions, and all earlier audit rows.
+
+The operation UUID embedded in free-form `LogEntry.change_message` has no
+database uniqueness constraint and no existing trustworthy exact-replay lookup
+contract. Slice 9 therefore does not pretend that a matching current team or
+text search proves an earlier successful import. The reliable V1 replay rule is
+the revision CAS: after one successful POST, all 52 signed expected revisions
+are stale, so a double POST/replay performs no duplicate anchor save, revision
+advance, or audit. A concurrent second POST waits/fails busy or later fails CAS.
+The response is `stale / already changed — rebuild preview`. A rebuilt preview
+after successful application produces 52 no-op rows and no confirm action.
+
+No durable `ImportRun` is required because V1 needs no retained preview,
+multi-user handoff, workflow recovery, unique query-optimized batch history,
+one-click rollback, or import-history UI. The signed reviewed proposal supplies
+the request contract; per-changed-event `LogEntry` plus shared operation UUID
+supplies durable actor/correlation audit. If any deferred durable workflow need
+becomes mandatory, reevaluate schema rather than overstating this design.
+
+#### Notifications and request-scoped result UX
+
+The annual importer deliberately does not call the implemented `NOTIFY.1G`
+producer. A first production import may change all 52 anchors from null and the
+ordinary direct-change fanout could create an unreviewed notification burst.
+The exact selector and Rotation Planner notifications remain unchanged. After
+trial evidence, a separately approved producer may consider one bounded,
+recipient-specific annual-import summary.
+
+On success, the POST response may show only the sanitized workbook filename and
+hash, operation ID, selected/changed/no-op/audit counts, and changed Sunday/date
+rows with old team to new team. It states explicitly that no roster, assignment,
+audience, RequiredTeam, planner, event, membership, or serving data changed.
+The result is request-scoped; `LogEntry` is the durable audit and no import-
+history UI is added.
+
+On stale, conflict, busy, validation, save, or audit failure, show one all-or-
+nothing failure result: nothing changed; rebuild and review a new preview. Do
+not show partial-success counts or expose private/governance internals.
+
+#### Zero-write/all-or-nothing failure matrix
+
+Every listed failure yields zero committed anchor changes, zero partial
+revision claims, zero committed `LogEntry` rows, and zero notifications:
+
+| Failure | Required behavior |
+| --- | --- |
+| Expired, tampered, malformed, wrong-contract token; user mismatch | Reject before transaction mutation and require a new preview |
+| Ordinary/non-staff user or authority lost after preview | Reject before transaction or after post-CAS actor reload; rollback all claims |
+| One event deleted | Missing CAS target aborts and rolls back earlier claims |
+| One event revision changed | Stale CAS aborts and rolls back earlier claims |
+| Profile, local date/time, type, or expected-before anchor changed | Current-truth mismatch aborts all rows |
+| Event becomes draft/cancelled or unsupported lifecycle | Current lifecycle check aborts all rows |
+| Audience becomes zero/inactive/overlapping/otherwise invalid | Current readiness check aborts all rows |
+| Mapped/proposed team is missing, inactive, or nonassignable | Current mapping check aborts all rows |
+| Pool, Ministry hierarchy, primary path, Church anchor, or applicability changes | Recomputed governance mismatch/ineligibility aborts all rows |
+| Mapped team is no longer an eligible destination candidate | Current eligible-union check aborts all rows |
+| Current Worship assignment appears after preview | A changed-row assignment or any invalid ownership state aborts all rows |
+| Off-team, out-of-scope, multiple, or duplicate ownership appears | Canonical ownership check aborts all rows |
+| `LogEntry` creation fails after one or more saves | Transaction rolls back every save, claim, and earlier audit |
+| SQLite is busy/locked or a competing writer wins first | Return retry/new-preview failure; no partial commit |
+| Replay/double POST | Old expected revisions fail; no duplicate write/audit and no claim of proven prior application |
+
+#### Required implementation test architecture
+
+Before runtime is approved, focused tests must cover:
+
+- staff and superuser success; ordinary user, pool Lead, event planner,
+  exact-team Lead, and global assignment manager denial;
+- a production-shaped exact 52-row batch containing completed and published
+  targets, plus mixed changed/no-op behavior;
+- all-selected stale protection and one later stale/missing row rolling back
+  earlier claims;
+- every identity, lifecycle, audience, team activity/assignability, pool,
+  hierarchy, Church anchor/applicability, destination eligibility, expected-old
+  anchor, assignment, and ownership failure above;
+- changed-only per-event `LogEntry`, one shared operation UUID, privacy-bounded
+  audit fields, and audit-failure rollback;
+- zero creation/change of ServiceEvent rows beyond anchor/revision, audience,
+  RequiredTeam, planner, assignment/member, MinistryTeam, Church Structure,
+  membership, serving, or user data;
+- no notification payload, Core on-commit producer registration, or Notification
+  row from the annual importer;
+- token contract/tamper/user/expiry/shape validation and confirmability gates;
+- double POST/replay and concurrent POST behavior with zero duplicate write;
+- a real two-connection, file-backed SQLite confirmation service test modeled
+  on A1/1B-B, proving the first CAS excludes a competing writer through commit,
+  later failure restores all claims, and no partial 52-row commit occurs; and
+- rendered bilingual English/Chinese desktop/mobile confirmable, blocked,
+  already-matches, stale, failure, and success UI QA. Automated tests use only
+  isolated test databases and never mutate production.
+
+The implementation slice must retain POST-only/CSRF behavior, exact 52-row
+shape, and the repository's no-row-lock wording. Any need for event creation,
+RequiredTeam/assignment/member mutation, notification fanout, durable run state,
+or a second concurrency protocol is a stop condition requiring a new decision.
 
 ### MO-S.6D — Excel Event + Worship Team Import
 
@@ -1476,7 +1783,9 @@ writes/rollback, attribution, audit/result handling, and idempotency.
   mapping, exact existing-target classification, blocked-row business evidence,
   bounded downstream-impact display, and staff/superuser-only upload/preview
   are in place. The flow has no confirm/apply route and performs no scheduling
-  or cross-domain write. Slice 9 confirmation remains separate and unauthorized.
+  or cross-domain write. `MO-S.6D-SLICE9.0A` freezes the separate confirmation-
+  write contract; confirmation runtime remains unimplemented and separately
+  authorized.
 - Goal: controlled annual Bethany 9:30 workbook input under the approved
   contract and lifecycle, not date-and-anchor import in isolation.
 - Implemented Slice 8 scope: code-versioned template contract,
@@ -1484,20 +1793,23 @@ writes/rollback, attribution, audit/result handling, and idempotency.
   eligible mapping for present tokens, incomplete-mapping and per-destination
   eligibility blockers, before/after Worship Team proposals, current Worship
   roster conflict detection, downstream-assignment impact display, and no-op/
-  change/blocked classification. Slice 9 may separately propose
-  confirmation, reauthorization, audit/result handling, and idempotent atomic
-  selected-team-only writes. New-event
+  change/blocked classification. Docs/read-only `MO-S.6D-SLICE9.0A` now freezes
+  the future confirmation, reauthorization, audit/result, replay, and atomic
+  selected-team-only write contract; Slice 9 runtime remains unimplemented.
+  New-event
   creation remains excluded unless product separately approves the
   audience/profile flow.
 - Out of scope: assignment/member import, arbitrary workbooks, formulas as
   rules, bidirectional sync, automatic user/team creation.
 - Components: strict importer-preview service, upload/preview view/template,
   event/team lookup helpers, and reused generic models; no confirm endpoint.
-- Schema impact: target none; any import-run persistence requires a later
-  explicit decision.
-- Security: staff/superuser only for the implemented upload/preview workflow;
-  no production mutation on upload or preview; signed state is normalized,
-  expiring, and user-bound. Confirmation does not exist in Slice 8.
+- Schema impact: none in Slice 8 or the approved Slice 9 V1 contract; a durable
+  ImportRun remains deferred unless a later explicit workflow requirement
+  proves it necessary.
+- Security: staff/superuser only for the implemented upload/preview workflow
+  and future confirmation; no production mutation on upload or preview; signed
+  state is normalized, expiring, and user-bound. Confirmation does not exist in
+  Slice 8 and remains unimplemented after the docs-only Slice 9 contract.
 - Tests: malformed/versioned workbook, ZIP member/count/resource/encryption
   boundaries, derived and absent-token distributions, signed semantic tamper,
   date/event conflict, no-op, selected-team change, incomplete/no-candidate/
@@ -1508,7 +1820,8 @@ writes/rollback, attribution, audit/result handling, and idempotency.
   mappings and business blockers remain visible; identical current selection is
   a no-op; no event/team/assignment/audience/audit/notification data is written,
   no assignment is created, and no published zero-audience event is produced.
-  Confirmation/write acceptance remains a separately authorized Slice 9 concern.
+  Confirmation/write runtime acceptance remains a separately authorized Slice 9
+  implementation concern under the frozen `SLICE9.0A` contract.
 - Dependency: MO-S.6B event/team context, the MO-S.6D-0A/FU1 governance
   prerequisites, stable service-profile mapping, and a separately reviewed
   `.xlsx` dependency.

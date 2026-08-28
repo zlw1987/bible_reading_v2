@@ -43,8 +43,9 @@ and 52 exact CM audience rows. The final production audit reported schema ready,
 52 expected Sundays, 52 canonical tagged rows, 52 ready exact matches, no
 missing/duplicate/invalid/ambiguous target rows, and recommendation
 `PROFILE SETUP READY`. The Slice 8 target-event setup prerequisite is closed
-and Slice 8 is implemented; Slice 9 confirmation remains separate and
-unauthorized.
+and Slice 8 is implemented. Docs/read-only `MO-S.6D-SLICE9.0A` now freezes the
+separate Excel confirmation-write contract and repository audit; Slice 9
+runtime remains unimplemented.
 
 ## 1. Project Identity
 
@@ -667,7 +668,9 @@ Future pieces include:
   parser, bounded archive preflight, and staff/superuser-only partial zero-write
   upload/preview with its wider operational matrix; production read-only smoke
   is passed. The `NOTIFY.1G-0A`
-  architecture gate is docs complete. Slice 9 confirmation remains separate.
+  architecture gate is docs complete. Docs/read-only `MO-S.6D-SLICE9.0A`
+  freezes the separate confirmation contract; its runtime remains
+  unimplemented.
   The bounded
   cross-team
   coordination projection replaces the older generic “multi-team dashboard”
@@ -1381,8 +1384,13 @@ Production smoke on GoDaddy Python 3.11.15 imported openpyxl 3.1.5, accepted the
 real workbook, and rendered 52 supported Sundays, 52 exact matched targets,
 zero no-op rows, 52 proposed changes, zero blocked rows, and Complete mapping.
 The preview remained read-only; this verifies Slice 8 only and is not Slice 9
-readiness proof.
-Slice 9 confirmation is not authorized by this implementation.
+write-path evidence. Docs/read-only `MO-S.6D-SLICE9.0A` subsequently completed
+the repository audit and froze the staff/superuser-only, distinct 30-minute
+signed reviewed proposal, exact 52-row all-or-nothing scheduling-revision CAS,
+current-truth recomputation, changed-anchor-only save, shared-operation
+per-changed-event `LogEntry`, no-`ImportRun`, no-notification, replay-safe,
+request-scoped-result contract. Slice 9 runtime remains unimplemented and needs
+a separately authorized implementation task.
 Remaining MO-S.6D and later slices are not
 authorized by the governance closure or these foundations. Availability,
 swaps, reminders, automatic
@@ -1437,10 +1445,12 @@ MO-S.6E remain separately deferred.
 
 Short next-candidate list:
 
-- for MO-S.6D after implemented and production-smoke-passed Slice 8: scope
-  Slice 9 confirmation separately if the product owner authorizes it; preserve
-  current-truth reauthorization, stale rollback, selected-team-only mutation,
-  and audit boundaries without expanding into assignment/member import;
+- for MO-S.6D after implemented and production-smoke-passed Slice 8 plus the
+  docs-complete `MO-S.6D-SLICE9.0A` contract: implement Slice 9 only under a
+  separately authorized task, preserving staff/superuser bulk authority,
+  distinct signed reviewed proposal, exact 52-row current-truth/CAS rollback,
+  selected-team-only mutation, changed-only shared audit, replay safe-fail,
+  no ImportRun, and no annual-import notification or assignment/member scope;
 - review Church Calendar limited-trial feedback before separately approving any
   broader calendar behavior such as notifications, external sync, attendance,
   authoring/management, staff dashboards, or CommunityActivity-to-ServiceEvent

@@ -823,6 +823,25 @@ class WorshipWorkbookViewTests(WorshipWorkbookDomainTestBase):
         self.assertContains(response, "仅预览——尚未修改任何排班数据。")
         self.assertContains(response, "上传 XLSX 工作簿")
 
+    def test_preview_renders_scoped_table_usability_hooks_without_write_action(self):
+        self.client.force_login(self.staff)
+        upload_response = self.client.post(
+            reverse("worship_workbook_preview"), {"workbook": self.upload()}
+        )
+        token = upload_response.context["mapping_form"]["signed_workbook"].value()
+        response = self.client.post(
+            reverse("worship_workbook_preview"), self.mapping_post(token)
+        )
+
+        self.assertContains(response, 'class="workbook-preview-page"')
+        self.assertContains(response, "data-workbook-table-top-scroll")
+        self.assertContains(response, "data-workbook-table-top-scroll-spacer")
+        self.assertContains(response, "data-workbook-table-scroll")
+        self.assertContains(response, "new ResizeObserver")
+        self.assertContains(response, "window.requestAnimationFrame")
+        self.assertNotContains(response, "Confirm Import")
+        self.assertNotContains(response, "Apply")
+
     def test_absent_token_has_no_mapping_control(self):
         self.client.force_login(self.staff)
         tokens = [*("A" for _ in range(12)), *("C2" for _ in range(20))]

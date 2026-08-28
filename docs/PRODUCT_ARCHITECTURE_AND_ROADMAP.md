@@ -19,10 +19,12 @@ authoring/management, or external-sync behavior.
 It grants no audience, permission, serving, recurrence, location, Host /
 Language, or scheduling-source semantics. Existing rows default empty; the
 first approved workbook setup value is `bethany_0930_cm`, and no event is
-automatically tagged. `MO-S.6D-SLICE8.1A/FU1` now implements the declared
+automatically tagged. `MO-S.6D-SLICE8.1A/FU1/UX1` now implements the declared
 strict XLSX dependency/parser, bounded OOXML ZIP resource preflight, and staff/
 superuser-only zero-write preview with exact persisted-profile matching,
-present-token mapping controls, and blocked partial-mapping evidence.
+present-token mapping controls, blocked partial-mapping evidence, and a wider
+operational review matrix. Production read-only smoke passed on GoDaddy Python
+3.11.15 with openpyxl 3.1.5.
 `MO-S.6D-PROFILE.1A` is
 committed in current HEAD.
 `MO-S.6D-PROFILE-SETUP.0A` provides a separate committed
@@ -661,9 +663,10 @@ Future pieces include:
   notification runtime `NOTIFY.1G` are implemented. The separate
   `MO-S.6D-PROFILE.1A` stable ServiceEvent profile-key foundation is also
   implemented, without automatically tagging existing events;
-  `MO-S.6D-SLICE8.1A/FU1` implements the separately scoped strict dependency/
+  `MO-S.6D-SLICE8.1A/FU1/UX1` implements the separately scoped strict dependency/
   parser, bounded archive preflight, and staff/superuser-only partial zero-write
-  upload/preview, and the `NOTIFY.1G-0A`
+  upload/preview with its wider operational matrix; production read-only smoke
+  is passed. The `NOTIFY.1G-0A`
   architecture gate is docs complete. Slice 9 confirmation remains separate.
   The bounded
   cross-team
@@ -1374,6 +1377,11 @@ preflight, and staff/superuser-only partial bulk upload/read-only preview are
 implemented without schema or data writes. Observed real-workbook token counts
 are acceptance evidence, not a runtime invariant; unresolved or ineligible
 mapping choices remain visible as blocked rows.
+Production smoke on GoDaddy Python 3.11.15 imported openpyxl 3.1.5, accepted the
+real workbook, and rendered 52 supported Sundays, 52 exact matched targets,
+zero no-op rows, 52 proposed changes, zero blocked rows, and Complete mapping.
+The preview remained read-only; this verifies Slice 8 only and is not Slice 9
+readiness proof.
 Slice 9 confirmation is not authorized by this implementation.
 Remaining MO-S.6D and later slices are not
 authorized by the governance closure or these foundations. Availability,
@@ -1429,8 +1437,7 @@ MO-S.6E remain separately deferred.
 
 Short next-candidate list:
 
-- for MO-S.6D after implemented Slice 8: run the exact GoDaddy Python 3.11
-  virtualenv dependency import smoke during deployment verification, then scope
+- for MO-S.6D after implemented and production-smoke-passed Slice 8: scope
   Slice 9 confirmation separately if the product owner authorizes it; preserve
   current-truth reauthorization, stale rollback, selected-team-only mutation,
   and audit boundaries without expanding into assignment/member import;

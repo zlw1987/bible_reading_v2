@@ -24,9 +24,11 @@ implemented; remaining MO-S.6D runtime slices remain
 separately scoped and require explicit approval.
 `MO-S.6D-PROFILE.1A` now implements the optional stable
 `ServiceEvent.service_profile_key` identity foundation and is committed in the
-current HEAD. `MO-S.6D-SLICE8.1A/FU1` separately implements the strict Excel
+current HEAD. `MO-S.6D-SLICE8.1A/FU1/UX1` separately implements the strict Excel
 dependency/parser, bounded OOXML ZIP resource preflight, and staff/superuser-
-only zero-write preview, including blocked partial-mapping preview.
+only zero-write preview, including blocked partial-mapping preview and the
+wider operational review surface. Its production read-only smoke passed on
+GoDaddy Python 3.11.15 with openpyxl 3.1.5.
 `MO-S.6D-PROFILE-SETUP.0A` is committed in current HEAD as the separate read-
 only target-event readiness audit. Its production run was reviewed: migrations
 and schema through `events/0011` were ready, but zero canonical rows meant the
@@ -159,9 +161,10 @@ read-only Worship Rotation Planner proposal/preview, and `1A-FU1`
 distinguishes terminal blank, exact-ID cycle-closed, and true displaced tail
 outcomes without adding preview writes. The system now provides optimistic
 planner confirmation/shared audit, a closed docs-only direct-change
-notification contract, and the bounded `NOTIFY.1G` producer. It still does not
-provide Excel dependency/parser/import runtime or the MO-S.6E roster-change
-staleness mechanism.
+notification contract, and the bounded `NOTIFY.1G` producer. The controlled XLSX dependency/parser/upload/read-only-preview runtime is now
+implemented and production-smoke-passed. The system still does not provide
+the separately unauthorized Excel confirmation/write path or the MO-S.6E
+roster-change staleness mechanism.
 
 ## 3. Real-world Sunday workflow
 
@@ -1403,11 +1406,10 @@ product-owner cPanel verification confirms that the GoDaddy Python App
 `AMAXTW.COM/APP_READ` uses Python 3.11.15, retains the existing `3.11`
 virtualenv, and has no Python 3.14 option in the observed selector. Therefore
 the Python 3.11 path in `deploy_godaddy.sh` remains aligned with production;
-`DEPLOY-PYTHON.1A` is closed with no script change required. `openpyxl 3.1.5`
-declares Python `>=3.8` support and Python 3.11 classification, so it covers the
-verified deployment version on package metadata; the exact production
-virtualenv import smoke remains a deployment step and is not claimed here. The
-parser reads xlsx server-side without Excel/LibreOffice.
+`DEPLOY-PYTHON.1A` is closed with no script change required. Production smoke
+subsequently confirmed that `openpyxl 3.1.5` imports successfully in the exact
+GoDaddy Python 3.11.15 runtime and that the parser reads the real xlsx
+server-side without Excel/LibreOffice.
 
 #### MO-S.6D Slice 8 implementation result
 
@@ -1443,6 +1445,13 @@ Preview does not mutate a ServiceEvent, its Worship Team, audience,
 RequiredTeam, TeamAssignment, serving rows, assignment members, notification,
 or audit data. Slice 9 confirmation is not authorized by this implementation.
 
+The production read-only smoke is **PASSED**: GoDaddy Python 3.11.15 imported
+openpyxl 3.1.5, accepted the real workbook, and produced 52 supported Sundays,
+52 exact matched targets, zero no-op rows, 52 proposed changes, zero blocked
+rows, and `Complete` token mapping. Product-owner review confirmed that the
+preview data looked correct. This verifies only the Slice 8 production preview
+path; it is not Slice 9 readiness or write-path evidence.
+
 The accepted production workbook observation was 12 A, 13 C1, 13 C2, and 14 C3
 rows. Those counts are evidence, not a runtime invariant: the parser derives
 counts from accepted rows while retaining the fixed vocabulary, 52-row total,
@@ -1461,8 +1470,8 @@ writes/rollback, attribution, audit/result handling, and idempotency.
 
 ### MO-S.6D — Excel Event + Worship Team Import
 
-- Status: **IMPLEMENTED THROUGH READ-ONLY PREVIEW
-  (`MO-S.6D-SLICE8.1A/FU1`)**. The declared dependency, strict parser, derived
+- Status: **IMPLEMENTED / PRODUCTION READ-ONLY SMOKE PASSED
+  (`MO-S.6D-SLICE8.1A/FU1/UX1`)**. The declared dependency, strict parser, derived
   present-token counts, bounded OOXML ZIP preflight, partial eligible-token
   mapping, exact existing-target classification, blocked-row business evidence,
   bounded downstream-impact display, and staff/superuser-only upload/preview

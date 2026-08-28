@@ -5,6 +5,7 @@
 {% block title %}{% if language == "zh" %}敬拜工作簿预览{% else %}Worship Workbook Preview{% endif %} | {{ ui.site_title }}{% endblock %}
 
 {% block content %}
+<div class="workbook-preview-page">
 <p>
     <a href="{% url 'worship_planning' %}">← {% if language == "zh" %}返回敬拜安排{% else %}Back to Worship Planning{% endif %}</a>
 </p>
@@ -87,7 +88,14 @@
         <h2 id="row-preview-heading" class="page-title">{% if language == "zh" %}主日逐行预览{% else %}Sunday Row Preview{% endif %}</h2>
         <p class="page-subtitle"><strong>{% if language == "zh" %}仅预览——尚未修改任何排班数据。{% else %}Preview only — no scheduling data has been changed.{% endif %}</strong></p>
     </div>
-    <div class="card workbook-table-wrap">
+    <div class="card workbook-table-card">
+        <div class="workbook-table-top-scroll" data-workbook-table-top-scroll hidden aria-hidden="true">
+            <div class="workbook-table-top-scroll-spacer" data-workbook-table-top-scroll-spacer></div>
+        </div>
+        <div class="workbook-table-wrap"
+             data-workbook-table-scroll
+             tabindex="0"
+             aria-label="{% if language == 'zh' %}主日逐行预览表{% else %}Sunday row preview table{% endif %}">
         <table class="workbook-preview-table">
             <thead>
                 <tr>
@@ -132,11 +140,18 @@
                 {% endfor %}
             </tbody>
         </table>
+        </div>
     </div>
 </section>
 {% endif %}
+</div>
 
 <style>
+.workbook-preview-page {
+    width: min(1560px, calc(100vw - 48px));
+    margin-left: 50%;
+    transform: translateX(-50%);
+}
 .workbook-preview-notice { border-left: 0.35rem solid var(--accent, #226a5d); }
 .workbook-summary-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.8rem 1.25rem; }
 .workbook-summary-grid div { min-width: 0; }
@@ -144,12 +159,147 @@
 .workbook-summary-grid dd { margin: 0.2rem 0 0; overflow-wrap: anywhere; }
 .workbook-hash { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 0.88rem; }
 .workbook-mapping-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.75rem 1rem; }
-.workbook-table-wrap { overflow-x: auto; }
-.workbook-preview-table { min-width: 1180px; width: 100%; border-collapse: collapse; }
-.workbook-preview-table th, .workbook-preview-table td { padding: 0.65rem; text-align: left; vertical-align: top; border-bottom: 1px solid var(--border, #ddd); overflow-wrap: anywhere; }
+.workbook-table-card { padding: 0.75rem; }
+.workbook-table-top-scroll {
+    height: 0.9rem;
+    margin: 0 0 0.35rem;
+    overflow-x: auto;
+    overflow-y: hidden;
+    overscroll-behavior-inline: contain;
+}
+.workbook-table-top-scroll-spacer { height: 1px; }
+.workbook-table-wrap {
+    position: relative;
+    max-height: min(72vh, 52rem);
+    max-width: 100%;
+    overflow: auto;
+    overscroll-behavior: contain;
+}
+.workbook-preview-table {
+    min-width: 1500px;
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+    font-size: 0.86rem;
+    line-height: 1.35;
+}
+.workbook-preview-table th,
+.workbook-preview-table td {
+    padding: 0.42rem 0.5rem;
+    text-align: left;
+    vertical-align: top;
+    border-bottom: 1px solid var(--border, #ddd);
+    overflow-wrap: anywhere;
+}
+.workbook-preview-table thead th {
+    position: sticky;
+    top: 0;
+    z-index: 3;
+    background: var(--surface-soft, #fbfaf7);
+    border-bottom-width: 2px;
+}
+.workbook-preview-table th:nth-child(1),
+.workbook-preview-table td:nth-child(1) {
+    position: sticky;
+    left: 0;
+    z-index: 2;
+    width: 3.75rem;
+    min-width: 3.75rem;
+    max-width: 3.75rem;
+    background: var(--surface, #fff);
+}
+.workbook-preview-table th:nth-child(2),
+.workbook-preview-table td:nth-child(2) {
+    position: sticky;
+    left: 3.75rem;
+    z-index: 2;
+    min-width: 7.5rem;
+    background: var(--surface, #fff);
+    box-shadow: 1px 0 0 var(--border, #ddd);
+}
+.workbook-preview-table thead th:nth-child(1),
+.workbook-preview-table thead th:nth-child(2) {
+    z-index: 4;
+    background: var(--surface-soft, #fbfaf7);
+}
 .workbook-impact-list { margin: 0; padding-left: 1.1rem; }
 @media (max-width: 620px) {
+    .workbook-preview-page { width: 100%; margin-left: 0; transform: none; }
     .workbook-summary-grid, .workbook-mapping-grid { grid-template-columns: 1fr; }
+    .workbook-table-card { padding: 0.65rem; }
+    .workbook-table-top-scroll { display: none !important; }
+    .workbook-table-wrap { max-height: 70vh; }
+    .workbook-preview-table { font-size: 0.9rem; }
+    .workbook-preview-table th, .workbook-preview-table td { padding: 0.55rem; }
+    .workbook-preview-table th:nth-child(1),
+    .workbook-preview-table td:nth-child(1),
+    .workbook-preview-table th:nth-child(2),
+    .workbook-preview-table td:nth-child(2) {
+        position: static;
+        width: auto;
+        min-width: 0;
+        max-width: none;
+        box-shadow: none;
+    }
 }
 </style>
+
+{% if preview %}
+<script>
+(function () {
+    var topScroll = document.querySelector("[data-workbook-table-top-scroll]");
+    var tableScroll = document.querySelector("[data-workbook-table-scroll]");
+    var spacer = document.querySelector("[data-workbook-table-top-scroll-spacer]");
+    var resizeFrame = null;
+
+    if (!topScroll || !tableScroll || !spacer) {
+        return;
+    }
+
+    function copyScrollPosition(source, target) {
+        if (Math.abs(target.scrollLeft - source.scrollLeft) > 1) {
+            target.scrollLeft = source.scrollLeft;
+        }
+    }
+
+    function updateTopScrollbar() {
+        var hasOverflow = tableScroll.scrollWidth > tableScroll.clientWidth + 1;
+        topScroll.hidden = !hasOverflow;
+        spacer.style.width = tableScroll.scrollWidth + "px";
+        if (hasOverflow) {
+            copyScrollPosition(tableScroll, topScroll);
+        } else {
+            topScroll.scrollLeft = 0;
+        }
+    }
+
+    function scheduleTopScrollbarUpdate() {
+        if (resizeFrame !== null) {
+            return;
+        }
+        resizeFrame = window.requestAnimationFrame(function () {
+            resizeFrame = null;
+            updateTopScrollbar();
+        });
+    }
+
+    topScroll.addEventListener("scroll", function () {
+        copyScrollPosition(topScroll, tableScroll);
+    }, { passive: true });
+    tableScroll.addEventListener("scroll", function () {
+        copyScrollPosition(tableScroll, topScroll);
+    }, { passive: true });
+    window.addEventListener("resize", scheduleTopScrollbarUpdate, { passive: true });
+
+    if ("ResizeObserver" in window) {
+        var resizeObserver = new ResizeObserver(scheduleTopScrollbarUpdate);
+        resizeObserver.observe(tableScroll);
+        resizeObserver.observe(tableScroll.querySelector("table"));
+    }
+
+    updateTopScrollbar();
+    scheduleTopScrollbarUpdate();
+}());
+</script>
+{% endif %}
 {% endblock %}

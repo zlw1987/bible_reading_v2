@@ -25,17 +25,18 @@ separately scoped and require explicit approval.
 `MO-S.6D-PROFILE.1A` now implements the optional stable
 `ServiceEvent.service_profile_key` identity foundation and is committed in the
 current HEAD. It does not resume the Excel dependency/parser/read-only-preview
-slice, which remains unimplemented and blocked on reviewed canonical setup
-evidence plus its importer-owned dependency and contract decisions.
+slice, which remains unimplemented but is now unblocked for its own dependency,
+parser, and read-only-preview implementation work.
 `MO-S.6D-PROFILE-SETUP.0A` is committed in current HEAD as the separate read-
 only target-event readiness audit. Its production run was reviewed: migrations
 and schema through `events/0011` were ready, but zero canonical rows meant the
 result was `NOT READY FOR SLICE 8 REAL-DATA MATCHING`; it found seven single
 untagged candidates and 45 Sundays with no 09:30 candidate.
-`MO-S.6D-PROFILE-SETUP.1A` now implements the bounded, dry-run-by-default TEST
-ServiceEvent reset and canonical 2026 Bethany 09:30 setup command in the current
-working tree; review/commit, deployment, target dry-run, and separately
-authorized APPLY remain pending.
+`MO-S.6D-PROFILE-SETUP.1A` is **PRODUCTION APPLY COMPLETE / VERIFIED**. The
+product-owner-reviewed reset created exactly 52 canonical 2026 Bethany 09:30
+`bethany_0930_cm` ServiceEvents with exact CM audience, and the production
+post-reset audit returned `PROFILE SETUP READY`. The Slice 8 target-event setup
+prerequisite is closed; Slice 8 itself remains unimplemented.
 
 ## 1. Purpose
 
@@ -987,11 +988,11 @@ tests and limited-trial review pass.
   advance `scheduling_revision`; validation failure rolls back that advance.
   This makes later profile-aware proposals stale when identity changes without
   introducing a second counter.
-- Excel dependency/parser/read-only preview remains **UNIMPLEMENTED / BLOCKED
-  ON REVIEWED SETUP EVIDENCE**. Production migrations/schema through
-  `events/0011` are already ready. The committed PROFILE-SETUP.0A audit found
-  no canonical target dataset; the separately reviewed/applied PROFILE-SETUP.1A
-  command must establish it. The setup command is not importer runtime.
+- Excel dependency/parser/read-only preview remains **UNIMPLEMENTED / NOW
+  UNBLOCKED FOR IMPLEMENTATION**. Production migrations/schema through
+  `events/0011` and the canonical 52-event target dataset are ready. The setup
+  command is not importer runtime, and Slice 8 still owns its dependency,
+  strict parser, exact matching, and read-only preview work.
 
 ### MO-S.6D-PROFILE-SETUP.0A — Bethany 09:30 Target Event Readiness Audit
 
@@ -1059,17 +1060,29 @@ tests and limited-trial review pass.
 
   This completed production audit still did not authorize profile assignment
   or reset APPLY; it established the reviewed pre-reset production truth only.
-- Excel Slice 8 remains **UNIMPLEMENTED**. Its real-data readiness remains
-  blocked on reviewed post-reset canonical setup evidence and a reviewed
-  `.xlsx` dependency.
+- This was the reviewed **pre-reset** audit result. The later product-owner-
+  reviewed post-reset audit supersedes it for current readiness and returned
+  `PROFILE SETUP READY` with 52/52 ready exact matches.
 
 ### MO-S.6D-PROFILE-SETUP.1A — Canonical Bethany 09:30 Test-Data Rebuild
 
-- Status: **SETUP COMMAND IMPLEMENTED; APPLY PENDING PRODUCT-OWNER REVIEW**.
+- Status: **PRODUCTION APPLY COMPLETE / VERIFIED**.
   `rebuild_bethany_0930_service_events` is read-only by default; mutation
   requires `--apply`, `--confirm-test-data-reset`, and
   `--expected-reset-token <token>` and must run in a maintenance window. No
-  APPLY was run during implementation.
+  APPLY was run during command implementation; the product owner later ran and
+  reviewed the production workflow.
+- The verified production reset deleted 44 ServiceEvents, 45 audience rows,
+  102 required-team rows, zero planner assignments, 23 TeamAssignments, and 29
+  assignment-member rows. Zero BibleStudyMeeting links were cleared by
+  `SET_NULL`. It created 52 ServiceEvents and 52 audience rows, with
+  `data_mutated: true` and postcondition `PROFILE SETUP READY`.
+- The final production audit reported schema ready, 52 expected Sundays, 52
+  canonical tagged rows, and 52 ready exact matches. Missing, duplicate,
+  wrong-time/type/date, unexpected, draft, cancelled, zero-audience, and
+  invalid-audience canonical counts were all zero. It recorded 34 completed
+  historical canonical rows and no remaining untagged-candidate or other-
+  profile exact-time ambiguity.
 - The product owner explicitly declared the current ServiceEvent/scheduling
   rows disposable TEST DATA. The reset deletes all `ServiceEvent` rows and the
   event-owned audience, required-team, planner, TeamAssignment, and assignment-
@@ -1108,11 +1121,11 @@ tests and limited-trial review pass.
   event type. The token is stale-state/reviewed-state binding, not an
   authentication credential. APPLY recomputes it inside the transaction before
   deletion; any mismatch stops zero-write and requires a new reviewed dry-run.
-- This is explicit setup data only. The importer still does not create
-  ServiceEvents or assign Worship Teams. Excel Slice 8 remains
-  **UNIMPLEMENTED** until this setup is reviewed/applied and its result is
-  reviewed with the readiness audit and the importer-owned dependency/contract
-  decisions.
+- This is explicit setup data only. The workbook/importer does not create
+  ServiceEvents, infer audience, create RequiredTeam, create TeamAssignment or
+  serving rows, or import assignment members. Excel Slice 8 remains
+  **UNIMPLEMENTED / NOW UNBLOCKED FOR IMPLEMENTATION**; it must be implemented
+  in its own approved dependency/parser/read-only-preview slice.
 
 ### MO-S.6D-0A — Workbook Contract & Imported-Sunday Readiness
 
@@ -1388,7 +1401,7 @@ local Python 3.14.x and deployment Python 3.11.15. A suitable parser can read
 xlsx server-side without Excel/LibreOffice, but no package/version is added by
 PROFILE.1A or `DEPLOY-PYTHON.1A`.
 
-#### Decisions and prerequisites before MO-S.6D authorization
+#### Decisions and remaining prerequisites for MO-S.6D Slice 8
 
 MO-S.6D-0A-FU1/FU2 close the lifecycle, Worship-pool/candidate,
 event-responsibility, operational-reachability, and initial bulk-authority
@@ -1404,24 +1417,19 @@ implemented; all other prerequisites remain documentation decisions only.
 
 `MO-S.6D-PROFILE.1A` supplies the stable field and approves
 `bethany_0930_cm` as the first setup value. `PROFILE-SETUP.0A` is committed,
-and `PROFILE-SETUP.1A` implements the bounded TEST-data rebuild in the current
-working tree with APPLY still pending. MO-S.6D import runtime remains
-unapproved until this sequence is completed:
+and `PROFILE-SETUP.1A` completed its product-owner-reviewed production apply and
+post-reset audit. The canonical target-event setup prerequisite is closed with
+52/52 ready exact matches and `PROFILE SETUP READY`.
 
-1. product-owner review/commit of PROFILE-SETUP.1A;
-2. deploy the setup command to GoDaddy;
-3. back up the production SQLite database;
-4. run the target dry-run on the already-schema-ready production DB;
-5. product-owner review of deletion counts, resolved audience, replacement
-   lifecycle, and reset approval token;
-6. separately authorize maintenance-window APPLY;
-7. run APPLY with the exact reviewed token;
-8. rerun `audit_service_profile_readiness` and require
-   `PROFILE SETUP READY`;
-9. only after reviewed setup evidence, separately approve any Slice 8 real-data
-   work together with its signed-proposal/audit decisions and a reviewed
-   `.xlsx` dependency supporting both local Python 3.14.x and deployment Python
-   3.11.15.
+Slice 8 is now approved to proceed to its own implementation slice, but remains
+unimplemented. It must select and verify an `.xlsx` dependency compatible with
+local Python 3.14.x and GoDaddy Python 3.11.15, implement the strict known-
+workbook parser, and add staff/superuser-only read-only upload/preview with
+exact persisted-profile event matching. A/C1/C2/C3 tokens must resolve through
+explicit reviewed mapping to current eligible canonical Worship teams. Preview
+must not mutate a ServiceEvent, its Worship Team, audience, RequiredTeam,
+TeamAssignment, serving rows, or assignment members. Slice 9 confirmation is
+not authorized by this closeout.
 
 Authorization must also preserve the strict sheet/header/date/formula/special-
 row contract, match conflicts, atomic stale revalidation, the first-slice
@@ -1431,10 +1439,12 @@ published zero-audience creation.
 
 ### MO-S.6D — Excel Event + Worship Team Import
 
-- Status: not implemented or authorized; blocked on PROFILE-SETUP.1A review and
-  reviewed-token APPLY, a post-reset `PROFILE SETUP READY` audit, and remaining
-  importer-owned decisions above. Production migrations/schema through
-  `events/0011` are already ready.
+- Status: **UNIMPLEMENTED / NOW UNBLOCKED FOR IMPLEMENTATION**. The
+  PROFILE-SETUP.1A production apply and post-reset `PROFILE SETUP READY` audit
+  closed the canonical target-event blocker. Production migrations/schema
+  through `events/0011` are ready. Slice 8 still owns the dependency, parser,
+  read-only upload/preview, and importer-contract implementation; Slice 9
+  confirmation remains separate and unauthorized here.
 - Goal: controlled annual Bethany 9:30 workbook input under the approved
   contract and lifecycle, not date-and-anchor import in isolation.
 - Candidate scope after approval: code-versioned template contract,

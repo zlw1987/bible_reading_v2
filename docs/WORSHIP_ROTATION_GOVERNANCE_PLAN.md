@@ -28,9 +28,11 @@ candidates were IDs 38-44 from `2026-08-16` through `2026-09-27`; product-owner
 review confirmed their Bethany 09:30 Chinese Worship resemblance and declared
 the current scheduling dataset disposable TEST DATA for reset rather than
 in-place tagging.
-`MO-S.6D-PROFILE-SETUP.1A` implements the bounded dry-run-by-default TEST
-ServiceEvent rebuild with reviewed-state token binding in the current working
-tree, but its deployment, target dry-run, and APPLY remain pending.
+`MO-S.6D-PROFILE-SETUP.1A` is **PRODUCTION APPLY COMPLETE / VERIFIED**. The
+product-owner-reviewed reset created exactly 52 canonical 2026 Bethany 09:30
+`bethany_0930_cm` ServiceEvents with exact CM audience, and the post-reset
+production audit returned `PROFILE SETUP READY`. Slice 8 remains unimplemented
+but its canonical target-event setup blocker is closed.
 Governance FU2 finalizes the required
 event-planner
 prerequisite and Worship-specific pool semantics. The Campus, pool-
@@ -945,9 +947,9 @@ Each slice is separately approvable and must verify repository truth again.
 | 6 | **Worship Rotation Planner — IMPLEMENTED THROUGH `1B-B`** | Existing selector retains one-Sunday changes; `1A/FU1` remain side-effect-free; `1B-A1` owns the event revision/barriers/fingerprint-v3 foundation; `1B-B` adds POST-only signed confirmation and shared audit; no rule engine, roster mutation, notification, or BatchRun schema | expected-revision CAS first, full recomputation, stale/all-or-nothing rollback, all-selected revision advance, changed-only shared-operation LogEntry audit, replay/tail/privacy/zero-cross-domain-write coverage, and target-like file-backed SQLite proof | Rendered English desktop and Chinese mobile confirmable/blocked/success/replay/narrow-authority QA completed; deployment QA remains separate |
 | 7 | **Direct Worship Team change notification producer — IMPLEMENTED (`NOTIFY.1G`)** | Ministry-owned post-commit producer through Core port; no notification permission/schema inference; recipient-specific summarized batch delivery | exact role/date recipients, current-operational required/additional downstream bounds, Worship exclusion, dedupe, subset privacy, language/snapshot safety, disabled-module no-op, rollback/no-emission | Focused source/persistence tests complete; deployment QA remains separate |
 | 7A | **Stable ServiceEvent profile identity — IMPLEMENTED (`MO-S.6D-PROFILE.1A`)** | One optional, non-unique, validated `service_profile_key`; Admin-only technical setup; existing rows default empty; grants no audience/permission/serving/recurrence meaning | lexical validation, duplicate profile reuse, ordinary-form exclusion, scheduling-revision advance/rollback, zero cross-domain side effects | No browser QA; no non-Admin surface changed |
-| 7B | **Profile target-event readiness audit — IMPLEMENTED, COMMITTED, AND RUN ON PRODUCTION (`MO-S.6D-PROFILE-SETUP.0A`, READ-ONLY)** | Independent 52-Sunday local-date contract; persisted-key-only canonical identity; requested-event-type candidate discovery; migration/schema gate; tagged-row, audience, untagged candidate, other-profile exact-time, and different-time parallel-service evidence; deterministic text/JSON stdout | exact/invalid/duplicate/out-of-contract tagged rows, untagged none/single/multiple review cases, other-profile non-candidate separation, different-time service isolation, profile-key length bound, schema-not-ready stop, privacy, full zero-write model/callback proof | Local DB remains schema-not-ready; production schema is ready through events/0011 and reviewed audit result was not setup-ready: 0 canonical, 7 single candidates, 45 missing, 0 multiple/other-profile |
-| 7C | **Canonical Bethany 09:30 TEST-data rebuild — COMMAND IMPLEMENTED / APPLY PENDING (`MO-S.6D-PROFILE-SETUP.1A/FU1`)** | Dry-run default; three-part destructive gate including reviewed-state token; all-ServiceEvent/event-owned reset only; exact active `CHURCH -> campus -> CM`; atomic 52-Sunday setup; audit postcondition; no importer or Worship selection | deletion/cascade/preservation inventory, deterministic token, missing/malformed/wrong/stale rejection, exact local/DST contract, lifecycle-date/path binding, rollback, no-op repeat, post-reset `PROFILE SETUP READY` | Product-owner review/commit, deploy, DB backup, target dry-run/token review, separately authorized maintenance-window APPLY, and post-apply audit remain required |
-| 8 | **Excel dependency/parser + preview** | Reviewed `.xlsx` dependency and read-only upload/preview; staff/superuser only; no data write or migration expected | contract/header/date/cache/token/profile/identity classification, roster/downstream impact, size/privacy/tamper/expiry tests | Required for upload and preview |
+| 7B | **Profile target-event readiness audit — IMPLEMENTED, COMMITTED, AND RUN ON PRODUCTION (`MO-S.6D-PROFILE-SETUP.0A`, READ-ONLY)** | Independent 52-Sunday local-date contract; persisted-key-only canonical identity; requested-event-type candidate discovery; migration/schema gate; tagged-row, audience, untagged candidate, other-profile exact-time, and different-time parallel-service evidence; deterministic text/JSON stdout | exact/invalid/duplicate/out-of-contract tagged rows, untagged none/single/multiple review cases, other-profile non-candidate separation, different-time service isolation, profile-key length bound, schema-not-ready stop, privacy, full zero-write model/callback proof | Local DB remains schema-not-ready; final production post-reset audit is setup-ready: 52 expected, 52 canonical, 52 ready exact matches, and zero missing/duplicate/invalid/ambiguous target rows |
+| 7C | **Canonical Bethany 09:30 TEST-data rebuild — PRODUCTION APPLY COMPLETE / VERIFIED (`MO-S.6D-PROFILE-SETUP.1A/FU1`)** | Dry-run default; three-part destructive gate including reviewed-state token; all-ServiceEvent/event-owned reset only; exact active `CHURCH -> campus -> CM`; atomic 52-Sunday setup; audit postcondition; no importer or Worship selection | deletion/cascade/preservation inventory, deterministic token, missing/malformed/wrong/stale rejection, exact local/DST contract, lifecycle-date/path binding, rollback, no-op repeat, post-reset `PROFILE SETUP READY` | Product-owner-reviewed production reset created 52 canonical events plus 52 exact CM audience rows; final audit returned 52/52 ready and `PROFILE SETUP READY` |
+| 8 | **Excel dependency/parser + preview — UNIMPLEMENTED / NOW UNBLOCKED FOR IMPLEMENTATION** | Select and verify the `.xlsx` dependency; implement strict known-workbook parsing and staff/superuser-only read-only upload/preview; no data write or migration expected | contract/header/date/cache/token/profile/identity classification, roster/downstream impact, size/privacy/tamper/expiry tests | Canonical target-event setup blocker closed; dependency/parser/preview work remains in Slice 8 |
 | 9 | **Excel exact match/update confirmation** | Atomic existing-event selected-team writes only; no new event/required team/assignment; no schema if signed proposal remains sufficient | reauthorization, target locking/fingerprint, roster conflict, stale rollback, idempotency, eligible mapping, unsupported rows, audit attribution | Required for confirmation/result UX |
 | 10 | **Later assignment import** | Deferred; would write TeamAssignment/member data and needs exact-team plus bulk authority and identity proof | unresolved/ambiguous people, explicit aliases, team ownership, no user creation, rollback/idempotency | Required; only after operational evidence |
 
@@ -964,11 +966,11 @@ using annual import as a batch rotation tool. Slice 7 follows a proven change
 path. PROFILE.1A supplies Slice 8's stable field, PROFILE-SETUP.0A supplies the
 committed zero-write evidence tool, and PROFILE-SETUP.1A supplies the separately
 gated canonical TEST-data setup command. Production migrations/schema through
-`events/0011` are already ready and the pre-reset audit has been reviewed. The
-setup command must be reviewed/deployed, the production DB backed up, its target
-dry-run/token reviewed, APPLY separately authorized and run in a maintenance
-window with that exact token, and the post-apply audit must return
-`PROFILE SETUP READY` before any Slice 8 resumption.
+`events/0011` are ready. The product-owner-reviewed production reset and post-
+apply audit are complete: 52/52 canonical targets are ready and the result is
+`PROFILE SETUP READY`. The target-event setup prerequisite is therefore closed;
+Slice 8 is unimplemented but unblocked for its own dependency/parser/read-only-
+preview implementation.
 Slice 8 precedes 9. Slice 10 remains later.
 
 ## 18. Permission, privacy, and data invariants
@@ -995,21 +997,15 @@ Slice 8 precedes 9. Slice 10 remains later.
 Architecture is closed enough for the proposed slices. The following details
 remain for their owning implementation approval:
 
-1. product-owner review/commit of `MO-S.6D-PROFILE-SETUP.1A`;
-2. deploy the setup command to GoDaddy;
-3. back up the production SQLite database;
-4. run its dry-run on the already-schema-ready production DB;
-5. review deletion counts, resolved audience, replacement lifecycle, and reset
-   approval token;
-6. separately authorize maintenance-window APPLY;
-7. run APPLY with the exact reviewed token;
-8. rerun `audit_service_profile_readiness` and require
-   `PROFILE SETUP READY`;
-9. only then consider resumed Slice 8 approval;
-10. whether signed request-scoped import proposals are sufficient or durable
+1. select and verify the `.xlsx` library/version compatible with both local
+   Python 3.14.x and verified GoDaddy Python 3.11.15;
+2. implement the strict known-workbook parser and staff/superuser-only read-only
+   upload/preview in Slice 8, using exact persisted-profile event matching;
+3. preserve no ServiceEvent, audience, RequiredTeam, TeamAssignment, serving,
+   or assignment/member creation or mutation during preview;
+4. whether signed request-scoped import proposals are sufficient or durable
    `ImportRun` retention is required; and
-11. the reviewed `.xlsx` library/version compatible with both local Python
-   3.14.x and the verified GoDaddy deployment Python 3.11.15 runtime.
+5. separately scope and authorize Slice 9 confirmation only after Slice 8.
 
 Multi-anchor pool semantics, a dedicated bulk-import capability, dedicated
 anchor version/audit schema, explicit roster-conflict resolution, and assignment

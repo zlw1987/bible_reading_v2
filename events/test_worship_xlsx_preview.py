@@ -797,7 +797,7 @@ class WorshipWorkbookViewTests(WorshipWorkbookDomainTestBase):
                 self.assertContains(response, text)
                 self.assertNotContains(response, "Traceback")
 
-    def test_upload_mapping_preview_is_bilingual_private_and_has_no_confirm_action(self):
+    def test_upload_mapping_preview_is_bilingual_private_and_mints_distinct_confirmation(self):
         self.client.force_login(self.staff)
         response = self.client.post(
             reverse("worship_workbook_preview"), {"workbook": self.upload()}
@@ -814,8 +814,10 @@ class WorshipWorkbookViewTests(WorshipWorkbookDomainTestBase):
         self.assertContains(response, "52")
         self.assertContains(response, "Complete")
         self.assertContains(response, "Preview only")
-        self.assertNotContains(response, "Confirm Import")
-        self.assertNotContains(response, "Apply")
+        self.assertContains(response, "Apply reviewed Worship Team changes")
+        self.assertContains(response, "Confirm and apply 52 reviewed targets")
+        self.assertIsNotNone(response.context["confirmation_form"])
+        self.assertIsNotNone(response.context["confirmation_proposal"])
         session = self.client.session
         session["language"] = "zh"
         session.save()
@@ -823,7 +825,7 @@ class WorshipWorkbookViewTests(WorshipWorkbookDomainTestBase):
         self.assertContains(response, "仅预览——尚未修改任何排班数据。")
         self.assertContains(response, "上传 XLSX 工作簿")
 
-    def test_preview_renders_scoped_table_usability_hooks_without_write_action(self):
+    def test_preview_renders_scoped_table_usability_hooks_and_explicit_confirm(self):
         self.client.force_login(self.staff)
         upload_response = self.client.post(
             reverse("worship_workbook_preview"), {"workbook": self.upload()}
@@ -839,8 +841,8 @@ class WorshipWorkbookViewTests(WorshipWorkbookDomainTestBase):
         self.assertContains(response, "data-workbook-table-scroll")
         self.assertContains(response, "new ResizeObserver")
         self.assertContains(response, "window.requestAnimationFrame")
-        self.assertNotContains(response, "Confirm Import")
-        self.assertNotContains(response, "Apply")
+        self.assertContains(response, "All or nothing")
+        self.assertContains(response, "Confirm and apply 52 reviewed targets")
 
     def test_absent_token_has_no_mapping_control(self):
         self.client.force_login(self.staff)

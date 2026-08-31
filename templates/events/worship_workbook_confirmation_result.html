@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% load event_extras %}
+
+{% block title %}{% if confirmation_succeeded %}{% if language == "zh" %}敬拜工作簿应用结果{% else %}Worship Workbook Result{% endif %}{% else %}{% if language == "zh" %}敬拜工作簿未应用{% else %}Worship Workbook Not Applied{% endif %}{% endif %} | {{ ui.site_title }}{% endblock %}
+
+{% block content %}
+<p><a href="{% url 'worship_workbook_preview' %}">← {% if language == "zh" %}返回工作簿预览{% else %}Back to Worship Workbook Preview{% endif %}</a></p>
+
+{% if confirmation_succeeded %}
+<div class="page-header">
+    <h1 class="page-title">{% if language == "zh" %}已应用审核后的敬拜团队安排{% else %}Reviewed Worship Team changes applied{% endif %}</h1>
+    <p class="page-subtitle">{% if language == "zh" %}52 场目标已在一个完整事务中处理。{% else %}All 52 reviewed targets were processed in one atomic transaction.{% endif %}</p>
+</div>
+
+<section class="card" aria-labelledby="workbook-result-summary">
+    <h2 id="workbook-result-summary" class="card-title">{% if language == "zh" %}应用摘要{% else %}Apply summary{% endif %}</h2>
+    <dl class="workbook-result-grid">
+        <div><dt>{% if language == "zh" %}文件名{% else %}Filename{% endif %}</dt><dd>{{ confirmation_result.filename }}</dd></div>
+        <div><dt>SHA-256</dt><dd class="workbook-hash">{{ confirmation_result.workbook_sha256 }}</dd></div>
+        <div><dt>{% if language == "zh" %}操作编号{% else %}Operation ID{% endif %}</dt><dd class="workbook-hash">{{ confirmation_result.operation_id }}</dd></div>
+        <div><dt>{% if language == "zh" %}确认契约{% else %}Confirmation contract{% endif %}</dt><dd>{{ confirmation_contract_revision }}</dd></div>
+        <div><dt>{% if language == "zh" %}已审核目标{% else %}Reviewed targets{% endif %}</dt><dd>{{ confirmation_result.selected_count }}</dd></div>
+        <div><dt>{% if language == "zh" %}已更改{% else %}Changed{% endif %}</dt><dd>{{ confirmation_result.changed_count }}</dd></div>
+        <div><dt>{% if language == "zh" %}无需更改{% else %}No-op{% endif %}</dt><dd>{{ confirmation_result.no_op_count }}</dd></div>
+        <div><dt>{% if language == "zh" %}审计记录{% else %}LogEntry audit rows{% endif %}</dt><dd>{{ confirmation_result.log_entry_count }}</dd></div>
+    </dl>
+</section>
+
+{% if confirmation_result.changes %}
+<section class="card" aria-labelledby="workbook-result-changes">
+    <h2 id="workbook-result-changes" class="card-title">{% if language == "zh" %}已更改的主日{% else %}Changed Sundays{% endif %}</h2>
+    <div class="table-scroll" tabindex="0">
+        <table>
+            <thead><tr><th>{% if language == "zh" %}主日日期{% else %}Sunday date{% endif %}</th><th>{% if language == "zh" %}原敬拜团队{% else %}Old Worship Team{% endif %}</th><th>{% if language == "zh" %}新敬拜团队{% else %}New Worship Team{% endif %}</th></tr></thead>
+            <tbody>
+                {% for change in confirmation_result.changes %}
+                <tr>
+                    <td>{{ change.local_date|date:"Y-m-d" }}</td>
+                    <td>{% if change.old_team %}{{ change.old_team|ministry_team_name:language }}{% else %}—{% endif %}</td>
+                    <td>{{ change.new_team|ministry_team_name:language }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+{% endif %}
+
+<section class="card" role="note">
+    <p><strong>{% if language == "zh" %}未更改任何团队排班、服事人员、适用范围、必需团队、聚会负责人、聚会身份或教会／事工结构数据。{% else %}No TeamAssignment, serving member, audience, Required Team, planner, ServiceEvent identity, or Church/Ministry Structure data was changed.{% endif %}</strong></p>
+</section>
+{% else %}
+<div class="page-header">
+    <h1 class="page-title">{% if language == "zh" %}工作簿安排未应用{% else %}Workbook changes were not applied{% endif %}</h1>
+</div>
+<section class="card" role="alert">
+    <p><strong>{% if language == "zh" %}未修改任何数据。{% else %}Nothing was changed.{% endif %}</strong></p>
+    <p>{% if language == "zh" %}请重新生成并审核工作簿预览后再重试。{% else %}Rebuild and review a fresh workbook preview before trying again.{% endif %}</p>
+</section>
+{% endif %}
+
+<style>
+.workbook-result-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.8rem 1.25rem; }
+.workbook-result-grid div { min-width: 0; }
+.workbook-result-grid dt { font-weight: 700; }
+.workbook-result-grid dd { margin: 0.2rem 0 0; overflow-wrap: anywhere; }
+.workbook-hash { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; overflow-wrap: anywhere; }
+.table-scroll { overflow-x: auto; }
+@media (max-width: 620px) { .workbook-result-grid { grid-template-columns: 1fr; } }
+</style>
+{% endblock %}

@@ -634,6 +634,10 @@ class WorshipWorkbookMappingForm(forms.Form):
         }
 
 
+class WorshipWorkbookConfirmationForm(forms.Form):
+    confirmation_proposal = forms.CharField(widget=forms.HiddenInput)
+
+
 class PlannerUserChoiceField(forms.ModelChoiceField):
     def label_from_instance(self, user):
         full_name = user.get_full_name().strip()

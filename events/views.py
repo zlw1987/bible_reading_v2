@@ -40,6 +40,14 @@ from ministry.services.worship_rotation_planner import (
     confirm_worship_rotation_proposal,
     decode_signed_worship_rotation_proposal,
 )
+from ministry.services.worship_xlsx_confirmation import (
+    CONFIRMATION_CONTRACT_REVISION,
+    WorshipWorkbookConfirmationError,
+    WorshipWorkbookConfirmationProposalError,
+    build_worship_workbook_confirmation_proposal,
+    confirm_worship_workbook,
+    decode_signed_worship_workbook_confirmation,
+)
 from ministry.services.worship_xlsx_preview import (
     CONTRACT_REVISION,
     SUPPORTED_SHEET,
@@ -70,6 +78,7 @@ from .forms import (
     WorshipRotationPlannerForm,
     WorshipTeamSelectionForm,
     WorshipWorkbookMappingForm,
+    WorshipWorkbookConfirmationForm,
     WorshipWorkbookUploadForm,
 )
 from .models import (
@@ -833,7 +842,13 @@ def _workbook_row_labels(language, row):
 
 
 def _workbook_preview_context(
-    *, language, upload_form=None, parsed=None, mapping_form=None, preview=None
+    *,
+    language,
+    upload_form=None,
+    parsed=None,
+    mapping_form=None,
+    preview=None,
+    confirmation_proposal=None,
 ):
     mapping_rows = []
     if mapping_form is not None and parsed is not None:
@@ -855,6 +870,23 @@ def _workbook_preview_context(
         "mapping_form": mapping_form,
         "mapping_rows": mapping_rows,
         "preview": preview,
+        "confirmation_proposal": confirmation_proposal,
+        "confirmation_form": (
+            WorshipWorkbookConfirmationForm(
+                initial={
+                    "confirmation_proposal": confirmation_proposal.signed_payload
+                }
+            )
+            if confirmation_proposal is not None
+            else None
+        ),
+        "already_matches": bool(
+            preview is not None
+            and preview.matched_target_count == 52
+            and preview.mapping_complete
+            and preview.blocked_count == 0
+            and preview.proposed_change_count == 0
+        ),
         "preview_rows": (
             [_workbook_row_labels(language, row) for row in preview.rows]
             if preview is not None
@@ -950,6 +982,7 @@ def worship_workbook_preview(request):
         candidate_teams=candidate_teams,
     )
     preview = None
+    confirmation_proposal = None
     if mapping_form.is_valid():
         try:
             preview = build_worship_import_preview(
@@ -957,6 +990,18 @@ def worship_workbook_preview(request):
                 mapping=mapping_form.selected_mapping(),
                 user=request.user,
             )
+            if (
+                preview.matched_target_count == 52
+                and preview.mapping_complete
+                and preview.blocked_count == 0
+                and preview.proposed_change_count > 0
+            ):
+                confirmation_proposal = (
+                    build_worship_workbook_confirmation_proposal(
+                        preview=preview,
+                        user=request.user,
+                    )
+                )
         except MappingValidationError as exc:
             mapping_form.add_error(None, str(exc))
     return render(
@@ -967,7 +1012,55 @@ def worship_workbook_preview(request):
             parsed=parsed,
             mapping_form=mapping_form,
             preview=preview,
+            confirmation_proposal=confirmation_proposal,
         ),
+    )
+
+
+@login_required
+@require_POST
+def worship_workbook_confirm(request):
+    """Confirm exactly one reviewed, staff-owned annual workbook proposal."""
+
+    if not can_preview_worship_workbook(request.user):
+        raise PermissionDenied
+    language = get_user_language(request)
+    form = WorshipWorkbookConfirmationForm(request.POST)
+    if not form.is_valid():
+        return render(
+            request,
+            "events/worship_workbook_confirmation_result.html",
+            {"confirmation_succeeded": False, "language": language},
+            status=400,
+        )
+
+    try:
+        payload = decode_signed_worship_workbook_confirmation(
+            form.cleaned_data["confirmation_proposal"],
+            user=request.user,
+        )
+        result = confirm_worship_workbook(user=request.user, payload=payload)
+    except (
+        WorshipWorkbookConfirmationProposalError,
+        SchedulingRevisionError,
+        WorshipWorkbookConfirmationError,
+    ):
+        return render(
+            request,
+            "events/worship_workbook_confirmation_result.html",
+            {"confirmation_succeeded": False, "language": language},
+            status=409,
+        )
+
+    return render(
+        request,
+        "events/worship_workbook_confirmation_result.html",
+        {
+            "confirmation_succeeded": True,
+            "language": language,
+            "confirmation_result": result,
+            "confirmation_contract_revision": CONFIRMATION_CONTRACT_REVISION,
+        },
     )
 
 

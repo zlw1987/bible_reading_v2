@@ -44,8 +44,10 @@ and 52 exact CM audience rows. The final production audit reported schema ready,
 missing/duplicate/invalid/ambiguous target rows, and recommendation
 `PROFILE SETUP READY`. The Slice 8 target-event setup prerequisite is closed
 and Slice 8 is implemented. Docs/read-only `MO-S.6D-SLICE9.0A` now freezes the
-separate Excel confirmation-write contract and repository audit; Slice 9
-runtime remains unimplemented.
+separate Excel confirmation-write contract and repository audit.
+`MO-S.6D-SLICE9.1A` is now **IMPLEMENTED / LOCAL VERIFIED** as the exact
+52-target atomic annual confirmation runtime. It has not been run against
+production; production confirmation remains separately product-owner reviewed.
 
 ## 1. Project Identity
 
@@ -669,8 +671,8 @@ Future pieces include:
   upload/preview with its wider operational matrix; production read-only smoke
   is passed. The `NOTIFY.1G-0A`
   architecture gate is docs complete. Docs/read-only `MO-S.6D-SLICE9.0A`
-  freezes the separate confirmation contract; its runtime remains
-  unimplemented.
+  freezes the separate confirmation contract; `MO-S.6D-SLICE9.1A` implements
+  that runtime with local verification and no production confirmation claim.
   The bounded
   cross-team
   coordination projection replaces the older generic “multi-team dashboard”
@@ -1389,8 +1391,14 @@ the repository audit and froze the staff/superuser-only, distinct 30-minute
 signed reviewed proposal, exact 52-row all-or-nothing scheduling-revision CAS,
 current-truth recomputation, changed-anchor-only save, shared-operation
 per-changed-event `LogEntry`, no-`ImportRun`, no-notification, replay-safe,
-request-scoped-result contract. Slice 9 runtime remains unimplemented and needs
-a separately authorized implementation task.
+request-scoped-result contract. `MO-S.6D-SLICE9.1A` now implements that contract
+locally: fully accepted Slice 8 preview to distinct proposal, POST-only staff/
+superuser confirmation, all-52 revision CAS, current-truth recomputation,
+changed-anchor-only saves, changed-only shared-operation audit, stale-safe
+replay, no ImportRun, and no annual-import notification. Focused rollback/
+current-truth tests, two-scenario file-backed SQLite concurrency, and English
+desktop/Chinese mobile rendered QA passed. This is not production APPLY/smoke
+evidence.
 Remaining MO-S.6D and later slices are not
 authorized by the governance closure or these foundations. Availability,
 swaps, reminders, automatic
@@ -1445,12 +1453,11 @@ MO-S.6E remain separately deferred.
 
 Short next-candidate list:
 
-- for MO-S.6D after implemented and production-smoke-passed Slice 8 plus the
-  docs-complete `MO-S.6D-SLICE9.0A` contract: implement Slice 9 only under a
-  separately authorized task, preserving staff/superuser bulk authority,
-  distinct signed reviewed proposal, exact 52-row current-truth/CAS rollback,
-  selected-team-only mutation, changed-only shared audit, replay safe-fail,
-  no ImportRun, and no annual-import notification or assignment/member scope;
+- for MO-S.6D after locally verified `MO-S.6D-SLICE9.1A`: perform no production
+  confirmation until the product owner separately reviews the exact workbook,
+  target state, operational timing, and rollback expectations; assignment/member
+  import, annual-import notifications, arbitrary workbooks, and durable import
+  history remain separately unapproved;
 - review Church Calendar limited-trial feedback before separately approving any
   broader calendar behavior such as notifications, external sync, attendance,
   authoring/management, staff dashboards, or CommunityActivity-to-ServiceEvent

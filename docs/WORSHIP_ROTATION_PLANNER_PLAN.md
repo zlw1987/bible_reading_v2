@@ -21,6 +21,13 @@ BatchRun schema was added. Preview remains zero-write; confirmation changes only
 selected-event Worship anchors and scheduling revisions plus shared-operation
 per-changed-event audit rows.
 
+The separate annual-workbook consumer `MO-S.6D-SLICE9.1A` is also
+**IMPLEMENTED / LOCAL VERIFIED**. It reuses the same A1
+`claim_scheduling_revisions` CAS and skip-second-revision anchor-save primitive,
+but retains its own strict 52-row signed contract, staff/superuser bulk
+authority, current-truth rules, audit source, result UI, and no-notification
+decision. It does not call or copy the planner shift/tail contract.
+
 This document owns the batch-planner contract. The broader Worship invariants
 remain canonical in
 [`WORSHIP_ROTATION_GOVERNANCE_PLAN.md`](WORSHIP_ROTATION_GOVERNANCE_PLAN.md).
@@ -734,3 +741,12 @@ inventoried supported paths, required file-backed SQLite concurrency tests,
 optimistic confirmation, and shared audit are implemented. Any newly discovered
 supported bulk/cascade path outside the one-event revision contract remains a
 stop condition; the downstream stale guarantee must not be weakened silently.
+
+The annual importer is not a planner extension. `MO-S.6D-SLICE9.1A` consumes
+only the generic A1 CAS/save foundations: its exact 52 reviewed targets all
+advance once, changed anchors are saved without a second increment, no-op
+anchors are not saved, and changed-only `LogEntry` rows share the annual
+proposal UUID. Its target-like file-backed SQLite tests cover same-proposal
+competition and a competing supported revision writer. Annual-import success
+registers no notification callback and creates no Notification; existing
+planner `NOTIFY.1G` behavior remains unchanged.

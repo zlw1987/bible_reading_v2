@@ -17,7 +17,7 @@
 
 <div class="card workbook-preview-notice" role="note">
     <strong>{% if language == "zh" %}仅预览——尚未修改任何排班数据。{% else %}Preview only — no scheduling data has been changed.{% endif %}</strong>
-    <p class="muted">{% if language == "zh" %}此页面没有确认或应用操作。{% else %}This page has no confirm or apply action.{% endif %}</p>
+    <p class="muted">{% if language == "zh" %}只有完整通过检查的预览才会在逐行审核后提供独立的明确确认操作。{% else %}Only a fully accepted preview offers a separate explicit confirmation after row-by-row review.{% endif %}</p>
 </div>
 
 <form method="post" enctype="multipart/form-data" class="card">
@@ -143,6 +143,32 @@
         </div>
     </div>
 </section>
+
+{% if confirmation_form %}
+<section class="card workbook-confirmation-card" aria-labelledby="workbook-confirmation-heading">
+    <h2 id="workbook-confirmation-heading" class="card-title">{% if language == "zh" %}应用已审核的敬拜团队安排{% else %}Apply reviewed Worship Team changes{% endif %}</h2>
+    <p><strong>{% if language == "zh" %}这将更新已审核的 2026 主日敬拜团队。不会创建服事安排或服事人员。{% else %}This will update the selected Worship Team for the reviewed 2026 Sunday events. It will not create assignments or serving members.{% endif %}</strong></p>
+    <dl class="workbook-summary-grid">
+        <div><dt>{% if language == "zh" %}已审核目标{% else %}Reviewed targets{% endif %}</dt><dd>{{ confirmation_proposal.selected_count }}</dd></div>
+        <div><dt>{% if language == "zh" %}建议更改{% else %}Proposed changes{% endif %}</dt><dd>{{ confirmation_proposal.changed_count }}</dd></div>
+        <div><dt>{% if language == "zh" %}无需更改{% else %}No-op{% endif %}</dt><dd>{{ confirmation_proposal.no_op_count }}</dd></div>
+        <div><dt>SHA-256</dt><dd class="workbook-hash">{{ preview.parsed.sha256 }}</dd></div>
+    </dl>
+    <p class="workbook-all-or-nothing"><strong>{% if language == "zh" %}全部成功或全部不改：若任何一场聚会已经变化、失效或发生冲突，52 场都不会应用。{% else %}All or nothing: if any event is stale, invalid, or conflicted, none of the 52 targets will be applied.{% endif %}</strong></p>
+    <form method="post" action="{% url 'worship_workbook_confirm' %}">
+        {% csrf_token %}
+        {{ confirmation_form.confirmation_proposal }}
+        <div class="actions">
+            <button type="submit" class="danger">{% if language == "zh" %}确认并应用 52 场已审核安排{% else %}Confirm and apply 52 reviewed targets{% endif %}</button>
+        </div>
+    </form>
+</section>
+{% elif already_matches %}
+<section class="card" role="status">
+    <h2 class="card-title">{% if language == "zh" %}已与当前安排一致——无需应用。{% else %}Already matches — nothing to apply.{% endif %}</h2>
+    <p class="muted">{% if language == "zh" %}没有可执行的确认操作。{% else %}No confirmation action is available.{% endif %}</p>
+</section>
+{% endif %}
 {% endif %}
 </div>
 
@@ -153,6 +179,8 @@
     transform: translateX(-50%);
 }
 .workbook-preview-notice { border-left: 0.35rem solid var(--accent, #226a5d); }
+.workbook-confirmation-card { border-left: 0.35rem solid #9a3412; }
+.workbook-all-or-nothing { margin-top: 1rem; }
 .workbook-summary-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.8rem 1.25rem; }
 .workbook-summary-grid div { min-width: 0; }
 .workbook-summary-grid dt { font-weight: 700; }

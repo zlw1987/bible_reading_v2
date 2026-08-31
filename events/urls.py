@@ -24,6 +24,11 @@ urlpatterns = [
         views.worship_workbook_preview,
         name="worship_workbook_preview",
     ),
+    path(
+        "events/worship-planning/workbook-confirm/",
+        views.worship_workbook_confirm,
+        name="worship_workbook_confirm",
+    ),
     path("events/new/", views.create_service_event, name="create_service_event"),
     path(
         "events/recurring/new/",

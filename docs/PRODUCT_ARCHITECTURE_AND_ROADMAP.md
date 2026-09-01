@@ -59,6 +59,23 @@ produced 52 no-op rows, 0 proposed changes, 0 blocked rows, and no confirmation
 action, confirming that production matches the reviewed annual Worship Team
 selection set.
 
+`MO-S.REQUIRED.0A` is **EFFECTIVE REQUIRED-TEAM SEMANTICS / EVENT WORSHIP
+ENTRY AUDIT COMPLETE; RUNTIME UNIMPLEMENTED**. It freezes effective required
+teams as stored `ServiceEventRequiredTeam` rows plus the exact current selected
+Worship Team only when canonical governance reports the selection eligible.
+The Worship member is derived and never persisted as a RequiredTeam row;
+ownership conflict/ambiguity remains separate. Coverage/gap consumers should
+adopt the effective set, while stored-row writes/audits and NOTIFY.1G downstream
+recipient classification remain explicit-only. Team Schedule/Sunday Board keep
+their dedicated Worship presentation and existing reachability. The normal
+Required Team picker will exclude inactive/non-assignable new choices while
+preserving legacy stored rows for review. The canonical Event-page entry is a
+read-only/current Worship section on ServiceEvent detail with an authorization-
+gated link to the existing governed selector, never a raw ordinary-form field.
+For the 52 canonical 2026 `bethany_0930_cm` events, the approved future static
+rows are Lighting, Sound, Camera, and Projection only; Digital Ministry and
+Worship containers are not required, and A/C1/C2/C3 remain derived per event.
+
 ## 1. Project Identity
 
 This project is a lightweight church spiritual life and ministry workflow system.

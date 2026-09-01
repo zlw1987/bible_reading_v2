@@ -177,3 +177,44 @@ MO-S.4 is complete as a team-scoped manual scheduling workspace that stays scope
 MO-S.4A is complete as scheduling semantic cleanup after manual QA.
 
 MO-S.5A is complete as rotation anchor foundation. MO-S.5B is complete as a limited preview/edit-first copy-forward suggestion helper. SE-AS.1 is complete as docs-only ServiceEvent audience-scope redesign planning. Historical/superseded: SE-AS.2 was a model-only ServiceEvent audience-scope data foundation, so at that time runtime visibility still used legacy `scope_type` / `district` / `small_group` and `Profile.small_group`. Current ServiceEvent visibility uses `ServiceEventAudienceScope` rows plus active primary membership, zero-row ordinary-user visibility fails closed, and SE-FIELD-RETIRE.1A removed the legacy scope fields. Future scheduling work should remain separately planned and must not treat MO-S.5B as authorization for an automatic scheduling engine.
+
+## 8. MO-S.REQUIRED.0A Current Effective Required-Team Contract
+
+Status: **docs/audit complete; runtime unimplemented**.
+
+The earlier MO-S.5A wording that `rotation_anchor_team` is never required
+coverage is preserved as historical implementation chronology. Governed Worship
+work subsequently made that field the exact event-level selected Worship Team,
+and `MO-S.REQUIRED.0A` now approves a derived operational semantic:
+
+```text
+effective required teams
+    = stored ServiceEventRequiredTeam rows
+      + current valid selected Worship Team
+```
+
+The selected team participates only when canonical Worship governance reports
+`selected_team_is_eligible`. It is de-duplicated by exact team identity and is
+not persisted as a RequiredTeam row. Invalid raw selection fails closed.
+Eligible selection remains the intended requirement during separately reported
+ownership conflict/ambiguity, but conflict/ambiguity is not clean coverage.
+
+Coverage, gap, and leader-attention consumers should use the effective set.
+Stored-row form writes, recurring creation, Admin/setup repair, persisted-data
+audits/fingerprints, and NOTIFY.1G downstream-team resolution remain explicit-
+only. Team Schedule and Sunday Board retain their existing exact selected-team
+reachability and dedicated Worship presentation, sharing the canonical resolver
+without duplicating the selected team in generic columns.
+
+New Required Ministry Team choices must be active and assignable. Event edit
+must still include every already-stored inactive/non-assignable row so it stays
+visible for deliberate review and is never silently deleted. Digital Ministry
+and Worship ministry containers are not required. For the canonical 52
+`bethany_0930_cm` Sundays in 2026, the approved static rows are Lighting, Sound,
+Camera, and Projection only; A/C1/C2/C3 derive from each event's valid selected
+Worship Team.
+
+The canonical Event-page entry belongs on ServiceEvent detail as a current
+Worship Team readout plus an authorization-gated link to the existing governed
+selector. Raw `rotation_anchor_team` remains excluded from ordinary event
+forms. Implementation and focused tests require a separate approved slice.

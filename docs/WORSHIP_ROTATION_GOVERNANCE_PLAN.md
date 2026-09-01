@@ -732,6 +732,48 @@ authority, planner/pool-Lead non-roster boundaries, old/new/cleared selection
 behavior, global-manager rows, lifecycle/date/type exclusions, invalid-selection
 fail-closed behavior, zero automatic writes, and contained bilingual mobile UI.
 
+### Effective required-team semantic — docs contract complete, runtime unimplemented
+
+`MO-S.REQUIRED.0A` supersedes only the earlier statement that a valid selected
+Worship Team is never required coverage. It does not alter the historical
+`MO-S.6D-1D-C` implementation result or persist a required row. The current
+approved semantic is:
+
+```text
+effective required teams
+    = explicit ServiceEventRequiredTeam rows
+      UNION the exact selected Worship Team when selected_team_is_eligible
+```
+
+The derived selected team is not a `ServiceEventRequiredTeam`, assignment,
+serving fact, audience, responsibility, or permission. Provenance remains
+available so NOTIFY.1G and stored-row audits continue to consume explicit rows
+only, and Board/Team Schedule keep the selected team in their dedicated Worship
+presentation rather than duplicate it in generic columns.
+
+`inspect_worship_ownership_consistency()` already provides the exact gate:
+`selected_team_is_eligible`. No selection or an invalid/ineligible raw selection
+derives nothing. A valid selected-unscheduled team is a missing Worship coverage
+expectation; one exact current assignment is empty or scheduled according to
+active members. If the selected identity remains eligible during off-team,
+out-of-scope, multiple, or duplicate ownership, it remains the intended
+effective requirement while the independent ownership result stays
+conflict/ambiguous and is not clean coverage. Invalid selected identity never
+becomes required merely because an assignment exists.
+
+Operational reachability remains the existing three-predicate behavior and may
+share the same selected-team resolver without changing scope. Exact-team roster
+authority remains separate. Anchor selection never creates/deletes a stored
+required row, and unselected Worship siblings and Worship containers are never
+effective-required.
+
+The Event-page entry contract also remains narrow: the canonical V1 entry is a
+read-only/current Worship Team section on ServiceEvent detail, with a Change
+action only when `can_change_worship_team(user, event)` is true. The action links
+to the existing governed exact-event selector and grants neither general event
+edit nor child roster authority. The ordinary ServiceEvent form must continue
+to exclude raw `rotation_anchor_team`.
+
 ## 14. Concurrent authorized editors
 
 Several pool Leads or planners may legitimately edit a combined event. The

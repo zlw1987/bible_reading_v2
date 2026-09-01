@@ -2256,6 +2256,201 @@ re-upload of the same workbook produced 52 no-op rows, 0 proposed changes,
 Evaluate separately only after operational evidence: availability, swaps or
 replacement workflow, reminders, and optional one-way Google Sheets import.
 
+### MO-S.REQUIRED.0A — Effective Required-Team Semantics / Event Worship Entry Audit
+
+Status: **EFFECTIVE REQUIRED-TEAM SEMANTICS / EVENT WORSHIP ENTRY AUDIT
+COMPLETE; RUNTIME UNIMPLEMENTED**.
+
+This docs-only repository audit freezes the next implementation contract. It
+does not change a model, migration, form, view, template, test, dependency,
+application row, permission, notification, or deployment state.
+
+#### Canonical semantic and provenance
+
+The effective required teams for one event are:
+
+```text
+explicit_required_teams(event)
+    = stored ServiceEventRequiredTeam rows
+
+effective_required_worship_team(event)
+    = event.rotation_anchor_team only when
+      inspect_worship_ownership_consistency(event).selected_team_is_eligible
+
+effective_required_teams(event)
+    = explicit_required_teams(event)
+      UNION effective_required_worship_team(event)
+```
+
+The union is by exact `MinistryTeam` identity, so a legacy explicit row for the
+same selected Worship child does not duplicate it. The helper must preserve
+provenance: consumers must be able to distinguish stored explicit teams from
+the one derived Worship team. A later implementation should centralize this in
+`ministry` beside Worship governance/coverage, not add a model property that
+creates an `events -> ministry` domain cycle. It may expose three functions or
+one immutable result carrying `explicit_teams`, `effective_worship_team`, and
+the deterministic de-duplicated union.
+
+The derived Worship requirement is never persisted as a
+`ServiceEventRequiredTeam`. Selecting, changing, or clearing Worship creates or
+deletes no RequiredTeam row. A change from C1 to C2 changes the derived member
+immediately; clearing removes it immediately. It creates no assignment,
+serving, audience, responsibility, permission, or notification fact by itself.
+
+The canonical fail-closed matrix is:
+
+| Worship truth | Derived effective Worship requirement | Coverage meaning |
+| --- | --- | --- |
+| No selection | None | No Worship requirement is inferred |
+| Valid selected, no current Worship assignment | Exact selected child | Missing / selected but unscheduled |
+| Valid selected, one exact current assignment, no active members | Exact selected child | Empty assignment |
+| Valid selected, one exact current assignment with active members | Exact selected child | Scheduled |
+| Invalid/ineligible raw selection | None | Raw anchor is review evidence only, never required coverage |
+| Eligible selected team plus off-team or out-of-scope current Worship assignment | Exact selected child remains intended | Conflict/review required; the conflicting assignment does not satisfy it |
+| Eligible selected team plus multiple current Worship assignments or duplicate selected-team assignments | Exact selected child remains intended | Ambiguous/review required; duplicates do not become clean coverage |
+
+This follows the repository's narrower canonical fact:
+`selected_team_is_eligible` is independent of assignment-consistency state.
+Ownership conflict and ambiguity remain separate warnings. If the selection
+itself ceases to be eligible, there is no derived requirement even if a raw FK
+or current assignment remains.
+
+#### Audited consumers and adoption decision
+
+| Current consumer | Current meaning | Later contract |
+| --- | --- | --- |
+| Single ServiceEvent create/edit Required Ministry Teams picker and `.set()` write | Stored rows only; write validation | Stay explicit-only; picker filters new choices to active assignable teams and preserves existing invalid rows for review |
+| Recurring ServiceEvent form/create | Stored rows only; repeated write | Stay explicit-only; new choices are active assignable teams only |
+| Django Admin RequiredTeam inline | Stored-row setup/repair | Stay explicit-only; never synthesize the selected Worship team and never hide or silently delete legacy invalid rows |
+| ServiceEvent management metadata | Display of stored rows | Keep an explicitly labelled stored/static list; show selected Worship separately |
+| `build_assignment_coverage()` used by ServiceEvent detail, TeamAssignment list/detail, Staff Overview, My Serving leader needs-attention, and the Today leader summary | Required coverage/readiness from stored rows; current assignments become required or additional | Adopt effective-required semantics, with provenance available to presentation consumers |
+| Team Schedule event queryset | Operational reachability: explicit required OR current assignment OR exact eligible selected Worship | Preserve behavior; share `effective_required_worship_team()` as the third resolver rather than broadening permissions |
+| Team Schedule projection | Generic stored coverage plus a dedicated Worship block | Effective Worship participates in coverage state, but remains in the dedicated Worship presentation and is suppressed from duplicate generic rows |
+| Sunday Schedule Board row/column projection | Operational participation from stored required, current assignment, or exact eligible selected Worship; dedicated Worship column | Preserve reachability and the dedicated Worship column; do not add A/C1/C2/C3 generic columns merely because one is effective-required |
+| Staff Overview unassigned-required count | Stored required coverage gaps | Count effective-required gaps, including selected-unscheduled Worship, without counting unselected siblings |
+| My Serving / Today leader needs-attention | Manageable stored required-team missing, empty, or unconfirmed work | Adopt effective-required coverage for the exact manageable selected Worship team; authority remains exact-team management |
+| `audit_trial_setup_readiness` ministry provider | Published upcoming stored required rows lacking a staffed assignment | Adopt effective-required gaps; report derived Worship provenance clearly |
+| Ministry structure readiness `required_event_links_to_non_assignable_team` | Stored-row integrity audit | Remain explicit-only; derived eligible Worship teams are already assignable and create no row |
+| Service-profile audit/reset fingerprint and destructive rebuild accounting | Exact stored rows/deletion scope | Remain explicit-only; this is persisted-data evidence, not operational coverage |
+| Worship Rotation Planner and annual workbook preview downstream-impact projection/fingerprint | Stored non-Worship required rows plus current non-Worship assignments; selected Worship is handled by the proposal's separate before/after and governance facts | Remain explicit-only; feeding the effective union here would misclassify the selected Worship team as downstream and change stale fingerprints |
+| NOTIFY.1G downstream recipient resolution | Active stored non-Worship required teams plus active non-Worship additional assignments; old/new exact Worship teams are a separate class | Remain explicit-only for the downstream class; never feed the effective union into it |
+| Future Bethany static setup command | Persisted static setup | Create only the approved four downstream stored rows; never mirror A/C1/C2/C3 |
+
+Coverage consumers must not treat all Worship-pool children, either Worship
+container, or Digital Ministry container as required. On the Sunday Board and
+Team Schedule, the dedicated Worship presentation owns selected-team state and
+conflict/ambiguity copy. Generic coverage may use the same effective semantic
+internally, but must not render the selected team twice.
+
+Operational reachability remains a separate concern. The current third
+predicate is already correct. A later implementation may replace its local
+eligibility check with `effective_required_worship_team(event)`, or have both
+paths share one resolver, but must not change the reachable event set merely to
+create an abstraction. The selected valid Worship Team remains reachable before
+an assignment exists; the four static downstream teams are reachable before an
+assignment because they have explicit rows.
+
+#### Required-Team picker and legacy-row contract
+
+Current single edit uses `active OR already selected`; recurring creation uses
+`active`. Neither path currently requires `is_assignable=True`, so active
+containers can be selected. Admin's inline autocomplete is also not restricted
+to assignable teams.
+
+The later normal-picker filter is `is_active=True AND is_assignable=True`.
+Single-event edit must union every team already stored for that exact event,
+including inactive or non-assignable rows, so the user can see and deliberately
+review/remove it and an unrelated save does not silently drop it. Recurring
+creation has no legacy initial rows and uses only the strict new-choice filter.
+Admin remains an explicit stored-row repair surface: existing invalid links
+stay visible, while any future restriction on new inline additions must retain
+those existing rows. No save path may silently delete legacy invalid rows.
+
+#### Event-page Worship Team entry and authority
+
+The current ordinary `ServiceEventForm` correctly excludes
+`rotation_anchor_team`. The existing exact-event route
+`/events/<event_id>/worship-team/` already owns current candidate recomputation,
+`can_change_worship_team`, stale/revision handling, current-assignment blocking,
+atomic anchor-only save, `LogEntry`, and NOTIFY.1G. No second anchor write path
+is allowed.
+
+V1 placement is the **ServiceEvent detail page**, not the ordinary edit form.
+For every user who can already open that detail, show a dedicated section:
+
+```text
+Worship Team / 敬拜团队
+Current: <localized team> / 当前：<本地化团队>
+[ Change Worship Team / 更改敬拜团队 ]
+```
+
+With no selection, show `Current: Not selected / 当前：尚未选择`. Show the
+action only when `can_change_worship_team(user, event)` is true, and link to the
+existing selector. Otherwise the section is read-only. Moving the canonical
+entry to detail avoids coupling it to the manager-only edit form and lets an
+independently detail-visible exact planner or applicable pool Lead use the
+narrow action. It grants no new ServiceEvent detail visibility; a planner/pool
+Lead without existing detail visibility continues to enter through Worship
+Planning. The current manager-only edit-page shortcut is not a second write
+path, but V1 should have one canonical Event-page entry on detail rather than
+duplicating the section on both pages.
+
+Authority remains:
+
+| User fact | Ordinary ServiceEvent edit | Governed Worship action | Child roster |
+| --- | --- | --- | --- |
+| Staff/superuser/`CAP_MANAGE_SERVICE_EVENTS` | Yes | Yes | Only under existing assignment authority |
+| Current exact-event planner responsibility | No | Yes for that event | No grant |
+| Active Lead/Coordinator on an applicable Worship pool | No | Yes for applicable event | No descendant grant |
+| Exact Worship child-team Lead/Coordinator | No grant | No grant unless another approved rule also qualifies | Exact child only |
+| Audience/belonging/detail visibility | No grant | No grant | No grant |
+
+#### NOTIFY.1G and Bethany setup contract
+
+NOTIFY.1G already excludes canonical Worship-path teams from its stored-required
+and operational-additional downstream classes. Old/new exact selected-team
+Leads/Coordinators remain the Worship recipient class. Stored active downstream
+RequiredTeam rows remain downstream input. Effective-required Worship must not
+re-enter or duplicate that class, and Digital Ministry receives nothing merely
+because it is a parent.
+
+For exactly 52 canonical `bethany_0930_cm` Sunday events in 2026, the approved
+**static** RequiredTeam set is exactly:
+
+- Lighting Team / 灯光团队;
+- Sound Team / 音控团队;
+- Camera Team / 摄像团队; and
+- Projection Team / 幻灯片组.
+
+Digital Ministry / 影音事工 is a non-assignable container and is not required.
+Neither Worship ministry container is required. Worship A/C1/C2/C3 are never
+static rows for this purpose; only the exact current eligible selected child is
+derived per event.
+
+A separate later command must be dry-run by default, target only the exact
+profile/year/52 expected Sunday identities, and resolve the approved four teams
+by stable reviewed repository identity (explicit IDs/codes resolved from
+current data), never fuzzy names. It must report existing, missing, extra, and
+legacy explicit Worship rows; block missing/ambiguous/inactive/non-assignable
+targets; preserve unrelated/manual rows; report legacy A/C1/C2/C3 for manual
+review rather than delete them; and produce deterministic before/after counts.
+Apply requires an explicit gate and is idempotent, creating only missing
+approved rows. It never creates an assignment/member, changes Worship, audience,
+or unrelated required rows, or emits a Notification.
+
+#### Future focused acceptance matrix
+
+The runtime slice must cover: exact selected child only; C1-to-C2 and clear;
+invalid selection; explicit/derived de-duplication; missing/empty/scheduled;
+unselected siblings absent; conflict/ambiguity separated from eligibility;
+the four static downstream teams; strict picker filtering plus legacy-row
+preservation; detail-page read-only/action states for full manager, exact
+planner, applicable pool Lead, ordinary viewer, and unauthorized viewer; reuse
+of the existing selector; no second anchor write; no RequiredTeam persistence
+from Worship change; no permission/serving/audience mutation; no NOTIFY.1G
+downstream duplication; and the 52-event dry-run/idempotent setup contract with
+zero assignment/member/anchor/audience/notification effects.
+
 ## 15. Test, rollout, and limited-trial strategy
 
 The implementation slices should use focused Django tests for actual GET/POST

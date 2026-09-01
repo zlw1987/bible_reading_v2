@@ -135,8 +135,10 @@ The current code declares `openpyxl==3.1.5` and provides the bounded Slice 8
 annual-workbook parser/upload/preview. Counts are derived from present allowed
 tokens, incomplete mappings and business blockers remain previewable, and an
 OOXML ZIP preflight rejects encrypted or excessive archives before openpyxl.
-It provides no confirmation endpoint, selected-team write, durable import-run
-schema, or assignment import.
+The annual workbook flow now includes the Slice 9 staff/superuser confirmation
+endpoint and selected-team write runtime, and that confirmation is production-
+applied and verified. It still provides no durable `ImportRun` schema and no
+`TeamAssignment`/`TeamAssignmentMember` import.
 
 `created_by` is creation attribution, not durable planner responsibility or
 runtime authority. `MinistryTeamParentLink.parent_church_unit` is a display/
@@ -852,8 +854,16 @@ This direct producer is separate from MO-S.6E. A committed selected-team change
 has explicit before/after facts and can notify immediately. Detecting a later
 roster membership/status change across every mutation path, deciding which
 downstream schedules became stale, and avoiding noisy repeats remains the
-harder MO-S.6E context/version problem. Existing member-facing assignment
-notifications do not solve that cross-team warning.
+harder MO-S.6E problem. Docs/read-only `MO-S.6E.0A` now rejects timestamp-only
+and `scheduling_revision` reuse and freezes a later nullable downstream-reviewed
+canonical-fingerprint contract with unknown/current/different states and
+explicit review acknowledgement. Docs-only `MO-S.6E.0A-FU1` closes unlinked
+display-identity fingerprinting and binds acknowledgement to the protected
+rendered context rather than silently accepting newer truth. Its schema,
+warning UI, SQLite writer/current-truth implementation, and acknowledgement
+runtime remain unimplemented. Existing member-facing assignment notifications
+do not solve that cross-team warning, and MO-S.6E V1 adds no notification
+producer.
 
 Scheduler-facing copy should say **Worship Team** / **敬拜团队**, for example
 "Current Worship Team" and "Change Worship Team." Reserve

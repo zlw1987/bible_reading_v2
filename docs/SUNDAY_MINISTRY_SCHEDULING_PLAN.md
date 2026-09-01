@@ -46,6 +46,14 @@ production confirmation applied the reviewed annual Worship Team selection set.
 A fresh re-upload of the same workbook then produced 52 no-op rows, 0 proposed
 changes, 0 blocked rows, and no confirmation action, confirming that production
 now matches the reviewed workbook.
+Docs/read-only `MO-S.6E.0A` now completes the Worship-context staleness
+repository audit and freezes a nullable downstream-reviewed canonical
+fingerprint contract. MO-S.6E warning runtime remains unimplemented and needs a
+separately approved schema/runtime slice.
+Docs-only `MO-S.6E.0A-FU1` closes two contract gaps without implementing that
+runtime: unlinked/display-name-only roster identity participates through a
+privacy-safe display-identity digest, and acknowledgement is bound to the exact
+canonical context rendered to the reviewer.
 
 ## 1. Purpose
 
@@ -182,9 +190,10 @@ The intended operating sequence is:
    Worship anchor/roster and any historical suggestion, and schedules its own
    team assignment.
 4. Each team owns its own members, status, notes, and confirmation workflow.
-5. A later Worship change does not rewrite downstream assignments. It marks
-   affected downstream rows for human review when the system can establish
-   that the upstream context changed after the downstream row was last saved.
+5. A later Worship change does not rewrite downstream assignments. The future
+   MO-S.6E warning compares current canonical Worship context with the exact
+   context explicitly reviewed by that downstream team; ordinary assignment
+   `updated_at` is not review evidence.
 6. The board provides a shared operational overview, while the owning team
    surfaces remain the places where detailed edits and confirmations occur.
 
@@ -397,34 +406,297 @@ update/idempotency behavior. V1 must not claim that an assignment was a
 only report a current assignment that differs from or matches the current
 suggestion. A new durable provenance field is not approved in MO-S.6A.
 
-## 8. Upstream-change awareness
+## 8. Upstream-change awareness — `MO-S.6E.0A` V1 contract complete
 
-Initially, evaluate a derived warning without schema changes only after an
-implementation audit proves that every relevant Worship roster/member
-mutation updates the timestamp being compared. Candidate evidence includes
-the current Worship assignment/event `updated_at`, the downstream assignment
-`updated_at`, and any already-existing request-flow state. The current model
-has a separate `TeamAssignmentMember` row with `created_at` but no
-`updated_at`, and its save/confirmation path does not itself update the parent
-assignment; therefore timestamps cannot be assumed to prove roster change.
+`MO-S.6E.0A` is a docs/read-only repository audit. It implements no warning,
+field, migration, route, template, notification, or data write. The earlier
+hope for a no-schema timestamp comparison is retained as historical design
+context but is now rejected by repository evidence.
 
-Before shipping a warning, the implementer must trace all supported create,
-remove, replace, confirm, and direct/administrative paths that can change the
-relevant roster. If those paths do not reliably update the compared timestamp,
-stop before material divergence, report the evidence, and present the smallest
-safe alternatives (for example, a deliberately weaker review prompt or a
-future explicit context/version field) for product decision. Do not ship a
-misleading freshness warning and do not add schema in this task.
+### Canonical Worship-context semantic
 
-The warning is advisory only:
+The future comparison must consume the same centralized domain truth as
+`inspect_worship_ownership_consistency()` and `build_worship_contexts()`; it
+must not infer Worship from names, labels, membership, or assignment
+resemblance. The normalized, privacy-safe semantic is:
 
-> Worship scheduling changed after this team assignment was last updated.
-> Review recommended.
+1. the exact selected Worship Team ID, or no selection;
+2. the canonical ownership/presentation state: no selection, unavailable,
+   selected-unscheduled, consistent-empty, consistent-roster, conflict, or
+   ambiguous;
+3. only for one consistent current exact-team assignment, the assignment ID
+   and selected/assigned team ID; and
+4. only for that consistent assignment, a deterministic order-independent set
+   of active roster identities. A user-linked identity contains exact
+   `TeamAssignmentMember.membership_id` plus exact non-null
+   `TeamMembership.user_id`. An unlinked/display-name-only identity contains
+   exact `membership_id`, `user_id=null`, and a privacy-safe digest of the
+   canonical visible display identity. The digest is required because the
+   normal membership form can edit `display_name` while both stored IDs remain
+   unchanged; omitting it would permit a false **current** result after the
+   visible Worship roster changed. A supported membership relink between users
+   or between linked and unlinked identity is also material.
 
-Do not overwrite downstream members, status, notes, or confirmation. If later
-product use shows that timestamps cannot distinguish context changes, evaluate
-a narrow explicit scheduling-context/version field in a later slice. Do not
-claim manual-override provenance or add that schema in this planning task.
+Current means assignment status `scheduled`, `confirmed`, or `prepared`.
+Transitions within that current set are not separate Worship-context facts,
+because the canonical Worship projection does not expose the exact status.
+Moving into or out of the current set is material because it changes assignment
+existence/state. `TeamMembership.is_active=False` removes an assigned member
+from the canonical roster and is material. Deletion of the membership cascades
+the assigned-member row and is also material. Ministry-team activity,
+assignability, configured pool/path usability, event audience applicability,
+and selected-team ownership consistency are material only when they change the
+canonical state above.
+
+The current helper does not filter roster members on Django `User.is_active`;
+therefore user activation/deactivation is not a V1 staleness fact. The schema
+has no TeamMembership end-date field. Member confirmation time/note is not
+shown by the narrow Worship context and is excluded. For a linked membership,
+display-name, username, and user-name label edits remain non-semantic because
+exact `user_id` is the stronger person identity. For an unlinked membership,
+changing the canonical visible display identity is material because no
+stronger person identity exists. Also excluded are team display labels, notes,
+contact/private profile data, confirmation detail, unrelated ServiceEvent
+fields, required-team changes that do not alter canonical Worship governance,
+and downstream-team edits.
+
+The unlinked display-identity normalization must be deterministic and confined
+to signature computation. For a valid `user_id=null` row, V1 uses the exact
+stored `display_name` that `TeamMembership.get_display_name()` canonically
+projects, normalized to Unicode NFC and stripped only of leading/trailing
+whitespace. It must not case-fold, transliterate, fuzzy-match, remove
+punctuation, or use email/contact fallback as a second identity rule. Encode
+that normalized value as UTF-8 in a length-safe/versioned representation and
+derive a domain-separated SHA-256 display-identity digest. The raw value may
+exist transiently while computing the signature but is never persisted on
+`TeamAssignment`; only the final one 64-character canonical Worship-context
+fingerprint is stored. A blank/malformed unlinked `display_name` must fail
+closed rather than use the model method's defensive email fallback or normalize
+to a shared sentinel.
+
+### Supported mutation-path inventory
+
+The audit found the following supported paths capable of changing that
+semantic. `ServiceEvent.updated_at` means the event timestamp;
+`TeamAssignment.updated_at` means the assignment timestamp; `revision` means
+`ServiceEvent.scheduling_revision`.
+
+| Path / transaction owner | Material change | Timestamp/revision evidence |
+| --- | --- | --- |
+| Exact-event Worship Team selector (`events.views.change_worship_team`) | selected team ID | One atomic selector transaction claims revision, saves anchor + event `updated_at`, writes audit, and registers `NOTIFY.1G` after commit. |
+| Worship Rotation Planner confirmation (`confirm_worship_rotation_proposal`) | selected team IDs for changed events | One atomic batch claims every selected event revision; changed anchors save event `updated_at`; no-op selected rows advance revision only. |
+| Annual workbook confirmation (`confirm_worship_workbook`) | selected team IDs for changed exact-profile events | One atomic 52-event batch claims every revision; changed anchors save event `updated_at`; no-op rows advance revision only. The annual path deliberately emits no `NOTIFY.1G`. |
+| Supported direct `ServiceEvent.save()` and ordinary/Admin event save | selected team when changed directly; event lifecycle/audience-driven governance when relevant | Every persisted event save advances event `updated_at` and revision, including unrelated edits. Normal event/Admin forms do not expose `rotation_anchor_team`; Admin displays it read-only. Audience rows are synced after the normal parent save. |
+| Generic assignment create/edit and Team Schedule save | current Worship assignment create, retarget/status transition where allowed, plus roster add/remove/replace/empty transitions through `sync_assignment_members()` | Parent save and child sync share the view transaction. Parent `updated_at` always advances on save; revision advances only for fingerprinted event/team/status changes. Child creates/deletes have no parent/revision hook. |
+| Assignment cancel/reactivate/complete and member-confirmation parent transition | entering/leaving current assignment set is material; confirmation alone is not | Assignment save advances parent `updated_at`; current-set identity/status transitions advance revision. Last-member confirmation may automatically change parent status and `updated_at`/revision without any Worship-context roster change. |
+| ServiceEvent cancellation | current Worship assignment becomes cancelled and scheduling surfaces lose the event | Event save advances event `updated_at`/revision; current assignments are then bulk-updated to cancelled with assignment `updated_at`. |
+| `TeamAssignment.save()` / object delete, Django Admin object edit/delete, Admin bulk delete, `MinistryTeam` delete cascade | assignment create/edit/status/retarget/delete or cascade can change consistent/unscheduled/conflict state | Supported parent save changes assignment `updated_at`; current assignment create/delete/retarget/status changes advance revision. Hard delete leaves no assignment timestamp; delete paths preserve only revision on the surviving event. |
+| `TeamAssignmentMember` model/Admin create, edit, object delete, Admin bulk delete, and normal member sync | roster add/remove/replace/last removal | Add leaves only child `created_at`; child has no `updated_at`. Removal/delete leaves no timestamp or tombstone and does not advance parent/event/revision. Admin/direct child paths bypass the normal parent form save. |
+| Narrow Lighting pilot importer | theoretically material only if its exact resolved Lighting row is also the selected eligible Worship Team for that event | `get_or_create` parent/member writes use model validation; child creation does not advance parent/event/revision. This legacy importer is not the annual Worship importer and is not a general identity mechanism. |
+| TeamMembership create/edit/deactivate/delete through team-member UI, model, or Admin | assigned membership activation, deactivation, deletion, linked-user replacement, or unlinked canonical display-identity change | Membership save advances only membership `updated_at`; deactivation does not touch parent assignment/event/revision. Hard deletion cascades the member row and removes the evidence. Linked-user label and contact/note-only edits are non-semantic; an unlinked visible-identity edit is material. |
+| MinistryTeam metadata and MinistryTeamParentLink setup/Admin paths | activity, assignability, pool/path usability, or selected-team eligibility/governance change | Team saves have their own `updated_at`; parent-link saves have only link `updated_at`. Neither centrally advances event/assignment timestamps or revision. Team deletion has special current-assignment revision coverage, but ordinary metadata/path changes do not. |
+| ServiceEvent audience-row sync/Admin inline and Church Structure unit activity/ancestry changes | applicable pool/ownership state change | Normal event-form sync happens after a parent event save, but audience rows and structure changes have no universal event/assignment timestamp or revision hook. Direct supported Admin/structure paths can therefore change governance projection without centralized time evidence. |
+
+There is no normal application assignment-delete route, but model delete and
+Django Admin object/bulk delete are supported. Raw SQL, arbitrary shell ORM
+bulk mutation, and uninventoried future code remain outside supported write
+guarantees; the chosen current-semantic comparison nevertheless avoids relying
+on upstream mutation instrumentation.
+
+### Timestamp and scheduling-revision verdicts
+
+`latest_worship_context_change_time > downstream.updated_at` is unsafe. Member
+removal, last-member removal, Admin/direct child deletion, membership
+deactivation/deletion, and hierarchy/applicability changes can alter the
+canonical context without any surviving centralized comparable timestamp.
+Hard Worship-assignment deletion leaves only a revision, not a timestamp.
+Conversely, event `updated_at` advances for unrelated event edits.
+
+`TeamAssignment.updated_at` is also not a truthful downstream “last reviewed”
+time. Notes-only/status saves advance it; automatic last-member confirmation
+can advance it through a parent status transition; Admin/direct saves can
+advance it without showing current Worship context. These paths can produce a
+false **current** result, which is worse than an explicit unknown state.
+
+Existing `scheduling_revision` remains the planner concurrency contract, not a
+Worship-context version. It catches selected-team changes, supported current
+assignment creation/deletion/retarget/current-set status changes, team-delete
+cascade, and every ordinary event save. It deliberately misses pure roster
+edits, member confirmation unless parent fingerprinted status changes,
+membership activation/deactivation/deletion, linked-user changes, and several
+governance metadata/path changes. It also catches unrelated event saves and all
+selected no-op planner/workbook claims. MO-S.6E must not broaden or silently
+redefine the frozen A1 contract.
+
+### Minimal design comparison and selected V1
+
+| Option | Verdict |
+| --- | --- |
+| A — event Worship-context timestamp | Rejected. It requires retrofitting every parent, child, membership, hierarchy, audience, Admin, deletion, and cascade path, still needs a truthful downstream review time, and is exposed to false fresh/stale results. |
+| B — source revision + downstream seen revision | Truthful only with broad upstream bump instrumentation. It costs two fields and tightly couples all mutation paths; reusing `scheduling_revision` would violate its existing contract. |
+| C — downstream stored canonical Worship-context fingerprint | **Selected for V1.** One nullable downstream field plus a centralized deterministic current-signature helper detects add/remove/delete/deactivation and governance-state differences without upstream write hooks. It stores no roster names or private data. |
+| D — context-review model | Deferred. One current reviewed snapshot per downstream assignment is sufficient; a generic dependency/history model would be premature scope. |
+
+The later implementation should add one nullable, non-editable Ministry-owned
+field on `TeamAssignment`, named
+`reviewed_worship_context_fingerprint` (64-character SHA-256 hex is the expected
+shape). The canonical helper must serialize an explicit contract version plus
+the normalized semantic above, sort roster identity tuples, and hash the
+result. The current presentation helper should be refactored around one typed
+canonical semantic result so both display and hashing consume the same roster
+query and governance result; a parallel fingerprint-only interpretation is not
+acceptable. A raw unlinked display identity may enter only the transient,
+domain-separated digest computation described above. No raw names, notes,
+email/contact data, confirmation details, or private profile fields enter the
+stored downstream field.
+
+The comparison is intentionally current-semantic, not a historical mutation
+log: if the exact normalized context changes and later returns to the exact
+reviewed semantic, the fingerprints match again. User-facing copy therefore
+must say the current context **differs** from the reviewed context, not claim an
+irreversible historical event.
+
+### Review state and acknowledgement
+
+The field has three fail-closed states:
+
+- null: **review status unknown**; all assignments existing at migration time
+  remain null, with no backfill pretending that a review occurred;
+- non-null and equal to the current signature: **current / reviewed**; and
+- non-null and different: **review recommended**.
+
+No downstream assignment means no review state or warning. No selection,
+selected-unscheduled, consistent empty/roster, unavailable/conflict, and
+ambiguous are all deterministic roster-safe current signatures. A conflict or
+ambiguity keeps its existing independent governance warning even after the
+downstream team acknowledges having seen that state. If the shared helper
+cannot produce a valid signature, fail closed as unknown; never clear a warning
+from partial/fuzzy truth.
+
+For this V1, a downstream assignment is a current operational assignment in an
+already-visible coordination row whose team is not the event's selected
+Worship Team and whose canonical primary path does not resolve to a configured
+Worship rotation pool. This matches the existing `NOTIFY.1G` Worship/downstream
+classification boundary and avoids treating another Worship-pool child or an
+ownership-conflict row as a downstream consumer. Required and additional
+non-Worship assignments are both eligible; RequiredTeam alone, with no
+assignment, has no reviewed state.
+
+V1 uses **Save plus explicit Mark Reviewed**. A successful downstream save may
+record the current signature only on a scheduling surface that actually showed
+the same canonical Worship context and rechecked exact-team authority/current
+truth in the write transaction. Generic/Admin/direct saves must not imply
+review. Team Schedule also provides a small POST-only **Mark Reviewed** action
+so a lead can acknowledge the current context without a fake roster, note, or
+status edit. That action changes only the fingerprint (and normal assignment
+`updated_at` if implemented through model save), grants no authority, uses
+`can_manage_team_assignment_for_team` for the exact downstream team, and must
+not advance `scheduling_revision` when event/team/status are unchanged. The
+Sunday Board remains the bounded overview and links an authorized owner to Team
+Schedule for review; MO-S.6E does not turn the GET-only Board into a new write
+authority.
+
+Both acknowledgement-capable Team Schedule Save and **Mark Reviewed** must bind
+the POST to the exact canonical Worship context rendered to that reviewer. The
+review surface carries `expected_worship_context_fingerprint` inside an
+integrity-protected, user/assignment/event/team-bound, bounded representation;
+a freely editable hidden digest alone is insufficient. The protected state
+must also bind the prior persisted downstream review/concurrency baseline and
+expire; after a successful write, the changed fingerprint/assignment baseline
+must make replay stale. Existing `TeamAssignment.updated_at` may participate
+only as optimistic request-version evidence, never as proof that Worship
+context was reviewed. On POST, the future runtime must:
+
+1. reauthorize exact-team assignment management;
+2. enter the repository-supported transaction/write boundary;
+3. reload and recompute current canonical Worship context;
+4. compare its fingerprint with the protected expected fingerprint that was
+   rendered; and
+5. only when they are equal, store
+   `reviewed_worship_context_fingerprint = current`.
+
+If current and expected differ, the request fails closed: it does not change
+the reviewed fingerprint, does not claim current/reviewed, and requires a
+refresh and new review. An ordinary Team Schedule Save must not silently
+acknowledge the newer context; V1 should reject that stale save atomically
+rather than commit a downstream arrangement reviewed against older context.
+Replay or a stale/tampered expected representation cannot clear a warning. The
+product meaning is exactly **I reviewed the Worship context shown to me**, never
+**the server accepted a newer context that appeared after render**.
+
+This docs contract does not claim that `select_for_update()` provides a row
+lock on target SQLite. The later implementation slice must establish and prove
+the correct SQLite writer/current-truth boundary using repository-supported
+transaction behavior before it stores acknowledgement. A review-only write
+must not advance `ServiceEvent.scheduling_revision` merely for MO-S.6E state,
+emit Notification, mutate assignment members/status/notes/audience/
+RequiredTeam, or grant authority.
+
+### Presentation, authority, and side-effect contract
+
+Show the advisory state only on already-authorized Team Schedule and Sunday
+Board coordination rows that already include the downstream assignment. It
+does not establish row/event/assignment visibility. Preserve Board bounded
+scheduler scope, Team Schedule exact-team scope, general ServiceEvent/detail
+permissions, and exact-team management authority.
+
+Recommended bilingual different-state copy:
+
+> Worship scheduling is different from what this team last reviewed. Review recommended.
+>
+> 当前敬拜安排与本团队上次审核时不同。建议重新检查本团队安排。
+
+Unknown-state copy:
+
+> Worship review status is not available for this existing assignment.
+>
+> 此现有安排没有可用的敬拜审核状态。
+
+Rendered-context stale copy:
+
+> Worship scheduling changed while you were reviewing. Refresh and review the current arrangement.
+>
+> 敬拜安排在您审核期间发生了变化。请刷新页面并重新检查当前安排。
+
+Do not show fingerprints/revisions, private Worship notes, contacts,
+confirmation detail, internal model terminology, or unapproved roster data.
+MO-S.6E creates no Notification. `NOTIFY.1G` remains the separate committed
+selected-team-change producer; V1 staleness is UI/advisory only. A Worship
+change never edits/cancels downstream assignments or members, resets
+confirmation, changes notes/RequiredTeam/audience/serving/permissions, or copies
+members. The flow is only **detect -> warn -> human review**.
+
+### Future implementation test contract
+
+The later approved runtime slice must focus on:
+
+- selected team change; Worship assignment create/delete; member add/remove/
+  replace/last removal; membership active/inactive/delete and linked-user
+  change; unlinked canonical display-identity change; and material team/pool/
+  path/audience governance-state changes;
+- linked-membership display-name and user-name label, notes, confirmation
+  detail, and operational status transitions within the current status set
+  remaining non-semantic;
+- review before change => different, review after change => current, null
+  legacy => unknown, successful Team Schedule save/explicit acknowledgement,
+  exact-team allow, and unrelated-user deny;
+- no selection, selected-unscheduled, consistent empty/roster, unavailable,
+  conflict, ambiguity, no downstream assignment, and deterministic restoration
+  to the exact reviewed semantic;
+- deterministic versioned normalization, order independence, stable exact IDs,
+  linked/unlinked identity distinction, Unicode/whitespace behavior, unlinked
+  display-digest change/stability, no raw name persistence, and fixed SHA-256
+  output;
+- render context A then mutate upstream to B: Mark Reviewed rejects and leaves
+  the reviewed fingerprint unchanged; the ordinary Team Schedule Save cannot
+  silently acknowledge B; unchanged A acknowledges successfully; replayed,
+  stale, or tampered expected context cannot clear a warning; and target-like
+  SQLite concurrency proves the supported writer/current-truth boundary without
+  a row-lock claim;
+- bilingual Team Schedule/Board rendering and zero privacy expansion; and
+- zero automatic assignment/member/confirmation/notes/RequiredTeam/audience/
+  serving/permission writes, zero Notification, and no change to the existing
+  `scheduling_revision` contract.
 
 ## 9. Controlled Excel import
 
@@ -1007,7 +1279,9 @@ tests and limited-trial review pass.
   an omitted or ineligible selection remains visible as a blocked row rather
   than preventing preview. The setup command remains separate from importer
   runtime. `MO-S.6D-SLICE9.0A` freezes the confirmation-write contract, and
-  `MO-S.6D-SLICE9.1A` implements it with local verification only.
+  `MO-S.6D-SLICE9.1A` is production-applied and product-owner verified,
+  including a same-workbook re-upload with 52 no-op rows, zero proposed
+  changes, zero blocked rows, and no confirmation action.
 
 ### MO-S.6D-PROFILE-SETUP.0A — Bethany 09:30 Target Event Readiness Audit
 
@@ -1875,22 +2149,38 @@ re-upload of the same workbook produced 52 no-op rows, 0 proposed changes,
 
 ### MO-S.6E — Worship Change / Downstream Review Warning
 
+- Status: `MO-S.6E.0A` **WORSHIP CONTEXT STALENESS AUDIT / V1 CONTRACT
+  COMPLETE**; docs-only `MO-S.6E.0A-FU1` closes display-identity and rendered-
+  context acknowledgement binding. MO-S.6E runtime remains **UNIMPLEMENTED**.
 - Goal: make possible downstream staleness visible without automation.
-- Scope: conservative derived warning first; later version field only if needed.
+- V1 decision: one nullable
+  `TeamAssignment.reviewed_worship_context_fingerprint`, computed from the
+  centralized versioned privacy-safe canonical Worship semantic. Null means
+  unknown; equal means current/reviewed; unequal means review recommended.
+  Unlinked/display-name-only roster identity contributes a privacy-safe digest
+  of its canonical visible identity; no raw name is stored downstream.
+- Review workflow: successful save only on a surface that showed/revalidated
+  the same context, plus a POST-only exact-team **Mark Reviewed** action so no
+  fake edit is required. Both paths must compare recomputed current context with
+  an integrity-protected expected fingerprint for what the reviewer actually
+  saw and fail closed on mismatch/replay.
 - Out of scope: downstream rewrite, automatic rescheduling, and notification
   fanout. A known committed before/after Worship Team selection may receive a
   separately implemented `NOTIFY.1G` producer under the docs-complete
   `NOTIFY.1G-0A` contract; it does not solve this harder
   later-roster-change staleness problem.
-- Likely components: event/team context helper and board/team schedule copy.
-- Schema impact: none initially; explicit context/version field deferred.
+- Future components: centralized canonical signature helper, one nullable
+  TeamAssignment field/migration, Team Schedule acknowledgement, and bounded
+  Board/Team Schedule copy.
+- Schema impact: one later nullable fingerprint field; no review-history model
+  or upstream timestamp/revision field in V1.
 - Security: warning reveals only authorized schedule context.
-- Tests: upstream-before-downstream, upstream-after-downstream, no Worship
-  assignment, roster mutation-path timestamp audit, unsupported timestamp
-  evidence, and unknown/ambiguous freshness state.
-- Acceptance: warning is advisory, shipped only where every relevant roster
-  mutation is proven to update the compared timestamp, and never mutates
-  assignments.
+- Tests: the Section 8 normalization, upstream mutation, tri-state,
+  acknowledgement, authority/privacy, zero-notification, and zero-auto-mutation
+  contract.
+- Acceptance: warning is advisory, compares stored reviewed canonical semantic
+  to current canonical semantic, preserves unknown legacy state, and never
+  mutates downstream scheduling truth.
 - Dependency: MO-S.6C and stable board context.
 
 ### MO-S.6F — Excel Assignment Import
@@ -1956,14 +2246,14 @@ These are genuine future decisions, not hidden implementation assumptions:
 
 The direct Worship Team change notification is not an open architecture item:
 `NOTIFY.1G-0A` closed its contract and `NOTIFY.1G` implements that bounded
-runtime. MO-S.6E roster-change staleness remains a separate future problem.
+runtime. `MO-S.6E.0A` now closes the separate docs-only roster-change
+staleness audit/V1 contract; its runtime remains a future separately approved
+problem.
 
 - Which teams participate in the default Sunday board, and how are combined or
   special services represented?
 - Which additional cross-team details, if any, may be added beyond the
   approved narrow Sunday coordination view?
-- Can existing `updated_at` values produce a trustworthy review warning after
-  all roster mutation paths are audited, or is a context/version field needed?
 - What exact annual workbook template/version and stable event key will the
   church support?
 - Should import preview/results be retained durably for audit, or remain a

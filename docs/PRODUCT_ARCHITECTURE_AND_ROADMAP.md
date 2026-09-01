@@ -7,7 +7,13 @@ serving-assignment producer, the studies-owned explicit Bible Study meeting-role
 producer, and the Community Activities-owned primary-creator review-outcome
 producer after `REPOSITORY-AUDIT-CLOSEOUT.1A`), plus the docs-only
 `NOTIFY.1G-0A` contract and implemented `NOTIFY.1G` Direct Worship Team Change
-producer. Church Calendar V1 remains implemented
+producer. Docs/read-only `MO-S.6E.0A` now completes the Worship-context
+staleness repository audit and freezes the later V1 nullable downstream-
+reviewed canonical-fingerprint contract; MO-S.6E runtime remains unimplemented.
+Docs-only `MO-S.6E.0A-FU1` closes unlinked/display-name-only identity through a
+privacy-safe display digest and requires acknowledgement to match the protected
+canonical context actually rendered to the reviewer; it adds no runtime.
+Church Calendar V1 remains implemented
 as a model-free, read-only aggregation surface with source providers, month/day
 UI, grouping, limited-trial baseline QA closure, and personal explicit-serving
 overlays through `CHURCH-CALENDAR.2B`. Calendar remains read-only and does not
@@ -677,6 +683,13 @@ Future pieces include:
   freezes the separate confirmation contract; `MO-S.6D-SLICE9.1A` is production-applied and product-owner verified,
 including a fresh same-workbook re-upload showing 52 no-op rows, 0 proposed
 changes, 0 blocked rows, and no confirmation action.
+  Docs/read-only `MO-S.6E.0A` is also complete: repository timestamps and
+  `scheduling_revision` are not truthful complete review-state mechanisms, so
+  the later V1 warning is frozen around one nullable downstream-reviewed,
+  privacy-safe canonical Worship-context fingerprint plus explicit review
+  acknowledgement. Docs-only FU1 adds unlinked visible-identity digesting and
+  protected rendered-context comparison before acknowledgement. Runtime/schema/
+  UI remain separately unimplemented.
   The bounded
   cross-team
   coordination projection replaces the older generic “multi-team dashboard”
@@ -1066,6 +1079,13 @@ batch/audit decision, `MO-S.6D-1D-D-1A` implements read-only preview, and
 optimistic confirmation/shared audit `1B-B` are implemented. Any remaining governance
 prerequisite or later MO-S.6 runtime slice
 requires separate explicit approval and repository-truth review.
+Docs/read-only `MO-S.6E.0A` is complete. It rejects timestamp-only and
+`scheduling_revision` reuse, freezes a nullable downstream-reviewed canonical
+fingerprint with unknown/current/different states and a future POST-only exact-
+team acknowledgement, and authorizes no runtime, migration, UI, notification,
+or data write.
+Docs-only `MO-S.6E.0A-FU1` further closes the display-name-only false-current
+case and the render-to-POST review binding without changing that status.
 
 Still deferred unless separately approved and supported by real use:
 - Availability
@@ -1396,13 +1416,15 @@ signed reviewed proposal, exact 52-row all-or-nothing scheduling-revision CAS,
 current-truth recomputation, changed-anchor-only save, shared-operation
 per-changed-event `LogEntry`, no-`ImportRun`, no-notification, replay-safe,
 request-scoped-result contract. `MO-S.6D-SLICE9.1A` now implements that contract
-locally: fully accepted Slice 8 preview to distinct proposal, POST-only staff/
+and is production-applied/product-owner verified: fully accepted Slice 8
+preview to distinct proposal, POST-only staff/
 superuser confirmation, all-52 revision CAS, current-truth recomputation,
 changed-anchor-only saves, changed-only shared-operation audit, stale-safe
 replay, no ImportRun, and no annual-import notification. Focused rollback/
 current-truth tests, two-scenario file-backed SQLite concurrency, and English
-desktop/Chinese mobile rendered QA passed. This is not production APPLY/smoke
-evidence.
+desktop/Chinese mobile rendered QA passed. The reviewed production confirmation
+was followed by a same-workbook re-upload showing 52 no-op rows, zero proposed
+changes, zero blocked rows, and no confirmation action.
 Remaining MO-S.6D and later slices are not
 authorized by the governance closure or these foundations. Availability,
 swaps, reminders, automatic
@@ -1453,7 +1475,11 @@ Notification expansion by default.
 
 The separately approved docs-only `NOTIFY.1G-0A` architecture gate and bounded
 `NOTIFY.1G` implementation are complete. Broader notification producers and
-MO-S.6E remain separately deferred.
+MO-S.6E notifications remain separately deferred. Docs/read-only
+`MO-S.6E.0A` is complete; its fingerprint-based warning runtime, schema,
+acknowledgement action, and presentation remain unimplemented pending a
+separately approved slice. Docs-only FU1 closes display-identity and protected
+rendered-context binding only; it is not runtime implementation.
 
 Short next-candidate list:
 
@@ -1461,6 +1487,10 @@ Short next-candidate list:
   product-owner verified through `MO-S.6D-SLICE9.1A`; assignment/member import,
   annual-import notifications, arbitrary workbooks, and durable import history
   remain separately unapproved;
+- MO-S.6E.0A Worship-context staleness audit/V1 contract is complete, including
+  docs-only FU1 display-identity and rendered-context binding; review
+  and separately approve the nullable fingerprint implementation slice before
+  any runtime/schema/UI work;
 - review Church Calendar limited-trial feedback before separately approving any
   broader calendar behavior such as notifications, external sync, attendance,
   authoring/management, staff dashboards, or CommunityActivity-to-ServiceEvent

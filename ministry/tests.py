@@ -3771,13 +3771,20 @@ class TeamAssignmentV1Tests(TestCase):
         self.event.save()
         self.client.login(username="assignment_lead", password="testpass123")
 
-        response = self.client.post(
+        schedule_url = (
             f"{reverse('team_schedule', args=[self.team.id])}"
-            f"?event={self.event.id}&suggest=anchor",
+            f"?event={self.event.id}&suggest=anchor"
+        )
+        review_token = self.client.get(schedule_url).context[
+            "active_form"
+        ].initial["worship_review_state"]
+        response = self.client.post(
+            schedule_url,
             {
                 "assigned_members": [self.second_membership.id],
                 "status": TeamAssignment.STATUS_SCHEDULED,
                 "notes": "",
+                "worship_review_state": review_token,
             },
         )
 
@@ -3811,13 +3818,20 @@ class TeamAssignmentV1Tests(TestCase):
         )
         self.client.login(username="assignment_lead", password="testpass123")
 
-        response = self.client.post(
+        schedule_url = (
             f"{reverse('team_schedule', args=[self.team.id])}"
-            f"?event={self.event.id}&suggest=team",
+            f"?event={self.event.id}&suggest=team"
+        )
+        review_token = self.client.get(schedule_url).context[
+            "active_form"
+        ].initial["worship_review_state"]
+        response = self.client.post(
+            schedule_url,
             {
                 "assigned_members": [self.second_membership.id],
                 "status": TeamAssignment.STATUS_SCHEDULED,
                 "notes": "Edited before save.",
+                "worship_review_state": review_token,
             },
         )
 
@@ -3920,12 +3934,19 @@ class TeamAssignmentV1Tests(TestCase):
         self.event.required_teams.add(self.team)
         self.client.login(username="assignment_lead", password="testpass123")
 
+        schedule_url = (
+            f"{reverse('team_schedule', args=[self.team.id])}?event={self.event.id}"
+        )
+        review_token = self.client.get(schedule_url).context[
+            "active_form"
+        ].initial["worship_review_state"]
         response = self.client.post(
-            f"{reverse('team_schedule', args=[self.team.id])}?event={self.event.id}",
+            schedule_url,
             {
                 "assigned_members": [self.membership.id, self.second_membership.id],
                 "status": TeamAssignment.STATUS_SCHEDULED,
                 "notes": "Schedule from workspace.",
+                "worship_review_state": review_token,
             },
         )
 
@@ -3943,12 +3964,19 @@ class TeamAssignmentV1Tests(TestCase):
         assignment = self.create_assignment()
         self.client.login(username="assignment_lead", password="testpass123")
 
+        schedule_url = (
+            f"{reverse('team_schedule', args=[self.team.id])}?event={self.event.id}"
+        )
+        review_token = self.client.get(schedule_url).context[
+            "active_form"
+        ].initial["worship_review_state"]
         response = self.client.post(
-            f"{reverse('team_schedule', args=[self.team.id])}?event={self.event.id}",
+            schedule_url,
             {
                 "assigned_members": [self.second_membership.id],
                 "status": TeamAssignment.STATUS_PREPARED,
                 "notes": "Updated through event action.",
+                "worship_review_state": review_token,
             },
         )
 
@@ -3967,12 +3995,20 @@ class TeamAssignmentV1Tests(TestCase):
         assignment = self.create_assignment()
         self.client.login(username="assignment_lead", password="testpass123")
 
+        schedule_url = (
+            f"{reverse('team_schedule', args=[self.team.id])}"
+            f"?assignment={assignment.id}"
+        )
+        review_token = self.client.get(schedule_url).context[
+            "active_form"
+        ].initial["worship_review_state"]
         response = self.client.post(
-            f"{reverse('team_schedule', args=[self.team.id])}?assignment={assignment.id}",
+            schedule_url,
             {
                 "assigned_members": [self.membership.id, self.second_membership.id],
                 "status": TeamAssignment.STATUS_CONFIRMED,
                 "notes": "Edited from workspace.",
+                "worship_review_state": review_token,
             },
         )
 

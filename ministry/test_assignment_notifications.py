@@ -155,6 +155,16 @@ class AssignmentNotificationProducerTests(TestCase):
         return data
 
     def _post_with_payloads(self, url, data):
+        if "/schedule/" in url:
+            rendered = self.client.get(url)
+            active_form = rendered.context.get("active_form")
+            if active_form is not None:
+                data = {
+                    **data,
+                    "worship_review_state": active_form.initial.get(
+                        "worship_review_state", ""
+                    ),
+                }
         payloads = []
         with notification_sink_override_for_tests(payloads.append):
             with self.captureOnCommitCallbacks(execute=True):

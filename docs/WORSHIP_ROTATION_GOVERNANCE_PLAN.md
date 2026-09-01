@@ -855,15 +855,15 @@ has explicit before/after facts and can notify immediately. Detecting a later
 roster membership/status change across every mutation path, deciding which
 downstream schedules became stale, and avoiding noisy repeats remains the
 harder MO-S.6E problem. Docs/read-only `MO-S.6E.0A` now rejects timestamp-only
-and `scheduling_revision` reuse and freezes a later nullable downstream-reviewed
+and `scheduling_revision` reuse and freezes a nullable downstream-reviewed
 canonical-fingerprint contract with unknown/current/different states and
 explicit review acknowledgement. Docs-only `MO-S.6E.0A-FU1` closes unlinked
 display-identity fingerprinting and binds acknowledgement to the protected
-rendered context rather than silently accepting newer truth. Its schema,
-warning UI, SQLite writer/current-truth implementation, and acknowledgement
-runtime remain unimplemented. Existing member-facing assignment notifications
-do not solve that cross-team warning, and MO-S.6E V1 adds no notification
-producer.
+rendered context rather than silently accepting newer truth. `MO-S.6E.1A` now
+implements the additive nullable schema, shared canonical signature, bounded
+Team Schedule/Board UI, POST-only acknowledgement, and real SQLite first-write/
+current-truth hard gate. Existing member-facing assignment notifications do not
+solve that cross-team warning, and MO-S.6E V1 adds no notification producer.
 
 Scheduler-facing copy should say **Worship Team** / **敬拜团队**, for example
 "Current Worship Team" and "Change Worship Team." Reserve

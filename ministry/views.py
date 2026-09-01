@@ -6,14 +6,14 @@ from urllib.parse import urlencode
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import ValidationError
-from django.db import transaction
+from django.db import OperationalError, transaction
 from django.db.models import Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.dateparse import parse_date
 from django.utils.http import url_has_allowed_host_and_scheme
-from django.views.decorators.http import require_GET
+from django.views.decorators.http import require_GET, require_POST
 
 from accounts.language import get_user_language
 from accounts.ordering import order_team_memberships_by_visible_identity
@@ -101,7 +101,22 @@ from .services.lighting_pilot_import import (
     read_csv_file,
 )
 from .services.sunday_schedule_board import build_sunday_schedule_board
-from .services.worship_context import build_worship_contexts
+from .services.worship_context import (
+    build_canonical_worship_contexts,
+    build_worship_contexts,
+)
+from .services.worship_context_review import (
+    WorshipContextReviewState,
+    WorshipReviewStateError,
+    classify_downstream_worship_review,
+    decode_rendered_worship_review_state,
+    establish_worship_review_writer_barrier,
+    is_downstream_worship_review_assignment,
+    is_downstream_worship_review_target,
+    mint_rendered_worship_review_state,
+    require_rendered_context_is_current,
+    signature_from_canonical_context,
+)
 from .services.worship_governance import inspect_worship_ownership_consistency
 from .services.worship_assignment_guard import (
     validate_worship_assignment_write,
@@ -170,6 +185,11 @@ def ministry_ui_text(language, key):
             "scheduling_retry": (
                 "Scheduling changed or is busy. Reload the current state and try again."
             ),
+            "worship_review_stale": (
+                "Worship scheduling changed while you were reviewing. "
+                "Refresh and review the current arrangement."
+            ),
+            "worship_reviewed": "Worship context marked reviewed.",
         },
         "zh": {
             "no_permission": "你没有管理事工团队的权限。",
@@ -207,6 +227,10 @@ def ministry_ui_text(language, key):
             "team_not_assignable": "这个事工单位目前不可用于服事排班。",
             "board_no_permission": "你没有查看主日服事排班总览的权限。",
             "scheduling_retry": "排班资料已有变化或系统正忙。请刷新当前状态后重试。",
+            "worship_review_stale": (
+                "敬拜安排在您审核期间发生了变化。请刷新页面并重新检查当前安排。"
+            ),
+            "worship_reviewed": "敬拜安排已标记为已审核。",
         },
     }
     return labels.get(language, labels["en"])[key]
@@ -1408,6 +1432,80 @@ def sunday_schedule_board(request):
 
 
 @login_required
+@require_POST
+def mark_worship_context_reviewed(request, assignment_id):
+    language = get_user_language(request)
+    assignment = get_object_or_404(
+        TeamAssignment.objects.select_related(
+            "service_event",
+            "service_event__rotation_anchor_team",
+            "ministry_team",
+        ),
+        pk=assignment_id,
+    )
+    redirect_url = (
+        f"{reverse('team_schedule', args=[assignment.ministry_team_id])}"
+        f"?assignment={assignment.pk}"
+    )
+    if not can_manage_team_assignment_for_team(
+        request.user, assignment.ministry_team
+    ):
+        messages.error(
+            request, ministry_ui_text(language, "no_assignment_permission")
+        )
+        return redirect("ministry_team_list")
+    if not is_downstream_worship_review_assignment(assignment):
+        messages.error(
+            request, ministry_ui_text(language, "assignment_not_available")
+        )
+        return redirect(redirect_url)
+
+    try:
+        state = decode_rendered_worship_review_state(
+            request.POST.get("worship_review_state", ""),
+            user=request.user,
+            event_id=assignment.service_event_id,
+            team_id=assignment.ministry_team_id,
+            assignment_id=assignment.pk,
+        )
+        with transaction.atomic():
+            current_assignment = TeamAssignment.objects.select_related(
+                "service_event",
+                "service_event__rotation_anchor_team",
+                "ministry_team",
+            ).get(pk=assignment.pk)
+            _validate_current_assignment_authority(request.user, current_assignment)
+            establish_worship_review_writer_barrier(state)
+            current_assignment = TeamAssignment.objects.select_related(
+                "service_event",
+                "service_event__rotation_anchor_team",
+                "ministry_team",
+            ).get(pk=assignment.pk)
+            if not is_downstream_worship_review_assignment(current_assignment):
+                raise WorshipReviewStateError("Assignment is no longer downstream.")
+            signature = require_rendered_context_is_current(state)
+            if (
+                current_assignment.reviewed_worship_context_fingerprint
+                != signature.fingerprint
+            ):
+                TeamAssignment.objects.filter(pk=current_assignment.pk).update(
+                    reviewed_worship_context_fingerprint=signature.fingerprint,
+                    updated_at=timezone.now(),
+                )
+    except (
+        TeamAssignment.DoesNotExist,
+        WorshipReviewStateError,
+        OperationalError,
+    ):
+        messages.error(
+            request, ministry_ui_text(language, "worship_review_stale")
+        )
+    else:
+        messages.success(request, ministry_ui_text(language, "worship_reviewed"))
+    return redirect(redirect_url)
+
+
+@login_required
 def team_schedule(request, team_id):
     language = get_user_language(request)
     team = get_object_or_404(MinistryTeam, id=team_id)
@@ -1617,7 +1715,52 @@ def team_schedule(request, team_id):
                 if not assignment.pk:
                     assignment.created_by = request.user
                 try:
+                    rendered_review_state = None
+                    review_target = is_downstream_worship_review_target(
+                        active_form_event,
+                        team,
+                        proposed_status=assignment.status,
+                    )
+                    if review_target:
+                        rendered_review_state = (
+                            decode_rendered_worship_review_state(
+                                active_form.cleaned_data.get(
+                                    "worship_review_state", ""
+                                ),
+                                user=request.user,
+                                event_id=active_form_event.pk,
+                                team_id=team.pk,
+                                assignment_id=assignment.pk,
+                            )
+                        )
                     with transaction.atomic():
+                        if review_target:
+                            _validate_current_assignment_authority(
+                                request.user, assignment
+                            )
+                            establish_worship_review_writer_barrier(
+                                rendered_review_state
+                            )
+                            current_event = ServiceEvent.objects.select_related(
+                                "rotation_anchor_team"
+                            ).get(pk=active_form_event.pk)
+                            current_team = MinistryTeam.objects.get(pk=team.pk)
+                            if not is_downstream_worship_review_target(
+                                current_event,
+                                current_team,
+                                proposed_status=assignment.status,
+                            ):
+                                raise WorshipReviewStateError(
+                                    "Assignment is no longer downstream."
+                                )
+                            signature = require_rendered_context_is_current(
+                                rendered_review_state
+                            )
+                            assignment.service_event = current_event
+                            assignment.ministry_team = current_team
+                            assignment.reviewed_worship_context_fingerprint = (
+                                signature.fingerprint
+                            )
                         assignment.save(
                             _post_scheduling_revision_validate=lambda current: (
                                 _validate_current_assignment_authority(
@@ -1644,6 +1787,11 @@ def team_schedule(request, team_id):
                         None,
                         ministry_ui_text(language, "scheduling_retry"),
                     )
+                except (WorshipReviewStateError, OperationalError):
+                    active_form.add_error(
+                        None,
+                        ministry_ui_text(language, "worship_review_stale"),
+                    )
                 else:
                     messages.success(
                         request, ministry_ui_text(language, "assignment_saved")
@@ -1666,9 +1814,13 @@ def team_schedule(request, team_id):
                 ),
             )
 
-    worship_contexts = build_worship_contexts(
+    canonical_worship_contexts = build_canonical_worship_contexts(
         events,
         ownership_inspections=ownership_inspections,
+    )
+    worship_contexts = build_worship_contexts(
+        events,
+        canonical_contexts=canonical_worship_contexts,
     )
     schedule_rows = []
     for event in events:
@@ -1678,6 +1830,34 @@ def team_schedule(request, team_id):
         if not rows and not is_valid_selected_worship_team:
             continue
         assignment = event_assignments[0] if event_assignments else None
+        signature = signature_from_canonical_context(
+            canonical_worship_contexts[event.id]
+        )
+        review_state = (
+            classify_downstream_worship_review(assignment, signature)
+            if assignment is not None
+            else None
+        )
+        review_token = ""
+        if (
+            signature.available
+            and is_downstream_worship_review_target(
+                event,
+                team,
+                proposed_status=(
+                    assignment.status
+                    if assignment is not None
+                    else TeamAssignment.STATUS_SCHEDULED
+                ),
+            )
+        ):
+            review_token = mint_rendered_worship_review_state(
+                user=request.user,
+                event=event,
+                team=team,
+                assignment=assignment,
+                signature=signature,
+            )
         anchor_suggestion = find_copy_forward_suggestion(event, team, MODE_ANCHOR)
         team_suggestion = find_copy_forward_suggestion(event, team, MODE_TEAM)
         schedule_rows.append(
@@ -1693,6 +1873,8 @@ def team_schedule(request, team_id):
                 ),
                 "coverage_rows": rows,
                 "assignment": assignment,
+                "worship_review_state": review_state,
+                "worship_review_token": review_token,
                 "action_url": (
                     f"{base_path}?{schedule_query_string(filters, assignment=assignment.id)}"
                     if assignment
@@ -1716,6 +1898,20 @@ def team_schedule(request, team_id):
                 ),
             }
         )
+
+    if active_form is not None and not active_form.is_bound and active_form_event:
+        active_row = next(
+            (
+                row
+                for row in schedule_rows
+                if row["event"].pk == active_form_event.pk
+            ),
+            None,
+        )
+        if active_row is not None:
+            active_form.initial["worship_review_state"] = active_row[
+                "worship_review_token"
+            ]
 
     return render(
         request,

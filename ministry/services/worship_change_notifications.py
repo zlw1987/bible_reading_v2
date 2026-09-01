@@ -16,7 +16,7 @@ from core.notification_delivery import emit_notification
 
 from ..models import MinistryTeam, TeamAssignment
 from ..permissions import current_ministry_management_role_assignments
-from .worship_governance import resolve_worship_rotation_pool_for_team
+from .worship_governance import is_canonical_worship_rotation_team
 
 
 CURRENT_DOWNSTREAM_ASSIGNMENT_STATUSES = (
@@ -46,13 +46,6 @@ def _localized_date(value, language):
     if language == "zh":
         return f"{local_date.year}年{local_date.month}月{local_date.day}日"
     return local_date.strftime("%b %d, %Y").replace(" 0", " ")
-
-
-def _is_canonical_worship_team(team):
-    # A resolved configured pool excludes a downstream team even when the pool
-    # is currently unusable. Malformed/unresolved paths fail closed without
-    # display-name, team-kind, or secondary-path guesses.
-    return resolve_worship_rotation_pool_for_team(team).pool is not None
 
 
 def _team_name(team_id, *, language, teams_by_id):
@@ -105,7 +98,7 @@ def _recipient_change_subsets(changes):
     ).distinct()
     for team in required_teams:
         teams_by_id[team.pk] = team
-        if _is_canonical_worship_team(team):
+        if is_canonical_worship_rotation_team(team):
             continue
         for event_id in team.required_event_links.filter(
             service_event_id__in=event_ids
@@ -120,7 +113,7 @@ def _recipient_change_subsets(changes):
     for assignment in assignments:
         team = assignment.ministry_team
         teams_by_id[team.pk] = team
-        if not _is_canonical_worship_team(team):
+        if not is_canonical_worship_rotation_team(team):
             qualifying_team_ids[assignment.service_event_id].add(team.pk)
 
     all_qualifying_team_ids = set().union(*qualifying_team_ids.values())

@@ -132,6 +132,19 @@
                             {% endfor %}
                         </div>
                         {% endif %}
+                        {% if cell.worship_review_state == "unknown" %}
+                        <p class="sunday-board-cell-note status status-warning">
+                            {% if language == "zh" %}敬拜审核状态不可用{% else %}Worship review status unavailable{% endif %}
+                        </p>
+                        {% elif cell.worship_review_state == "review_recommended" %}
+                        <p class="sunday-board-cell-note status status-warning">
+                            {% if language == "zh" %}建议重新检查敬拜安排{% else %}Worship review recommended{% endif %}
+                        </p>
+                        {% elif cell.worship_review_state == "current" %}
+                        <p class="sunday-board-cell-note muted">
+                            {% if language == "zh" %}敬拜安排已审核{% else %}Worship context reviewed{% endif %}
+                        </p>
+                        {% endif %}
                         {% if cell.has_duplicate_assignments %}
                         <p class="sunday-board-cell-note">
                             {% if language == "zh" %}发现多个排班，请先在服事排班中检查。{% else %}Multiple assignments found; review them before editing.{% endif %}

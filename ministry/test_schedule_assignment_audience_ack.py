@@ -263,10 +263,14 @@ class ScheduleAssignmentAudienceAckViewTests(ScheduleAssignmentAudienceAckBase):
 
     def _post(self, memberships, ack=False):
         self.client.force_login(self.scheduler)
+        rendered = self.client.get(self.url)
         data = {
             "assigned_members": [m.id for m in memberships],
             "status": TeamAssignment.STATUS_SCHEDULED,
             "notes": "",
+            "worship_review_state": rendered.context[
+                "active_form"
+            ].initial.get("worship_review_state", ""),
         }
         if ack:
             data["audience_override_ack"] = "on"

@@ -417,6 +417,11 @@ class TeamAssignment(models.Model):
         default=STATUS_SCHEDULED,
     )
     notes = models.TextField(blank=True, default="")
+    reviewed_worship_context_fingerprint = models.CharField(
+        max_length=64,
+        null=True,
+        editable=False,
+    )
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,

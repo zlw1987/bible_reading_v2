@@ -145,6 +145,37 @@
         </div>
         {% endif %}
 
+        {% if item.worship_review_state %}
+        <div class="assignment-coverage-rows">
+            <div class="assignment-coverage-row assignment-coverage-row-additional">
+                <div class="assignment-coverage-main">
+                    {% if item.worship_review_state == "unknown" %}
+                    <span class="status status-warning">
+                        {% if language == "zh" %}此现有安排没有可用的敬拜审核状态。{% else %}Worship review status is not available for this existing assignment.{% endif %}
+                    </span>
+                    {% elif item.worship_review_state == "review_recommended" %}
+                    <span class="status status-warning">
+                        {% if language == "zh" %}当前敬拜安排与本团队上次审核时不同。建议重新检查本团队安排。{% else %}Worship scheduling is different from what this team last reviewed. Review recommended.{% endif %}
+                    </span>
+                    {% else %}
+                    <span class="status status-good">
+                        {% if language == "zh" %}敬拜安排已审核{% else %}Worship context reviewed{% endif %}
+                    </span>
+                    {% endif %}
+                    {% if item.worship_review_token and item.worship_review_state != "current" %}
+                    <form method="post" action="{% url 'mark_worship_context_reviewed' item.assignment.id %}">
+                        {% csrf_token %}
+                        <input type="hidden" name="worship_review_state" value="{{ item.worship_review_token }}">
+                        <button type="submit" class="button button-secondary">
+                            {% if language == "zh" %}标记为已审核{% else %}Mark Reviewed{% endif %}
+                        </button>
+                    </form>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
         <div class="assignment-coverage-rows team-schedule-coverage">
             {% for row in item.coverage_rows %}
             <div class="assignment-coverage-row assignment-coverage-row-{{ row.kind }}">
@@ -261,13 +292,16 @@
             </div>
             {% endif %}
             {{ active_form.non_field_errors }}
+            {{ active_form.worship_review_state }}
             {% for field in active_form %}
+            {% if not field.is_hidden %}
             <div class="form-row">
                 {{ field.label_tag }}
                 {{ field }}
                 {% if field.help_text %}<p class="muted">{{ field.help_text }}</p>{% endif %}
                 {{ field.errors }}
             </div>
+            {% endif %}
             {% endfor %}
             <div class="actions">
                 <button type="submit">

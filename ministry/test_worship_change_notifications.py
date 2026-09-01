@@ -1,5 +1,7 @@
 """Focused NOTIFY.1G Worship Team change producer tests."""
 
+from datetime import datetime
+
 from unittest.mock import patch
 
 from django.contrib.auth.models import User
@@ -315,7 +317,14 @@ class WorshipChangeNotificationProducerTests(TestCase):
             set(subset.metadata), {"operation_id", "recipient_relevant_event_count"}
         )
         body_lines = subset.body.splitlines()
-        self.assertLess(body_lines[1], body_lines[2])
+        rendered_dates = [
+            datetime.strptime(
+                line.split(" Old Worship Team", 1)[0],
+                "%b %d, %Y",
+            )
+            for line in body_lines[1:3]
+        ]
+        self.assertLess(rendered_dates[0], rendered_dates[1])
 
     def test_batch_more_than_three_is_bounded_localized_and_snapshot_private(self):
         recipient = self.user("batch_zh", language="zh")

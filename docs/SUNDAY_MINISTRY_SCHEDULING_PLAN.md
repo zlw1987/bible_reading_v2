@@ -48,8 +48,9 @@ changes, 0 blocked rows, and no confirmation action, confirming that production
 now matches the reviewed workbook.
 Docs/read-only `MO-S.6E.0A` now completes the Worship-context staleness
 repository audit and freezes a nullable downstream-reviewed canonical
-fingerprint contract. MO-S.6E warning runtime remains unimplemented and needs a
-separately approved schema/runtime slice.
+fingerprint contract. `MO-S.6E.1A` now implements that approved V1 runtime with
+one additive nullable field, centralized fingerprinting, Team Schedule review,
+POST-only **Mark Reviewed**, and Sunday Board review state.
 Docs-only `MO-S.6E.0A-FU1` closes two contract gaps without implementing that
 runtime: unlinked/display-name-only roster identity participates through a
 privacy-safe display-identity digest, and acknowledgement is bound to the exact
@@ -147,10 +148,10 @@ or a production import in this planning slice.
 MO-S.6B provides the bounded cross-team Sunday matrix and exact-team cell
 editability. MO-S.6C now adds the narrow current Worship roster/state context
 and transparent, review-first pairing suggestions to that Board/Team Schedule
-workflow. The current system still does not provide the downstream review
-warning when Worship changes. It now provides the controlled `.xlsx` upload/parse/preview flow and the
-separately governed atomic confirmation/write runtime. The system still does not provide the MO-S.6E
-roster-change staleness mechanism.
+workflow. `MO-S.6E.1A` now provides the advisory downstream review warning when
+the current canonical Worship context differs from what that team last
+reviewed. It also provides the controlled `.xlsx` upload/parse/preview flow and
+the separately governed atomic confirmation/write runtime.
 MO-S.6D-0A-FU1/FU2 define how
 a future explicitly configured Worship rotation pool, event audience, and
 primary Ministry Structure path determine eligible teams without treating a
@@ -190,8 +191,8 @@ The intended operating sequence is:
    Worship anchor/roster and any historical suggestion, and schedules its own
    team assignment.
 4. Each team owns its own members, status, notes, and confirmation workflow.
-5. A later Worship change does not rewrite downstream assignments. The future
-   MO-S.6E warning compares current canonical Worship context with the exact
+5. A later Worship change does not rewrite downstream assignments. The
+   implemented MO-S.6E warning compares current canonical Worship context with the exact
    context explicitly reviewed by that downstream team; ordinary assignment
    `updated_at` is not review evidence.
 6. The board provides a shared operational overview, while the owning team
@@ -406,16 +407,46 @@ update/idempotency behavior. V1 must not claim that an assignment was a
 only report a current assignment that differs from or matches the current
 suggestion. A new durable provenance field is not approved in MO-S.6A.
 
-## 8. Upstream-change awareness — `MO-S.6E.0A` V1 contract complete
+## 8. Upstream-change awareness — `MO-S.6E.1A` runtime implemented
 
 `MO-S.6E.0A` is a docs/read-only repository audit. It implements no warning,
 field, migration, route, template, notification, or data write. The earlier
 hope for a no-schema timestamp comparison is retained as historical design
 context but is now rejected by repository evidence.
 
+`MO-S.6E.1A` implements the approved V1 contract. It adds nullable, non-editable
+`TeamAssignment.reviewed_worship_context_fingerprint` through additive
+`ministry.0005` with no data migration or backfill, so every pre-existing row
+remains null / review-status-unknown. `worship_context.py` now produces one
+typed canonical semantic consumed by both the existing narrow presentation and
+the versioned privacy-safe SHA-256 signature in `worship_context_review.py`.
+Team Schedule Save and the POST-only exact-team **Mark Reviewed** action accept
+only a signed, expiring, user/event/team/assignment-bound rendered state that
+also carries the prior fingerprint and assignment timestamp baseline. The
+Sunday Board projects only the compact unknown/current/recommended state and
+remains GET-only.
+
+On SQLite, acknowledgement enters the write transaction with a first no-op
+conditional `UPDATE` on the exact downstream assignment (or event for a create)
+before reloading and hashing current Worship truth. That first write acquires
+SQLite's writer boundary; it is not described as a row lock. Three real
+file-backed, two-connection scenarios prove: an upstream roster write that wins
+first makes the review stale; a review write that wins first blocks a
+concurrent roster writer until commit and a later roster write becomes review-
+recommended; and the Team Schedule write plus acknowledgement commits as one
+atomic unit. Render A followed by Worship B therefore never silently
+acknowledges B, and a stale Team Schedule save rolls back all downstream edits.
+
+Local acceptance also verifies English desktop and Chinese 390x844 Team
+Schedule/Sunday Board rendering, independent conflict-warning visibility,
+successful and stale **Mark Reviewed** behavior, zero Notification emission,
+no `scheduling_revision` change for review-only writes, and null preservation
+for a pre-migration assignment. No normal-local or production migration was
+applied by this slice.
+
 ### Canonical Worship-context semantic
 
-The future comparison must consume the same centralized domain truth as
+The implemented comparison consumes the same centralized domain truth as
 `inspect_worship_ownership_consistency()` and `build_worship_contexts()`; it
 must not infer Worship from names, labels, membership, or assignment
 resemblance. The normalized, privacy-safe semantic is:
@@ -537,8 +568,8 @@ redefine the frozen A1 contract.
 | C — downstream stored canonical Worship-context fingerprint | **Selected for V1.** One nullable downstream field plus a centralized deterministic current-signature helper detects add/remove/delete/deactivation and governance-state differences without upstream write hooks. It stores no roster names or private data. |
 | D — context-review model | Deferred. One current reviewed snapshot per downstream assignment is sufficient; a generic dependency/history model would be premature scope. |
 
-The later implementation should add one nullable, non-editable Ministry-owned
-field on `TeamAssignment`, named
+The implementation adds one nullable, non-editable Ministry-owned field on
+`TeamAssignment`, named
 `reviewed_worship_context_fingerprint` (64-character SHA-256 hex is the expected
 shape). The canonical helper must serialize an explicit contract version plus
 the normalized semantic above, sort roster identity tuples, and hash the
@@ -588,8 +619,8 @@ the same canonical Worship context and rechecked exact-team authority/current
 truth in the write transaction. Generic/Admin/direct saves must not imply
 review. Team Schedule also provides a small POST-only **Mark Reviewed** action
 so a lead can acknowledge the current context without a fake roster, note, or
-status edit. That action changes only the fingerprint (and normal assignment
-`updated_at` if implemented through model save), grants no authority, uses
+status edit. That action changes only the fingerprint and normal assignment
+`updated_at`, grants no authority, uses
 `can_manage_team_assignment_for_team` for the exact downstream team, and must
 not advance `scheduling_revision` when event/team/status are unchanged. The
 Sunday Board remains the bounded overview and links an authorized owner to Team
@@ -605,7 +636,7 @@ must also bind the prior persisted downstream review/concurrency baseline and
 expire; after a successful write, the changed fingerprint/assignment baseline
 must make replay stale. Existing `TeamAssignment.updated_at` may participate
 only as optimistic request-version evidence, never as proof that Worship
-context was reviewed. On POST, the future runtime must:
+context was reviewed. On POST, the runtime:
 
 1. reauthorize exact-team assignment management;
 2. enter the repository-supported transaction/write boundary;
@@ -624,9 +655,9 @@ Replay or a stale/tampered expected representation cannot clear a warning. The
 product meaning is exactly **I reviewed the Worship context shown to me**, never
 **the server accepted a newer context that appeared after render**.
 
-This docs contract does not claim that `select_for_update()` provides a row
-lock on target SQLite. The later implementation slice must establish and prove
-the correct SQLite writer/current-truth boundary using repository-supported
+This contract and implementation do not claim that `select_for_update()`
+provides a row lock on target SQLite. `MO-S.6E.1A` establishes and proves the
+SQLite first-write/current-truth boundary using repository-supported
 transaction behavior before it stores acknowledgement. A review-only write
 must not advance `ServiceEvent.scheduling_revision` merely for MO-S.6E state,
 emit Notification, mutate assignment members/status/notes/audience/
@@ -666,9 +697,9 @@ change never edits/cancels downstream assignments or members, resets
 confirmation, changes notes/RequiredTeam/audience/serving/permissions, or copies
 members. The flow is only **detect -> warn -> human review**.
 
-### Future implementation test contract
+### Implemented acceptance and regression contract
 
-The later approved runtime slice must focus on:
+`MO-S.6E.1A` verifies:
 
 - selected team change; Worship assignment create/delete; member add/remove/
   replace/last removal; membership active/inactive/delete and linked-user
@@ -2151,7 +2182,8 @@ re-upload of the same workbook produced 52 no-op rows, 0 proposed changes,
 
 - Status: `MO-S.6E.0A` **WORSHIP CONTEXT STALENESS AUDIT / V1 CONTRACT
   COMPLETE**; docs-only `MO-S.6E.0A-FU1` closes display-identity and rendered-
-  context acknowledgement binding. MO-S.6E runtime remains **UNIMPLEMENTED**.
+  context acknowledgement binding; `MO-S.6E.1A` is **IMPLEMENTED / LOCAL
+  ACCEPTANCE COMPLETE / READY FOR PRODUCT-OWNER REVIEW**.
 - Goal: make possible downstream staleness visible without automation.
 - V1 decision: one nullable
   `TeamAssignment.reviewed_worship_context_fingerprint`, computed from the
@@ -2169,11 +2201,13 @@ re-upload of the same workbook produced 52 no-op rows, 0 proposed changes,
   separately implemented `NOTIFY.1G` producer under the docs-complete
   `NOTIFY.1G-0A` contract; it does not solve this harder
   later-roster-change staleness problem.
-- Future components: centralized canonical signature helper, one nullable
-  TeamAssignment field/migration, Team Schedule acknowledgement, and bounded
-  Board/Team Schedule copy.
-- Schema impact: one later nullable fingerprint field; no review-history model
-  or upstream timestamp/revision field in V1.
+- Implemented components: centralized canonical semantic/signature helper, one
+  nullable TeamAssignment field/additive migration, render-bound Team Schedule
+  acknowledgement, POST-only Mark Reviewed, and bounded Board/Team Schedule
+  copy.
+- Schema impact: one nullable fingerprint field in `ministry.0005`, with no data
+  migration/backfill; no review-history model or upstream timestamp/revision
+  field in V1.
 - Security: warning reveals only authorized schedule context.
 - Tests: the Section 8 normalization, upstream mutation, tri-state,
   acknowledgement, authority/privacy, zero-notification, and zero-auto-mutation
@@ -2246,9 +2280,10 @@ These are genuine future decisions, not hidden implementation assumptions:
 
 The direct Worship Team change notification is not an open architecture item:
 `NOTIFY.1G-0A` closed its contract and `NOTIFY.1G` implements that bounded
-runtime. `MO-S.6E.0A` now closes the separate docs-only roster-change
-staleness audit/V1 contract; its runtime remains a future separately approved
-problem.
+runtime. `MO-S.6E.0A/FU1` closed the separate roster-change staleness contract,
+and `MO-S.6E.1A` now implements its one-field advisory review runtime. Deployment
+or migration application to any normal-local/target database remains a
+separate authorized operation.
 
 - Which teams participate in the default Sunday board, and how are combined or
   special services represented?

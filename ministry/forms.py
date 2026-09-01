@@ -714,6 +714,10 @@ class TeamScheduleAssignmentForm(forms.ModelForm):
     # outside the event's audience scope grants that user read-only serving
     # visibility to this one event. Not a model field; it only gates the save.
     audience_override_ack = forms.BooleanField(required=False)
+    worship_review_state = forms.CharField(
+        required=False,
+        widget=forms.HiddenInput,
+    )
 
     class Meta:
         model = TeamAssignment
@@ -753,6 +757,9 @@ class TeamScheduleAssignmentForm(forms.ModelForm):
         self.assignment_form_text = text
 
         for field_name in self.fields:
+            if field_name == "worship_review_state":
+                self.fields[field_name].label = ""
+                continue
             self.fields[field_name].label = text[field_name]
         self.fields["audience_override_ack"].help_text = text[
             "audience_override_help"

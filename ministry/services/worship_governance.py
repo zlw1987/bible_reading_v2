@@ -196,6 +196,12 @@ def resolve_worship_rotation_pool_for_team(team):
     return _resolve_primary_worship_pool(team)
 
 
+def is_canonical_worship_rotation_team(team):
+    """Return whether ``team`` resolves to a configured primary-path pool."""
+
+    return resolve_worship_rotation_pool_for_team(team).pool is not None
+
+
 def _eligible_worship_team_candidates(applicable_pools):
     applicable_pool_ids = {item.pool.pk for item in applicable_pools}
     if not applicable_pool_ids:

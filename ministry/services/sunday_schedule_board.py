@@ -19,7 +19,12 @@ from .worship_context import (
     WORSHIP_CONTEXT_ANCHOR_UNAVAILABLE,
     WORSHIP_CONTEXT_CONFLICT,
     WORSHIP_CONTEXT_NO_ANCHOR,
+    build_canonical_worship_contexts,
     build_worship_contexts,
+)
+from .worship_context_review import (
+    classify_downstream_worship_review,
+    signature_from_canonical_context,
 )
 from .worship_governance import inspect_worship_ownership_consistency
 
@@ -169,9 +174,13 @@ def build_sunday_schedule_board(
         eligible_assignments,
         language=language,
     )
-    worship_contexts = build_worship_contexts(
+    canonical_worship_contexts = build_canonical_worship_contexts(
         eligible_events,
         ownership_inspections=ownership_inspections,
+    )
+    worship_contexts = build_worship_contexts(
+        eligible_events,
+        canonical_contexts=canonical_worship_contexts,
     )
     coverage_rows_by_event_team = defaultdict(list)
     for event_id, coverage in coverage_by_event.items():
@@ -223,6 +232,14 @@ def build_sunday_schedule_board(
                 state = BOARD_CELL_EMPTY
 
             has_duplicate_assignments = len(team_assignments) > 1
+            review_state = None
+            if len(team_assignments) == 1:
+                review_state = classify_downstream_worship_review(
+                    team_assignments[0],
+                    signature_from_canonical_context(
+                        canonical_worship_contexts[event.id]
+                    ),
+                )
             can_edit = (
                 not has_duplicate_assignments
                 and team.is_active
@@ -250,6 +267,7 @@ def build_sunday_schedule_board(
                     "has_duplicate_assignments": has_duplicate_assignments,
                     "can_edit": can_edit,
                     "action_url": action_url,
+                    "worship_review_state": review_state,
                 }
             )
 

@@ -22,7 +22,10 @@ selected-event Worship anchors and scheduling revisions plus shared-operation
 per-changed-event audit rows.
 
 The separate annual-workbook consumer `MO-S.6D-SLICE9.1A` is also
-**IMPLEMENTED / LOCAL VERIFIED**. It reuses the same A1
+**PRODUCTION APPLY COMPLETE / VERIFIED**. The product-owner-reviewed production
+confirmation completed successfully, and a fresh re-upload of the same workbook
+produced 52 no-op rows, 0 proposed changes, 0 blocked rows, and no confirmation
+action. It reuses the same A1
 `claim_scheduling_revisions` CAS and skip-second-revision anchor-save primitive,
 but retains its own strict 52-row signed contract, staff/superuser bulk
 authority, current-truth rules, audit source, result UI, and no-notification

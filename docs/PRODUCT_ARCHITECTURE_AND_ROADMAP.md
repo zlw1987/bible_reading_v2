@@ -45,9 +45,12 @@ missing/duplicate/invalid/ambiguous target rows, and recommendation
 `PROFILE SETUP READY`. The Slice 8 target-event setup prerequisite is closed
 and Slice 8 is implemented. Docs/read-only `MO-S.6D-SLICE9.0A` now freezes the
 separate Excel confirmation-write contract and repository audit.
-`MO-S.6D-SLICE9.1A` is now **IMPLEMENTED / LOCAL VERIFIED** as the exact
-52-target atomic annual confirmation runtime. It has not been run against
-production; production confirmation remains separately product-owner reviewed.
+`MO-S.6D-SLICE9.1A` is now **PRODUCTION APPLY COMPLETE / VERIFIED** as the exact
+52-target atomic annual confirmation runtime. The product-owner-reviewed
+production confirmation is complete. A fresh re-upload of the same workbook
+produced 52 no-op rows, 0 proposed changes, 0 blocked rows, and no confirmation
+action, confirming that production matches the reviewed annual Worship Team
+selection set.
 
 ## 1. Project Identity
 
@@ -671,8 +674,9 @@ Future pieces include:
   upload/preview with its wider operational matrix; production read-only smoke
   is passed. The `NOTIFY.1G-0A`
   architecture gate is docs complete. Docs/read-only `MO-S.6D-SLICE9.0A`
-  freezes the separate confirmation contract; `MO-S.6D-SLICE9.1A` implements
-  that runtime with local verification and no production confirmation claim.
+  freezes the separate confirmation contract; `MO-S.6D-SLICE9.1A` is production-applied and product-owner verified,
+including a fresh same-workbook re-upload showing 52 no-op rows, 0 proposed
+changes, 0 blocked rows, and no confirmation action.
   The bounded
   cross-team
   coordination projection replaces the older generic “multi-team dashboard”
@@ -1453,11 +1457,10 @@ MO-S.6E remain separately deferred.
 
 Short next-candidate list:
 
-- for MO-S.6D after locally verified `MO-S.6D-SLICE9.1A`: perform no production
-  confirmation until the product owner separately reviews the exact workbook,
-  target state, operational timing, and rollback expectations; assignment/member
-  import, annual-import notifications, arbitrary workbooks, and durable import
-  history remain separately unapproved;
+- MO-S.6D annual Worship Team workbook confirmation is production-applied and
+  product-owner verified through `MO-S.6D-SLICE9.1A`; assignment/member import,
+  annual-import notifications, arbitrary workbooks, and durable import history
+  remain separately unapproved;
 - review Church Calendar limited-trial feedback before separately approving any
   broader calendar behavior such as notifications, external sync, attendance,
   authoring/management, staff dashboards, or CommunityActivity-to-ServiceEvent

@@ -40,10 +40,12 @@ product-owner-reviewed reset created exactly 52 canonical 2026 Bethany 09:30
 post-reset audit returned `PROFILE SETUP READY`. The Slice 8 target-event setup
 prerequisite is closed; Slice 8 is implemented. Docs/read-only
 `MO-S.6D-SLICE9.0A` now freezes the separately approved confirmation-write
-contract and repository audit. `MO-S.6D-SLICE9.1A` is now **IMPLEMENTED /
-LOCAL VERIFIED** as the distinct signed 52-target atomic confirmation runtime.
-No production confirmation/APPLY has been run; that remains a separate
-product-owner-reviewed operation.
+contract and repository audit. `MO-S.6D-SLICE9.1A` is now **PRODUCTION APPLY COMPLETE / VERIFIED** as the
+distinct signed 52-target atomic confirmation runtime. The product-owner-reviewed
+production confirmation applied the reviewed annual Worship Team selection set.
+A fresh re-upload of the same workbook then produced 52 no-op rows, 0 proposed
+changes, 0 blocked rows, and no confirmation action, confirming that production
+now matches the reviewed workbook.
 
 ## 1. Purpose
 
@@ -139,8 +141,7 @@ editability. MO-S.6C now adds the narrow current Worship roster/state context
 and transparent, review-first pairing suggestions to that Board/Team Schedule
 workflow. The current system still does not provide the downstream review
 warning when Worship changes. It now provides the controlled `.xlsx` upload/parse/preview flow and the
-separately governed atomic confirmation/write runtime. Production confirmation
-has not yet been run. The system still does not provide the MO-S.6E
+separately governed atomic confirmation/write runtime. The system still does not provide the MO-S.6E
 roster-change staleness mechanism.
 MO-S.6D-0A-FU1/FU2 define how
 a future explicitly configured Worship rotation pool, event audience, and
@@ -1782,7 +1783,7 @@ shape, and the repository's no-row-lock wording. Any need for event creation,
 RequiredTeam/assignment/member mutation, notification fanout, durable run state,
 or a second concurrency protocol is a stop condition requiring a new decision.
 
-### MO-S.6D-SLICE9.1A — Atomic Annual Workbook Confirmation — IMPLEMENTED / LOCAL VERIFIED
+### MO-S.6D-SLICE9.1A — Atomic Annual Workbook Confirmation — PRODUCTION APPLY COMPLETE / VERIFIED
 
 `MO-S.6D-SLICE9.1A` implements the complete V1 confirmation runtime authorized
 by `SLICE9.0A`:
@@ -1814,20 +1815,23 @@ by `SLICE9.0A`:
   rendered QA also verified blocked/no-op action gates and no global horizontal
   layout break.
 
-This is local implementation evidence only. Production confirmation remains a
-separate product-owner-reviewed operation; no production APPLY/smoke is claimed.
+Production confirmation is complete and product-owner verified. A fresh
+re-upload of the same workbook produced 52 no-op rows, 0 proposed changes,
+0 blocked rows, and no confirmation action. This closes the annual Worship Team
+workbook confirmation path for the current V1 scope. Assignment/member import
+remains separately deferred.
 
 ### MO-S.6D — Excel Event + Worship Team Import
 
 - Status: **PREVIEW IMPLEMENTED / PRODUCTION READ-ONLY SMOKE PASSED
-  (`MO-S.6D-SLICE8.1A/FU1/UX1`); CONFIRMATION IMPLEMENTED / LOCAL VERIFIED
+  (`MO-S.6D-SLICE8.1A/FU1/UX1`); CONFIRMATION PRODUCTION APPLY COMPLETE / VERIFIED
   (`MO-S.6D-SLICE9.1A`)**. The declared dependency, strict parser, derived
   present-token counts, bounded OOXML ZIP preflight, partial eligible-token
   mapping, exact existing-target classification, blocked-row business evidence,
   bounded downstream-impact display, and staff/superuser-only upload/preview
   are in place. The preview remains zero-write. The separate explicit Slice 9
   POST applies only the reviewed 52-target anchor/revision/audit contract and
-  has not been run against production.
+ has been product-owner confirmed on production.
 - Goal: controlled annual Bethany 9:30 workbook input under the approved
   contract and lifecycle, not date-and-anchor import in isolation.
 - Implemented Slice 8 scope: code-versioned template contract,
@@ -1837,7 +1841,7 @@ separate product-owner-reviewed operation; no production APPLY/smoke is claimed.
   roster conflict detection, downstream-assignment impact display, and no-op/
   change/blocked classification. Docs/read-only `MO-S.6D-SLICE9.0A` froze the
   confirmation, reauthorization, audit/result, replay, and atomic selected-team-
-  only write contract; `MO-S.6D-SLICE9.1A` now implements it locally.
+  only write contract; `MO-S.6D-SLICE9.1A` is production-applied and product-owner verified.
   New-event
   creation remains excluded unless product separately approves the
   audience/profile flow.
@@ -1862,8 +1866,9 @@ separate product-owner-reviewed operation; no production APPLY/smoke is claimed.
   mappings and business blockers remain visible; identical current selection is
   a no-op; no event/team/assignment/audience/audit/notification data is written,
   no assignment is created, and no published zero-audience event is produced.
-  Slice 9 confirmation acceptance is locally verified; production confirmation
-  remains a separate reviewed operation under the frozen `SLICE9.0A` contract.
+Slice 9 confirmation is production-applied and product-owner verified. A fresh
+re-upload of the same workbook produced 52 no-op rows, 0 proposed changes,
+0 blocked rows, and no confirmation action.
 - Dependency: MO-S.6B event/team context, the MO-S.6D-0A/FU1 governance
   prerequisites, stable service-profile mapping, and a separately reviewed
   `.xlsx` dependency.

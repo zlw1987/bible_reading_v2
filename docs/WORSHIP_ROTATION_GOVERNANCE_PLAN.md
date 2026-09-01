@@ -37,10 +37,12 @@ staff/superuser-only zero-write preview with blocked partial mappings and a
 wider operational matrix. Its production read-only smoke passed on GoDaddy
 Python 3.11.15 with openpyxl 3.1.5. Docs/read-only
 `MO-S.6D-SLICE9.0A` now freezes the separate Excel confirmation-write contract
-and repository audit. `MO-S.6D-SLICE9.1A` is **IMPLEMENTED / LOCAL VERIFIED**
+and repository audit. `MO-S.6D-SLICE9.1A` is **PRODUCTION APPLY COMPLETE / VERIFIED**
 with a distinct signed proposal, exact 52-target CAS/revalidation boundary,
-changed-anchor-only writes, and changed-only shared audit. Production
-confirmation remains separately product-owner reviewed and has not been run.
+changed-anchor-only writes, and changed-only shared audit. The product-owner-
+reviewed production confirmation is complete. A fresh re-upload of the same
+workbook produced 52 no-op rows, 0 proposed changes, 0 blocked rows, and no
+confirmation action.
 Governance FU2 finalizes the required
 event-planner
 prerequisite and Worship-specific pool semantics. The Campus, pool-
@@ -877,8 +879,8 @@ The strict MO-S.6D-0A workbook decisions remain:
 
 Docs/read-only `MO-S.6D-SLICE9.0A` now owns the frozen confirmation-time
 reauthorization/revalidation, atomic fail-closed selected-team write,
-audit/result, rollback, replay, and idempotency contract. `SLICE9.1A` now
-implements that separate runtime locally; none of its write-path claims changes
+audit/result, rollback, replay, and idempotency contract. `SLICE9.1A` now implements that separate runtime and is
+**PRODUCTION APPLY COMPLETE / VERIFIED**; none of its write-path claims changes
 the still-zero-write Slice 8 preview contract.
 
 Revised first lifecycle:
@@ -893,7 +895,7 @@ Revised first lifecycle:
   conflict rather than moving or retagging a roster;
 - surface existing downstream assignments as review impact without changing
   them;
-- in the separately authorized and now locally verified Slice 9 runtime, update
+- in the production-applied and product-owner-verified Slice 9 runtime, update
   `rotation_anchor_team` only; and
 - never infer audience, Campus, Ministry Context, required teams, assignments,
   or serving from the workbook.
@@ -991,7 +993,7 @@ Each slice is separately approvable and must verify repository truth again.
 | 7B | **Profile target-event readiness audit — IMPLEMENTED, COMMITTED, AND RUN ON PRODUCTION (`MO-S.6D-PROFILE-SETUP.0A`, READ-ONLY)** | Independent 52-Sunday local-date contract; persisted-key-only canonical identity; requested-event-type candidate discovery; migration/schema gate; tagged-row, audience, untagged candidate, other-profile exact-time, and different-time parallel-service evidence; deterministic text/JSON stdout | exact/invalid/duplicate/out-of-contract tagged rows, untagged none/single/multiple review cases, other-profile non-candidate separation, different-time service isolation, profile-key length bound, schema-not-ready stop, privacy, full zero-write model/callback proof | Local DB remains schema-not-ready; final production post-reset audit is setup-ready: 52 expected, 52 canonical, 52 ready exact matches, and zero missing/duplicate/invalid/ambiguous target rows |
 | 7C | **Canonical Bethany 09:30 TEST-data rebuild — PRODUCTION APPLY COMPLETE / VERIFIED (`MO-S.6D-PROFILE-SETUP.1A/FU1`)** | Dry-run default; three-part destructive gate including reviewed-state token; all-ServiceEvent/event-owned reset only; exact active `CHURCH -> campus -> CM`; atomic 52-Sunday setup; audit postcondition; no importer or Worship selection | deletion/cascade/preservation inventory, deterministic token, missing/malformed/wrong/stale rejection, exact local/DST contract, lifecycle-date/path binding, rollback, no-op repeat, post-reset `PROFILE SETUP READY` | Product-owner-reviewed production reset created 52 canonical events plus 52 exact CM audience rows; final audit returned 52/52 ready and `PROFILE SETUP READY` |
 | 8 | **Excel dependency/parser + preview — IMPLEMENTED / PRODUCTION READ-ONLY SMOKE PASSED (`MO-S.6D-SLICE8.1A/FU1/UX1`)** | `openpyxl==3.1.5`; strict known-workbook parser; fixed A/C1/C2/C3 vocabulary with counts and mapping controls derived from present tokens; blocked partial-mapping preview; exact persisted-profile target classification; signed user-bound normalized state; pre-openpyxl 5 MiB upload, 128-member, 20 MiB total-uncompressed, and 8 MiB single-member OOXML limits plus encrypted-member rejection; staff/superuser-only read-only upload/preview; wider compact operational matrix with sticky review context; no confirm route, data write, or migration | contract/header/geometry/date/formula/cache/token/profile/identity classification, altered/absent-token distributions, archive member/count/resource/encryption boundaries, signed semantic tamper, target-before-mapping precedence, incomplete/no-candidate/per-destination mapping blockers, lifecycle/audience/parallel evidence, roster/downstream impact, privacy/expiry, permission, zero-write tests, and desktop/mobile rendered QA | Real workbook SHA-256 `186735DC723979AA49D209C92D4155BE533D6AFE9253CDB5D8B809A77C8B07AA` accepted on local Python 3.14.7: 257,609 bytes, 46 members, 2,291,811 declared uncompressed bytes, 631,391-byte largest member, and observed A/C1/C2/C3 counts 12/13/13/14 (evidence, not an invariant). Production smoke on GoDaddy Python 3.11.15 imported openpyxl 3.1.5 and produced 52 supported Sundays, 52 exact targets, 0 no-op, 52 proposed changes, 0 blocked, and Complete mapping; preview stayed read-only. This is not Slice 9 readiness proof. |
-| 9 | **Excel exact match/update confirmation — IMPLEMENTED / LOCAL VERIFIED (`MO-S.6D-SLICE9.1A`; contract `SLICE9.0A`)** | Staff/superuser-only distinct 30-minute signed reviewed proposal; exact 52 existing events; scheduling-revision CAS plus current-truth recomputation; changed anchors plus all-selected revision claims; per-changed-event shared-operation LogEntry; no ImportRun, assignment/member/audience/RequiredTeam/event/team/structure write, or notification | strict proposal shape/user/expiry, 52-row completed+published atomic success, changed/no-op, identity/governance/ownership failures, stale/busy/replay/audit rollback, zero cross-domain/notification effects, and two-scenario target-like file-backed SQLite concurrency | English desktop and Chinese mobile confirmable/blocked/no-op/success/replay QA passed locally; production confirmation remains separate |
+| 9 | **Excel exact match/update confirmation — PRODUCTION APPLY COMPLETE / VERIFIED (`MO-S.6D-SLICE9.1A`; contract `SLICE9.0A`)** | Staff/superuser-only distinct 30-minute signed reviewed proposal; exact 52 existing events; scheduling-revision CAS plus current-truth recomputation; changed anchors plus all-selected revision claims; per-changed-event shared-operation LogEntry; no ImportRun, assignment/member/audience/RequiredTeam/event/team/structure write, or notification | strict proposal shape/user/expiry, 52-row completed+published atomic success, changed/no-op, identity/governance/ownership failures, stale/busy/replay/audit rollback, zero cross-domain/notification effects, and two-scenario target-like file-backed SQLite concurrency | Local English desktop / Chinese mobile QA passed; product-owner-reviewed production confirmation completed, followed by 52 no-op / 0 proposed / 0 blocked re-upload verification. |
 | 10 | **Later assignment import** | Deferred; would write TeamAssignment/member data and needs exact-team plus bulk authority and identity proof | unresolved/ambiguous people, explicit aliases, team ownership, no user creation, rollback/idempotency | Required; only after operational evidence |
 
 Dependencies: slices 1, 2, 3, 4A, 4B, 5, and slice 6 through confirmation
@@ -1015,9 +1017,10 @@ write preview, and wider operational review surface are implemented. The exact
 production Python 3.11.15/openpyxl 3.1.5 read-only smoke passed with 52/52 exact
 targets and zero blocked rows. This closes Slice 8 production preview smoke
 only. `MO-S.6D-SLICE9.0A` closes the separate docs/read-only confirmation
-contract and repository audit; `MO-S.6D-SLICE9.1A` implements that runtime and
-is locally verified. Production confirmation remains separate. Slice 10 remains
-later.
+contract and repository audit; `MO-S.6D-SLICE9.1A` is PRODUCTION APPLY COMPLETE / VERIFIED. The
+product-owner-reviewed production confirmation is complete, and a fresh
+re-upload produced 52 no-op rows, 0 proposed changes, 0 blocked rows, and no
+confirmation action. Slice 10 remains later.
 
 ## 18. Permission, privacy, and data invariants
 
@@ -1047,9 +1050,10 @@ normalized proposals without `ImportRun` schema. Its exact production Python
 3.11.15/openpyxl 3.1.5 read-only smoke is complete. `MO-S.6D-SLICE9.0A` froze
 the no-schema signed-proposal, current-truth reauthorization, stale/replay
 handling, atomic 52-row selected-team write, shared audit, no-notification,
-result, failure, and concurrency-test contract; `MO-S.6D-SLICE9.1A` now
-implements and locally verifies it. Production confirmation remains the bounded
-next operational decision, not an implementation gap.
+result, failure, and concurrency-test contract; `MO-S.6D-SLICE9.1A` is now PRODUCTION APPLY COMPLETE / VERIFIED. The
+product-owner-reviewed production confirmation is complete, and the fresh
+same-workbook re-upload verified 52 no-op rows, 0 proposed changes, 0 blocked
+rows, and no confirmation action.
 
 Multi-anchor pool semantics, a dedicated bulk-import capability, dedicated
 anchor version/audit schema, explicit roster-conflict resolution, and assignment

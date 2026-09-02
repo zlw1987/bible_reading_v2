@@ -44,15 +44,22 @@ This is not a broad production-readiness claim (July 2026).
 freezes the deployment-configuration boundary: one generic codebase with a
 separate database per installation, local canonical configuration data, and
 explicit opt-in deployment adapters. It does not introduce multi-tenancy or a
-plugin framework. Its integration registry and schema proposals remain runtime
-unimplemented pending separately approved slices, except that
+plugin framework. Its remaining integration/default/materialization proposals
+remain runtime unimplemented pending separately approved slices.
 `GENERIC-DEPLOYMENT-CONFIG.1A` now implements the additive nullable
 `MinistryTeam.team_key` identity foundation, bounded staff/Admin setup, and a
 read-only inventory, and `GENERIC-DEPLOYMENT-CONFIG.2A` implements the generic
 dry-run-first exact-PK reviewed key-configuration command with a versioned
-current-state token and atomic NULL-only CAS apply. Neither slice makes
-`team_key` an operational runtime consumer, and 2A applied no normal-local or
-production key configuration.
+current-state token and atomic NULL-only CAS apply. 2A itself applied no key
+configuration; the product owner later reported the current SVCA production
+deployment at 11 configured Ministry Teams, 0 unconfigured, and 0 identity
+integrity problems. This remains deployment data and no runtime behavior depends
+on key text. `GENERIC-DEPLOYMENT-CONFIG.3A` implements the exact frozen
+`events.ServiceProfile` table and nullable protected
+`ServiceEvent.service_profile` FK plus validation/immutability/revision/Admin
+foundations. Existing event FKs remain `NULL`, `service_profile_key` remains
+authoritative, and 3A created no profile data, performed no backfill, and
+switched no current consumer.
 
 This project is becoming a lightweight modular church management system.
 Churches should eventually be able to enable only the modules they need, and

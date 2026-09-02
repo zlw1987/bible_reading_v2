@@ -15,6 +15,7 @@ from .models import (
     ServiceEventAudienceScope,
     ServiceEventPlannerAssignment,
     ServiceEventRequiredTeam,
+    ServiceProfile,
 )
 
 
@@ -189,6 +190,7 @@ class ServiceEventAdmin(admin.ModelAdmin):
     )
     exclude = ("rotation_anchor_team",)
     readonly_fields = (
+        "service_profile",
         "worship_team",
         "created_at",
         "updated_at",
@@ -214,6 +216,26 @@ class ServiceEventAdmin(admin.ModelAdmin):
                 "This does not control visibility, serving assignment, or permissions."
             )
         return formfield
+
+
+@admin.register(ServiceProfile)
+class ServiceProfileAdmin(admin.ModelAdmin):
+    list_display = (
+        "key",
+        "name",
+        "name_en",
+        "event_type",
+        "is_active",
+    )
+    list_filter = ("event_type", "is_active")
+    search_fields = ("key", "name", "name_en")
+    readonly_fields = ("created_at", "updated_at")
+
+    def get_readonly_fields(self, request, obj=None):
+        readonly = list(super().get_readonly_fields(request, obj))
+        if obj is not None and obj.service_events.exists():
+            readonly.extend(("key", "event_type"))
+        return tuple(readonly)
 
 
 @admin.register(ServiceEventPlannerAssignment)

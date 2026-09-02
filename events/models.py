@@ -1,3 +1,4 @@
+import re
 from datetime import datetime, timedelta
 
 from django.conf import settings
@@ -9,6 +10,35 @@ from django.utils import timezone
 from accounts.models import ChurchStructureUnit
 from accounts.permissions import CAP_MANAGE_SERVICE_EVENTS, has_capability
 from accounts.structure_selectors import user_matches_structure_audience
+
+
+SERVICE_PROFILE_KEY_PATTERN = re.compile(r"^[a-z0-9_.-]+$")
+
+
+def normalize_service_profile_key(value):
+    """Return the canonical required deployment-local Service Profile key."""
+    if not isinstance(value, str):
+        raise ValidationError(
+            "A Service Profile key must be a string.",
+            code="invalid_service_profile_key_type",
+        )
+    return value.strip().lower()
+
+
+def validate_service_profile_key(value):
+    """Normalize and validate one required Service Profile key."""
+    normalized = normalize_service_profile_key(value)
+    if not normalized:
+        raise ValidationError(
+            "A Service Profile key is required.",
+            code="blank_service_profile_key",
+        )
+    if not SERVICE_PROFILE_KEY_PATTERN.fullmatch(normalized):
+        raise ValidationError(
+            "Use only lowercase letters, numbers, dot, underscore, or hyphen.",
+            code="invalid_service_profile_key",
+        )
+    return normalized
 
 
 def _ensure_aware_datetime(value):
@@ -97,6 +127,13 @@ class ServiceEvent(models.Model):
             "permissions."
         ),
     )
+    service_profile = models.ForeignKey(
+        "events.ServiceProfile",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="service_events",
+    )
     start_datetime = models.DateTimeField()
     end_datetime = models.DateTimeField(null=True, blank=True)
     location = models.CharField(max_length=180, blank=True, default="")
@@ -154,6 +191,7 @@ class ServiceEvent(models.Model):
         return self.title
 
     def clean(self):
+        super().clean()
         errors = {}
 
         if self.end_datetime and self.start_datetime and self.end_datetime < self.start_datetime:
@@ -166,6 +204,42 @@ class ServiceEvent(models.Model):
             self.STATUS_CANCELLED,
         }:
             errors["status"] = "Invalid service event status."
+
+        profile = None
+        if self.service_profile_id:
+            try:
+                profile = self.service_profile
+            except ServiceProfile.DoesNotExist:
+                # Field-level relation validation supplies the canonical error.
+                profile = None
+
+        if profile is not None:
+            if not self.service_profile_key:
+                errors["service_profile_key"] = (
+                    "A Service Profile relationship requires the matching legacy "
+                    "service profile key during this transition."
+                )
+            elif self.service_profile_key != profile.key:
+                errors["service_profile_key"] = (
+                    "The legacy service profile key must exactly match the selected "
+                    "Service Profile key."
+                )
+            if self.event_type != profile.event_type:
+                errors["event_type"] = (
+                    "The service event type must match the selected Service Profile."
+                )
+
+            stored_profile_id = None
+            if self.pk and not self._state.adding:
+                stored_profile_id = (
+                    type(self).objects.filter(pk=self.pk)
+                    .values_list("service_profile_id", flat=True)
+                    .first()
+                )
+            if stored_profile_id != self.service_profile_id and not profile.is_active:
+                errors["service_profile"] = (
+                    "Only an active Service Profile may be newly assigned."
+                )
 
         if errors:
             raise ValidationError(errors)
@@ -298,6 +372,67 @@ class ServiceEvent(models.Model):
         ChurchStructureMembership, not Profile.small_group.
         """
         return user_matches_structure_audience(user, units)
+
+
+class ServiceProfile(models.Model):
+    key = models.CharField(max_length=64, unique=True)
+    name = models.CharField(max_length=160)
+    name_en = models.CharField(max_length=160, blank=True, default="")
+    description = models.TextField(blank=True, default="")
+    description_en = models.TextField(blank=True, default="")
+    event_type = models.CharField(
+        max_length=40,
+        choices=ServiceEvent.EVENT_TYPE_CHOICES,
+    )
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return self.name
+
+    def clean(self):
+        super().clean()
+        errors = {}
+        try:
+            self.key = validate_service_profile_key(self.key)
+        except ValidationError as error:
+            errors["key"] = error
+
+        if (
+            self.pk
+            and ServiceEvent.objects.filter(service_profile_id=self.pk).exists()
+        ):
+            stored = (
+                type(self).objects.filter(pk=self.pk)
+                .values("key", "event_type")
+                .first()
+            )
+            if stored is not None:
+                if self.key != stored["key"]:
+                    errors["key"] = ValidationError(
+                        "A referenced Service Profile key is read-only.",
+                        code="referenced_service_profile_key_immutable",
+                    )
+                if self.event_type != stored["event_type"]:
+                    errors["event_type"] = ValidationError(
+                        "A referenced Service Profile event type is read-only.",
+                        code="referenced_service_profile_event_type_immutable",
+                    )
+
+        if errors:
+            raise ValidationError(errors)
+
+    def full_clean(self, *args, **kwargs):
+        # Normalize before field length/blank/uniqueness validation.
+        self.key = normalize_service_profile_key(self.key)
+        return super().full_clean(*args, **kwargs)
+
+    def save(self, *args, **kwargs):
+        # Service Profiles are technical setup records; supported model/Admin
+        # writes always enforce their complete identity contract.
+        self.full_clean()
+        return super().save(*args, **kwargs)
 
 
 class ServiceEventRequiredTeam(models.Model):
@@ -472,6 +607,7 @@ class ServiceEventPlannerAssignment(models.Model):
             errors["user"] = (
                 "Active planner responsibility requires an active user."
             )
+
         if errors:
             raise ValidationError(errors)
 

@@ -8,16 +8,28 @@ incompatible schema or domain change requires a separately approved architecture
 revision; implementation tasks must not silently drift from this contract.
 
 Implementation status: **`GENERIC-DEPLOYMENT-CONFIG.1A` — MinistryTeam stable
-technical identity foundation — IMPLEMENTED / LOCAL VERIFIED; and
+technical identity foundation — IMPLEMENTED / LOCAL VERIFIED;
 `GENERIC-DEPLOYMENT-CONFIG.2A` — reviewed Ministry Team key configuration
-tooling — IMPLEMENTED / LOCAL VERIFIED.** The additive nullable unique
+tooling — IMPLEMENTED / LOCAL VERIFIED; and
+`GENERIC-DEPLOYMENT-CONFIG.3A` — ServiceProfile + nullable ServiceEvent FK
+expansion — IMPLEMENTED / LOCAL VERIFIED.** The additive nullable unique
 `MinistryTeam.team_key`, canonical normalization/validation, write-once ordinary
 staff setup and Admin presentation, read-only identity inventory, and generic
-dry-run-first reviewed configuration command are implemented. Existing normal-
-local teams remain unconfigured (`NULL`): 2A applied no normal-local or
-production configuration. No runtime behavior depends on the key.
-`ServiceProfile`, its event FK, profile defaults/materialization, integration
-gating, MO-S.REQUIRED runtime, and external identity mapping remain
+dry-run-first reviewed configuration command are implemented. 2A itself applied
+no normal-local or production configuration. The product-owner-reported current
+SVCA production deployment later completed reviewed key configuration for all 11
+current Ministry Team rows: 0 unconfigured and 0 identity integrity problems.
+That remains deployment data; no runtime behavior depends on key text.
+
+3A adds the exact frozen `events.ServiceProfile` table and nullable protected
+`ServiceEvent.service_profile` FK through `events/0012`, with key
+normalization/validation, referenced identity immutability, transition
+consistency validation, existing scheduling-revision integration, and bounded
+technical Admin support. Existing events remain FK `NULL` and
+`service_profile_key` remains authoritative. No profile row was created or
+inferred, no FK was backfilled, and no readiness/setup/workbook consumer was
+switched. Profile mapping/backfill, profile defaults/materialization,
+integration gating, MO-S.REQUIRED runtime, and external identity mapping remain
 unimplemented and separately gated.
 
 ## 1. Product Deployment Model
@@ -154,13 +166,15 @@ no runtime consumer and applied no normal-local or production key data.
 repeated `ServiceEvent.service_profile_key`, readiness/setup, and annual
 workbook matching. The `events` app owns it.
 
-Current repository truth is an optional non-unique
-`ServiceEvent.service_profile_key` string (`max_length=64`, blank/default empty),
-with no first-class profile table. Its consumers include profile readiness and
-reset/setup services and commands, Admin, scheduling-revision change detection,
-the strict workbook preview and confirmation services, proposal/reset
-fingerprints and signing contracts, and their focused tests. Every one of these
-consumers must move together during the later switch phase.
+Current repository truth after `GENERIC-DEPLOYMENT-CONFIG.3A` includes the
+first-class profile table below plus a nullable protected
+`ServiceEvent.service_profile` FK. The optional non-unique
+`ServiceEvent.service_profile_key` string (`max_length=64`, blank/default empty)
+remains authoritative during this expansion phase. Its consumers remain profile
+readiness and reset/setup services and commands, Admin, the strict workbook
+preview and confirmation services, proposal/reset fingerprints and signing
+contracts, and their focused tests. No consumer switched in 3A; every one must
+move together during the later switch phase.
 
 | Field | Exact type and policy |
 |---|---|
@@ -251,8 +265,10 @@ create drift. Removal is a later contract phase, never initial expansion.
 
 Use expand/migrate/switch/contract:
 
-1. Add `ServiceProfile` without changing events.
-2. Add nullable `ServiceEvent.service_profile`; leave rows unchanged.
+1. **IMPLEMENTED / LOCAL VERIFIED in 3A:** add `ServiceProfile` without changing
+   existing event identity data.
+2. **IMPLEMENTED / LOCAL VERIFIED in 3A:** add nullable
+   `ServiceEvent.service_profile`; leave rows unchanged with FK `NULL`.
 3. Read-only audit distinct nonblank legacy keys and every event/type/key use.
 4. Product owner creates/approves one profile per accepted key/type. One key
    used across conflicting event types is a blocker.
@@ -371,19 +387,20 @@ models for theoretical purity.
 
 At the `GENERIC-DEPLOYMENT-CONFIG.1A` milestone,
 `ministry/0006_ministryteam_team_key` implements the additive nullable unique
-`MinistryTeam.team_key` foundation. The relevant Events head remains
-`events/0011`.
+`MinistryTeam.team_key` foundation. At the
+`GENERIC-DEPLOYMENT-CONFIG.3A` milestone,
+`events/0012_serviceprofile_serviceevent_service_profile` implements the exact
+frozen ServiceProfile table plus nullable protected event FK. It contains no
+`RunPython`, row creation, inference, or backfill.
 
 The remaining planned migration direction is:
 
 ```text
 ministry/0006 = implemented MinistryTeam.team_key foundation
 
-events head
-    -> future create ServiceProfile
-    -> future add nullable ServiceEvent.service_profile FK
+events/0012 = implemented ServiceProfile + nullable ServiceEvent.service_profile
 
-ministry/0006 + future events ServiceProfile migration
+ministry/0006 + events/0012
     -> future create ministry.ServiceProfileMinistryRequirement
 ```
 
@@ -492,8 +509,8 @@ Each slice requires separate approval.
 | Slice | Purpose/impact | Gate and review |
 |---|---|---|
 | 1. Team identity foundation | Add nullable unique key, validation/immutability, setup/Admin, tests, read-only inventory; no backfill. LOW. | Additive migration; product owner reviews field/copy. |
-| 2. Team key configuration | **IMPLEMENTED / LOCAL VERIFIED (`GENERIC-DEPLOYMENT-CONFIG.2A`)** as `configure_ministry_team_keys`: generic exact-PK reviewed plan, versioned state-bound token, atomic NULL-only CAS apply, and independent post-audit direction; no production configuration applied. MEDIUM operationally. | Stop on duplicate/malformed/noncanonical/unreviewed or stale state; owner reviews every apply. |
-| 3. Service Profile/FK expand | Add profile + nullable FK/Admin/validation while legacy string remains authoritative. LOW-MEDIUM. | Profile rows reviewed before creation. |
+| 2. Team key configuration | **IMPLEMENTED / LOCAL VERIFIED (`GENERIC-DEPLOYMENT-CONFIG.2A`)** as `configure_ministry_team_keys`: generic exact-PK reviewed plan, versioned state-bound token, atomic NULL-only CAS apply, and independent post-audit direction. 2A itself applied no configuration; the product owner later reported SVCA production at 11 configured current teams, 0 unconfigured, and 0 identity integrity problems. MEDIUM operationally. | Stop on duplicate/malformed/noncanonical/unreviewed or stale state; owner reviews every apply. |
+| 3. Service Profile/FK expand | **IMPLEMENTED / LOCAL VERIFIED (`GENERIC-DEPLOYMENT-CONFIG.3A`)**: exact frozen profile model, nullable protected FK, validation/immutability/revision/Admin foundations, additive migration, and disposable migration proof; legacy string remains authoritative and no rows/FKs were created or backfilled. LOW-MEDIUM. | Profile rows reviewed before creation; Slice 4 remains the mapping/backfill gate. |
 | 4. Profile mapping/backfill | Audit keys/types, create profiles, exact FK dry-run/apply, prove dual consistency including 52 rows. MEDIUM. | Stop on conflict/unmapped/ambiguity; owner reviews/apply. |
 | 5. Integration boundary + consumer switch | Registry/gates, isolate SVCA adapters, configure deployment, switch readiness/setup/workbook/Admin/signing to FK with drift audit. MEDIUM-HIGH. | Focused adapter/workbook regressions and deployment setting review; old payloads fail closed. |
 | 6. Profile ministry defaults | Add relation, validation/readiness, Admin/setup; no event materialization. LOW-MEDIUM. | Stop on invalid/inactive/non-assignable/Worship mapping; owner reviews configuration. |

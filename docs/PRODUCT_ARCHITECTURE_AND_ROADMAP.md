@@ -26,16 +26,23 @@ architecture in
 [`GENERIC_DEPLOYMENT_CONFIGURATION_ARCHITECTURE.md`](GENERIC_DEPLOYMENT_CONFIGURATION_ARCHITECTURE.md):
 stable local Ministry Team keys, first-class Service Profiles, explicit profile
 ministry defaults and reviewed materialization, opt-in named deployment
-adapters, and a deferred external-identity mapping layer. These proposals are
-runtime unimplemented and require separately approved implementation slices,
-except that `GENERIC-DEPLOYMENT-CONFIG.1A` now implements and locally verifies
+adapters, and a deferred external-identity mapping layer. Remaining proposals
+require separately approved implementation slices.
+`GENERIC-DEPLOYMENT-CONFIG.1A` implements and locally verifies
 the additive nullable `MinistryTeam.team_key` foundation, write-once ordinary
 staff/Admin setup, and read-only inventory, and
 `GENERIC-DEPLOYMENT-CONFIG.2A` implements and locally verifies the generic
 dry-run-first exact-PK reviewed configuration command with a versioned
-current-state token and atomic NULL-only CAS apply. Existing normal-local teams
-remain unconfigured and no production configuration was applied in 2A; no
-current operational runtime consumes the key. Service Profiles, defaults,
+current-state token and atomic NULL-only CAS apply. 2A itself applied no
+configuration; the product owner later reported the current SVCA production
+deployment at 11 configured Ministry Teams, 0 unconfigured, and 0 identity
+integrity problems. This is deployment data only; no current operational runtime
+consumes key text. `GENERIC-DEPLOYMENT-CONFIG.3A` implements and locally verifies
+the exact frozen `events.ServiceProfile` table and nullable protected
+`ServiceEvent.service_profile` FK, with validation/immutability/revision/Admin
+foundations. Existing event FKs remain `NULL`, the legacy
+`service_profile_key` remains authoritative, no profile data or FK backfill was
+created, and no current consumer switched. Profile mapping/backfill, defaults,
 materialization, integration gating, MO-S.REQUIRED runtime, and external
 identity mapping remain unimplemented.
 

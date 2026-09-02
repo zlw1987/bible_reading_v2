@@ -8,14 +8,17 @@ incompatible schema or domain change requires a separately approved architecture
 revision; implementation tasks must not silently drift from this contract.
 
 Implementation status: **`GENERIC-DEPLOYMENT-CONFIG.1A` — MinistryTeam stable
-technical identity foundation — IMPLEMENTED / LOCAL VERIFIED.** The additive
-nullable unique `MinistryTeam.team_key`, canonical normalization/validation,
-write-once ordinary staff setup and Admin presentation, and read-only identity
-inventory are implemented. Existing teams remain unconfigured (`NULL`) because
-this slice performs no backfill or normal-local/production data apply. No
-runtime behavior depends on the key. `ServiceProfile`, its event FK, profile
-defaults/materialization, integration gating, MO-S.REQUIRED runtime, and
-external identity mapping remain unimplemented and separately gated.
+technical identity foundation — IMPLEMENTED / LOCAL VERIFIED; and
+`GENERIC-DEPLOYMENT-CONFIG.2A` — reviewed Ministry Team key configuration
+tooling — IMPLEMENTED / LOCAL VERIFIED.** The additive nullable unique
+`MinistryTeam.team_key`, canonical normalization/validation, write-once ordinary
+staff setup and Admin presentation, read-only identity inventory, and generic
+dry-run-first reviewed configuration command are implemented. Existing normal-
+local teams remain unconfigured (`NULL`): 2A applied no normal-local or
+production configuration. No runtime behavior depends on the key.
+`ServiceProfile`, its event FK, profile defaults/materialization, integration
+gating, MO-S.REQUIRED runtime, and external identity mapping remain
+unimplemented and separately gated.
 
 ## 1. Product Deployment Model
 
@@ -131,6 +134,19 @@ The implementation surface is Django Admin plus the existing staff/superuser
 Ministry Structure setup boundary. Ordinary team/member/scheduling forms do not
 edit it. Copy must state that it grants no behavior, permission, membership,
 serving, or hierarchy.
+
+`GENERIC-DEPLOYMENT-CONFIG.2A` adds the generic operator command
+`configure_ministry_team_keys`. It accepts only invocation-supplied exact
+`MinistryTeam` PK -> reviewed canonical `team_key` mappings; source code contains
+no deployment-specific mapping. Dry-run is the default and prints deterministic
+review evidence plus a `TEAM_KEY_CONFIG_PLAN_V1` SHA-256 confirmation token over
+canonical JSON binding the exact target IDs, current/proposed keys, reviewed
+team metadata, and exact safe primary-path evidence. Apply requires both
+`--apply` and that exact current token, rebuilds and rechecks current truth,
+then performs ordered atomic conditional `team_key IS NULL` CAS updates. It
+cannot overwrite or rename a configured key. The command advances the target
+row's normal `updated_at` timestamp and changes no other domain state. 2A adds
+no runtime consumer and applied no normal-local or production key data.
 
 ### 4.2 `events.ServiceProfile`
 
@@ -476,7 +492,7 @@ Each slice requires separate approval.
 | Slice | Purpose/impact | Gate and review |
 |---|---|---|
 | 1. Team identity foundation | Add nullable unique key, validation/immutability, setup/Admin, tests, read-only inventory; no backfill. LOW. | Additive migration; product owner reviews field/copy. |
-| 2. Team key configuration | Dry-run export, reviewed key plan, guarded apply/post-audit; data only. MEDIUM. | Stop on duplicate/malformed/ambiguous/unreviewed mapping; owner reviews every apply. |
+| 2. Team key configuration | **IMPLEMENTED / LOCAL VERIFIED (`GENERIC-DEPLOYMENT-CONFIG.2A`)** as `configure_ministry_team_keys`: generic exact-PK reviewed plan, versioned state-bound token, atomic NULL-only CAS apply, and independent post-audit direction; no production configuration applied. MEDIUM operationally. | Stop on duplicate/malformed/noncanonical/unreviewed or stale state; owner reviews every apply. |
 | 3. Service Profile/FK expand | Add profile + nullable FK/Admin/validation while legacy string remains authoritative. LOW-MEDIUM. | Profile rows reviewed before creation. |
 | 4. Profile mapping/backfill | Audit keys/types, create profiles, exact FK dry-run/apply, prove dual consistency including 52 rows. MEDIUM. | Stop on conflict/unmapped/ambiguity; owner reviews/apply. |
 | 5. Integration boundary + consumer switch | Registry/gates, isolate SVCA adapters, configure deployment, switch readiness/setup/workbook/Admin/signing to FK with drift audit. MEDIUM-HIGH. | Focused adapter/workbook regressions and deployment setting review; old payloads fail closed. |

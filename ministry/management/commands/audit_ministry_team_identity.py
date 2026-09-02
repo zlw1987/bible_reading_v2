@@ -5,115 +5,15 @@ configuration slice. It never infers, creates, repairs, or requires keys.
 """
 
 import json
-from collections import defaultdict
 
-from django.core.exceptions import ValidationError
 from django.core.management.base import BaseCommand
 
-from ministry.models import (
-    MinistryTeam,
-    validate_ministry_team_key,
-)
+from ministry.team_identity import build_identity_inventory
 
 
 UNCONFIGURED = "UNCONFIGURED"
-UNRESOLVED_MULTIPLE_PRIMARY_LINKS = "UNRESOLVED_MULTIPLE_PRIMARY_LINKS"
-UNRESOLVED_PRIMARY_PATH_CYCLE = "UNRESOLVED_PRIMARY_PATH_CYCLE"
-
-
 def _display(value):
     return json.dumps(value or "", ensure_ascii=False)
-
-
-def _safe_primary_path(team):
-    """Resolve the canonical primary path, or an explicit fail-closed marker."""
-    ministry_names = [team.get_name("zh")]
-    seen = {team.pk}
-    current = team
-    while True:
-        links = list(
-            current.parent_links.filter(is_active=True, is_primary=True)
-            .select_related("parent_team", "parent_church_unit")
-            .order_by("sort_order", "id")[:2]
-        )
-        if len(links) > 1:
-            return UNRESOLVED_MULTIPLE_PRIMARY_LINKS
-        if not links:
-            return " > ".join(reversed(ministry_names))
-
-        link = links[0]
-        if link.parent_church_unit_id is not None:
-            return " > ".join(
-                [link.parent_church_unit.path_label("zh")]
-                + list(reversed(ministry_names))
-            )
-
-        parent = link.parent_team
-        if parent is None or parent.pk in seen:
-            return UNRESOLVED_PRIMARY_PATH_CYCLE
-        seen.add(parent.pk)
-        ministry_names.append(parent.get_name("zh"))
-        current = parent
-
-
-def build_identity_inventory():
-    """Return deterministic, privacy-bounded identity evidence for all teams."""
-    teams = list(MinistryTeam.objects.all().order_by("id"))
-    rows = []
-    canonical_key_owners = defaultdict(list)
-
-    for team in teams:
-        raw_key = team.team_key
-        integrity_problems = []
-        if raw_key is not None:
-            try:
-                canonical_key = validate_ministry_team_key(raw_key)
-            except ValidationError:
-                canonical_key = None
-                integrity_problems.append("MALFORMED_TEAM_KEY")
-            else:
-                if canonical_key != raw_key:
-                    integrity_problems.append("NONCANONICAL_TEAM_KEY")
-                if canonical_key is not None:
-                    canonical_key_owners[canonical_key].append(team.id)
-
-        rows.append(
-            {
-                "pk": team.pk,
-                "team_key": raw_key,
-                "name": team.name,
-                "name_en": team.name_en,
-                "is_active": team.is_active,
-                "is_assignable": team.is_assignable,
-                "is_worship_rotation_pool": team.is_worship_rotation_pool,
-                "primary_path": _safe_primary_path(team),
-                "integrity_problems": integrity_problems,
-            }
-        )
-
-    duplicate_ids = {
-        team_id
-        for owner_ids in canonical_key_owners.values()
-        if len(owner_ids) > 1
-        for team_id in owner_ids
-    }
-    for row in rows:
-        if row["pk"] in duplicate_ids:
-            row["integrity_problems"].append("DUPLICATE_CANONICAL_TEAM_KEY")
-
-    configured = sum(row["team_key"] is not None for row in rows)
-    return {
-        "rows": rows,
-        "summary": {
-            "total_teams": len(rows),
-            "active_teams": sum(row["is_active"] for row in rows),
-            "configured_team_keys": configured,
-            "unconfigured_team_keys": len(rows) - configured,
-            "integrity_problem_teams": sum(
-                bool(row["integrity_problems"]) for row in rows
-            ),
-        },
-    }
 
 
 class Command(BaseCommand):

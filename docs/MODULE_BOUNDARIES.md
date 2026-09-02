@@ -48,7 +48,11 @@ plugin framework. Its integration registry and schema proposals remain runtime
 unimplemented pending separately approved slices, except that
 `GENERIC-DEPLOYMENT-CONFIG.1A` now implements the additive nullable
 `MinistryTeam.team_key` identity foundation, bounded staff/Admin setup, and a
-read-only inventory with no backfill and no operational runtime consumer.
+read-only inventory, and `GENERIC-DEPLOYMENT-CONFIG.2A` implements the generic
+dry-run-first exact-PK reviewed key-configuration command with a versioned
+current-state token and atomic NULL-only CAS apply. Neither slice makes
+`team_key` an operational runtime consumer, and 2A applied no normal-local or
+production key configuration.
 
 This project is becoming a lightweight modular church management system.
 Churches should eventually be able to enable only the modules they need, and

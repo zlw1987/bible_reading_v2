@@ -7,6 +7,16 @@ schemas in this document. The runtime and migrations described here are
 incompatible schema or domain change requires a separately approved architecture
 revision; implementation tasks must not silently drift from this contract.
 
+Implementation status: **`GENERIC-DEPLOYMENT-CONFIG.1A` — MinistryTeam stable
+technical identity foundation — IMPLEMENTED / LOCAL VERIFIED.** The additive
+nullable unique `MinistryTeam.team_key`, canonical normalization/validation,
+write-once ordinary staff setup and Admin presentation, and read-only identity
+inventory are implemented. Existing teams remain unconfigured (`NULL`) because
+this slice performs no backfill or normal-local/production data apply. No
+runtime behavior depends on the key. `ServiceProfile`, its event FK, profile
+defaults/materialization, integration gating, MO-S.REQUIRED runtime, and
+external identity mapping remain unimplemented and separately gated.
+
 ## 1. Product Deployment Model
 
 The product is one generic CMS codebase installed independently by different
@@ -343,13 +353,22 @@ static downstream teams; selected Worship remains event-specific.
 This follows registered `ministry depends_on events` and avoids moving existing
 models for theoretical purity.
 
-From current heads (`events/0011`, `ministry/0005`):
+At the `GENERIC-DEPLOYMENT-CONFIG.1A` milestone,
+`ministry/0006_ministryteam_team_key` implements the additive nullable unique
+`MinistryTeam.team_key` foundation. The relevant Events head remains
+`events/0011`.
+
+The remaining planned migration direction is:
 
 ```text
-ministry head -> add nullable unique MinistryTeam.team_key
-events head -> create ServiceProfile -> add nullable ServiceEvent FK
-ministry team-key migration + events ServiceProfile migration
-    -> create ministry.ServiceProfileMinistryRequirement
+ministry/0006 = implemented MinistryTeam.team_key foundation
+
+events head
+    -> future create ServiceProfile
+    -> future add nullable ServiceEvent.service_profile FK
+
+ministry/0006 + future events ServiceProfile migration
+    -> future create ministry.ServiceProfileMinistryRequirement
 ```
 
 The events profile migration does not depend on the new ministry relationship.

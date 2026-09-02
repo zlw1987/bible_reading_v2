@@ -27,7 +27,13 @@ architecture in
 stable local Ministry Team keys, first-class Service Profiles, explicit profile
 ministry defaults and reviewed materialization, opt-in named deployment
 adapters, and a deferred external-identity mapping layer. These proposals are
-runtime unimplemented and require separately approved implementation slices.
+runtime unimplemented and require separately approved implementation slices,
+except that `GENERIC-DEPLOYMENT-CONFIG.1A` now implements and locally verifies
+the additive nullable `MinistryTeam.team_key` foundation, write-once ordinary
+staff/Admin setup, and read-only inventory. Existing teams remain unconfigured;
+no current operational runtime consumes the key. Service Profiles, defaults,
+materialization, integration gating, MO-S.REQUIRED runtime, and external
+identity mapping remain unimplemented.
 
 `MO-S.6D-PROFILE.1A` implements one optional validated
 `ServiceEvent.service_profile_key` as stable technical service-profile identity.

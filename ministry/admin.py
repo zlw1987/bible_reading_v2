@@ -3,6 +3,7 @@ from django.db import transaction
 
 from events.scheduling_revision import advance_scheduling_revisions
 
+from .forms import NormalizedMinistryTeamKeyFormField
 from .models import (
     MinistryTeam,
     MinistryTeamParentLink,
@@ -43,6 +44,7 @@ class MinistryTeamParentLinkInline(admin.TabularInline):
 class MinistryTeamAdmin(admin.ModelAdmin):
     list_display = (
         "name",
+        "team_key",
         "team_kind",
         "is_assignable",
         "is_worship_rotation_pool",
@@ -57,15 +59,34 @@ class MinistryTeamAdmin(admin.ModelAdmin):
         "is_worship_rotation_pool",
         "is_active",
     )
-    search_fields = ("name", "name_en", "description", "description_en", "email_alias")
+    search_fields = (
+        "name",
+        "name_en",
+        "team_key",
+        "description",
+        "description_en",
+        "email_alias",
+    )
     raw_id_fields = ("role_profile",)
     inlines = (MinistryTeamParentLinkInline,)
+
+    def formfield_for_dbfield(self, db_field, request, **kwargs):
+        if db_field.name == "team_key":
+            kwargs["form_class"] = NormalizedMinistryTeamKeyFormField
+        return super().formfield_for_dbfield(db_field, request, **kwargs)
 
     def get_inline_instances(self, request, obj=None):
         # Parent links require an existing child team; hide the inline on add.
         if obj is None:
             return []
         return super().get_inline_instances(request, obj)
+
+    def get_readonly_fields(self, request, obj=None):
+        """Keep a configured technical identity stable in ordinary Admin."""
+        readonly = list(super().get_readonly_fields(request, obj))
+        if obj is not None and obj.team_key is not None:
+            readonly.append("team_key")
+        return tuple(readonly)
 
     def delete_queryset(self, request, queryset):
         current_statuses = (

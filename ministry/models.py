@@ -1,9 +1,44 @@
+import re
+
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import DEFAULT_DB_ALIAS, models, transaction
 from django.utils import timezone
 
 from events.models import ServiceEvent
+
+
+MINISTRY_TEAM_KEY_PATTERN = re.compile(r"^[a-z0-9_.-]+$")
+
+
+def normalize_ministry_team_key(value):
+    """Return the canonical deployment-local Ministry Team key.
+
+    This is deliberately normalization only. Supported ModelForms and explicit
+    model validation call ``MinistryTeam.clean()`` for syntax validation; raw
+    SQL and queryset updates remain outside that supported-write guarantee and
+    are inspected by the read-only identity inventory.
+    """
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        raise ValidationError(
+            "A Ministry Team key must be a string.",
+            code="invalid_ministry_team_key_type",
+        )
+    normalized = value.strip().lower()
+    return normalized or None
+
+
+def validate_ministry_team_key(value):
+    """Normalize and validate one optional Ministry Team key."""
+    normalized = normalize_ministry_team_key(value)
+    if normalized is not None and not MINISTRY_TEAM_KEY_PATTERN.fullmatch(normalized):
+        raise ValidationError(
+            "Use only lowercase letters, numbers, dot, underscore, or hyphen.",
+            code="invalid_ministry_team_key",
+        )
+    return normalized
 
 
 class MinistryTeam(models.Model):
@@ -37,6 +72,16 @@ class MinistryTeam(models.Model):
 
     name = models.CharField(max_length=160)
     name_en = models.CharField(max_length=160, blank=True, default="")
+    team_key = models.CharField(
+        max_length=64,
+        null=True,
+        blank=True,
+        unique=True,
+        help_text=(
+            "Stable local technical identity for reviewed deployment setup and "
+            "integrations. Grants no permission or serving behavior."
+        ),
+    )
     description = models.TextField(blank=True, default="")
     description_en = models.TextField(blank=True, default="")
     email_alias = models.CharField(max_length=180, blank=True, default="")
@@ -107,15 +152,39 @@ class MinistryTeam(models.Model):
         so the Worship-pool inspection/readiness service also detects malformed
         stored rows and fails closed.
         """
+        super().clean()
+        errors = {}
+        try:
+            self.team_key = validate_ministry_team_key(self.team_key)
+        except ValidationError as error:
+            errors["team_key"] = error
+
         if self.is_worship_rotation_pool and self.is_assignable:
-            raise ValidationError(
-                {
-                    "is_worship_rotation_pool": ValidationError(
-                        self.WORSHIP_ROTATION_POOL_ASSIGNABLE_ERROR,
-                        code=self.WORSHIP_ROTATION_POOL_ASSIGNABLE_ERROR_CODE,
-                    )
-                }
+            errors["is_worship_rotation_pool"] = ValidationError(
+                self.WORSHIP_ROTATION_POOL_ASSIGNABLE_ERROR,
+                code=self.WORSHIP_ROTATION_POOL_ASSIGNABLE_ERROR_CODE,
             )
+
+        if errors:
+            raise ValidationError(errors)
+
+    def full_clean(self, *args, **kwargs):
+        # Normalize before Django's field-level max-length and uniqueness
+        # validation so supported explicit model validation follows the frozen
+        # trim/lower/blank-to-NULL ordering.
+        self.team_key = normalize_ministry_team_key(self.team_key)
+        return super().full_clean(*args, **kwargs)
+
+    def save(self, *args, **kwargs):
+        """Normalize the optional key without redefining Django save validation.
+
+        The repository's supported setup writes use ModelForms (and therefore
+        ``full_clean``). This narrow backstop keeps ordinary model saves
+        canonical while preserving the truthful boundary that arbitrary ORM
+        writes do not automatically run full model validation.
+        """
+        self.team_key = normalize_ministry_team_key(self.team_key)
+        return super().save(*args, **kwargs)
 
     def get_name(self, language="zh"):
         if language == "en" and self.name_en:

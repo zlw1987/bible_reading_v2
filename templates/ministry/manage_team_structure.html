@@ -122,7 +122,7 @@
         <div class="form-row">
             {{ field.label_tag }}
             {{ field }}
-            {% if field.name == "is_worship_rotation_pool" %}
+            {% if field.name == "is_worship_rotation_pool" or field.name == "team_key" %}
             <span class="muted">{{ field.help_text }}</span>
             {% endif %}
             {{ field.errors }}

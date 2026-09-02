@@ -1212,7 +1212,8 @@ def manage_ministry_team_structure(request, team_id):
     """Staff-only ministry-structure setup for one ministry team.
 
     Edits ministry-structure *display/organization* metadata (``team_kind``,
-    ``is_assignable``, ``role_profile``, ``is_active``) and manages
+    ``is_assignable``, ``role_profile``, ``is_active``), permits one reviewed
+    first-time stable ``team_key`` configuration, and manages
     ``MinistryTeamParentLink`` rows (add ministry-parent / church-anchor links,
     set the primary parent, deactivate a link). Access is staff/superuser only
     and is deliberately NOT granted by ``TeamMembership.role``/``can_lead``,

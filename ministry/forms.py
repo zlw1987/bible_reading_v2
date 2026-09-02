@@ -22,6 +22,7 @@ from .models import (
     MinistryTeamRoleType,
     TeamAssignment,
     TeamMembership,
+    normalize_ministry_team_key,
 )
 from .services.worship_assignment_guard import (
     WORSHIP_ASSIGNMENT_OWNERSHIP_ERROR_CODE,
@@ -218,6 +219,17 @@ ASSIGNMENT_FORM_TEXT = {
 STRUCTURE_FORM_TEXT = {
     "en": {
         "team_kind": "Unit kind",
+        "team_key": "Stable team key",
+        "team_key_unconfigured_help": (
+            "No technical key is configured. This technical deployment identity "
+            "is used by reviewed setup/integrations. It grants no permission or "
+            "serving behavior. After it is saved, ordinary setup treats it as "
+            "stable and read-only."
+        ),
+        "team_key_configured_help": (
+            "This stable technical deployment identity is read-only in ordinary "
+            "setup. It grants no permission or serving behavior."
+        ),
         "is_assignable": "Assignable (can be a serving assignment target)",
         "is_worship_rotation_pool": "Worship Rotation Pool",
         "is_worship_rotation_pool_help": (
@@ -239,6 +251,14 @@ STRUCTURE_FORM_TEXT = {
     },
     "zh": {
         "team_kind": "单位类型",
+        "team_key": "稳定团队标识",
+        "team_key_unconfigured_help": (
+            "尚未配置技术标识。此技术标识用于经审核的部署配置与系统集成。"
+            "不授予任何权限，也不代表服事安排。保存后，普通设置会将其视为稳定且只读。"
+        ),
+        "team_key_configured_help": (
+            "此稳定的部署技术标识在普通设置中为只读。不授予任何权限，也不代表服事安排。"
+        ),
         "is_assignable": "可排班（可作为服事安排对象）",
         "is_worship_rotation_pool": "敬拜轮值团队组",
         "is_worship_rotation_pool_help": (
@@ -303,6 +323,13 @@ def membership_form_text(language):
 
 def assignment_form_text(language):
     return ASSIGNMENT_FORM_TEXT.get(language, ASSIGNMENT_FORM_TEXT["en"])
+
+
+class NormalizedMinistryTeamKeyFormField(forms.CharField):
+    """Normalize the technical key before form-field length validation."""
+
+    def to_python(self, value):
+        return normalize_ministry_team_key(super().to_python(value))
 
 
 class MinistryTeamForm(forms.ModelForm):
@@ -899,16 +926,19 @@ class TeamAssignmentConfirmForm(forms.Form):
 class MinistryTeamStructureForm(forms.ModelForm):
     """Edit ministry-structure metadata on an existing ``MinistryTeam``.
 
-    Scope is the structure/setup metadata fields only (``team_kind``,
-    ``is_assignable``, Worship rotation-pool configuration, ``role_profile``,
-    ``is_active``). Name/bilingual fields stay on the existing ministry-team
-    edit form. ``role_profile`` lists only existing active profiles; this slice
-    seeds/creates none.
+    Scope is the structure/setup metadata fields only (stable ``team_key``,
+    ``team_kind``, ``is_assignable``, Worship rotation-pool configuration,
+    ``role_profile``, ``is_active``). Name/bilingual fields stay on the existing
+    ministry-team edit form. ``role_profile`` lists only existing active
+    profiles; this slice seeds/creates none.
     """
+
+    team_key = NormalizedMinistryTeamKeyFormField(required=False, max_length=64)
 
     class Meta:
         model = MinistryTeam
         fields = [
+            "team_key",
             "team_kind",
             "is_assignable",
             "is_worship_rotation_pool",
@@ -919,6 +949,11 @@ class MinistryTeamStructureForm(forms.ModelForm):
     def __init__(self, *args, language="en", **kwargs):
         super().__init__(*args, **kwargs)
         text = structure_form_text(language)
+        self._stored_team_key = (
+            self.instance.team_key
+            if self.instance is not None and self.instance.pk
+            else None
+        )
 
         # Import locally to avoid any import-order coupling with structure_map.
         from .structure_map import team_kind_options
@@ -928,6 +963,13 @@ class MinistryTeamStructureForm(forms.ModelForm):
             is_active=True
         ).order_by("sort_order", "code")
         self.fields["role_profile"].empty_label = text["role_profile_empty"]
+        self.fields["team_key"].help_text = (
+            text["team_key_configured_help"]
+            if self._stored_team_key is not None
+            else text["team_key_unconfigured_help"]
+        )
+        if self._stored_team_key is not None:
+            self.fields["team_key"].disabled = True
         self.fields["is_worship_rotation_pool"].help_text = text[
             "is_worship_rotation_pool_help"
         ]
@@ -937,6 +979,13 @@ class MinistryTeamStructureForm(forms.ModelForm):
 
         for field_name in self.fields:
             self.fields[field_name].label = text[field_name]
+
+    def clean_team_key(self):
+        """Normalize a first-time key and preserve configured keys unchanged."""
+        value = normalize_ministry_team_key(self.cleaned_data.get("team_key"))
+        if self._stored_team_key is not None:
+            return self._stored_team_key
+        return value
 
 
 class _BaseParentLinkForm(forms.Form):

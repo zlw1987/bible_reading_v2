@@ -45,7 +45,10 @@ freezes the deployment-configuration boundary: one generic codebase with a
 separate database per installation, local canonical configuration data, and
 explicit opt-in deployment adapters. It does not introduce multi-tenancy or a
 plugin framework. Its integration registry and schema proposals remain runtime
-unimplemented pending separately approved slices.
+unimplemented pending separately approved slices, except that
+`GENERIC-DEPLOYMENT-CONFIG.1A` now implements the additive nullable
+`MinistryTeam.team_key` identity foundation, bounded staff/Admin setup, and a
+read-only inventory with no backfill and no operational runtime consumer.
 
 This project is becoming a lightweight modular church management system.
 Churches should eventually be able to enable only the modules they need, and

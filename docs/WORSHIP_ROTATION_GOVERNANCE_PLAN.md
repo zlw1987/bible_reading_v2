@@ -52,6 +52,13 @@ confirmation, and the bounded direct-change notification runtime are
 implemented; assignment import and any broader later notification expansion
 below require separate explicit approval.
 
+[`GENERIC_DEPLOYMENT_CONFIGURATION_ARCHITECTURE.md`](GENERIC_DEPLOYMENT_CONFIGURATION_ARCHITECTURE.md)
+freezes the adjacent generic boundary. Service-profile defaults may name only
+explicit static assignable teams; the governed selected Worship Team remains
+dynamic event state and is never persisted as a static default. Named workbook
+adapters must be explicitly enabled per deployment. These proposals remain
+runtime unimplemented.
+
 ## 1. Problem and decisions owned here
 
 Sunday Worship has two separate decisions:

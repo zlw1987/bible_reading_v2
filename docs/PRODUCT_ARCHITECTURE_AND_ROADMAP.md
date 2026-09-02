@@ -21,6 +21,14 @@ overlays through `CHURCH-CALENDAR.2B`. Calendar remains read-only and does not
 change Today, My Serving, serving authority, notification, attendance/check-in,
 authoring/management, or external-sync behavior.
 
+`GENERIC-DEPLOYMENT-CONFIG.0A` freezes the cross-cutting generic deployment
+architecture in
+[`GENERIC_DEPLOYMENT_CONFIGURATION_ARCHITECTURE.md`](GENERIC_DEPLOYMENT_CONFIGURATION_ARCHITECTURE.md):
+stable local Ministry Team keys, first-class Service Profiles, explicit profile
+ministry defaults and reviewed materialization, opt-in named deployment
+adapters, and a deferred external-identity mapping layer. These proposals are
+runtime unimplemented and require separately approved implementation slices.
+
 `MO-S.6D-PROFILE.1A` implements one optional validated
 `ServiceEvent.service_profile_key` as stable technical service-profile identity.
 It grants no audience, permission, serving, recurrence, location, Host /

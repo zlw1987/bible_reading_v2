@@ -182,6 +182,13 @@ MO-S.5A is complete as rotation anchor foundation. MO-S.5B is complete as a limi
 
 Status: **docs/audit complete; runtime unimplemented**.
 
+The deployment-generic profile/default architecture is frozen in
+[`GENERIC_DEPLOYMENT_CONFIGURATION_ARCHITECTURE.md`](GENERIC_DEPLOYMENT_CONFIGURATION_ARCHITECTURE.md).
+Profile ministry defaults are configuration that must be explicitly and
+reviewably materialized into event RequiredTeam rows; they are never live
+inherited. The valid selected Worship Team remains separate dynamic event state.
+Those profile/default/materialization proposals are also runtime unimplemented.
+
 The earlier MO-S.5A wording that `rotation_anchor_team` is never required
 coverage is preserved as historical implementation chronology. Governed Worship
 work subsequently made that field the exact event-level selected Worship Team,

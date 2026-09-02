@@ -40,6 +40,13 @@ serving, which also confirmed `CHURCH-CALENDAR.2A-FU4` ServiceEvent serving
 grouping still works and My Serving behavior is unchanged.
 This is not a broad production-readiness claim (July 2026).
 
+[`GENERIC_DEPLOYMENT_CONFIGURATION_ARCHITECTURE.md`](GENERIC_DEPLOYMENT_CONFIGURATION_ARCHITECTURE.md)
+freezes the deployment-configuration boundary: one generic codebase with a
+separate database per installation, local canonical configuration data, and
+explicit opt-in deployment adapters. It does not introduce multi-tenancy or a
+plugin framework. Its integration registry and schema proposals remain runtime
+unimplemented pending separately approved slices.
+
 This project is becoming a lightweight modular church management system.
 Churches should eventually be able to enable only the modules they need, and
 individual modules should be able to integrate with existing church systems.

@@ -22,6 +22,14 @@ confirmation/shared audit `1B-B`. The docs-only `NOTIFY.1G-0A` Direct Worship
 Team Change Notification Contract and bounded `NOTIFY.1G` runtime are
 implemented; remaining MO-S.6D runtime slices remain
 separately scoped and require explicit approval.
+
+The generic replacement architecture is frozen in
+[`GENERIC_DEPLOYMENT_CONFIGURATION_ARCHITECTURE.md`](GENERIC_DEPLOYMENT_CONFIGURATION_ARCHITECTURE.md).
+Bethany, 09:30, the `A`/`C1`/`C2`/`C3` workbook tokens, and named Worship teams
+are deployment or adapter facts, not generic CMS taxonomy. The proposed
+first-class Service Profile, Ministry Team key, defaults, materialization, and
+integration gate remain runtime unimplemented.
+
 `MO-S.6D-PROFILE.1A` now implements the optional stable
 `ServiceEvent.service_profile_key` identity foundation and is committed in the
 current HEAD. `MO-S.6D-SLICE8.1A/FU1/UX1` separately implements the strict Excel

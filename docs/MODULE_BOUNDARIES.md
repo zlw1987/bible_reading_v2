@@ -59,7 +59,14 @@ on key text. `GENERIC-DEPLOYMENT-CONFIG.3A` implements the exact frozen
 `ServiceEvent.service_profile` FK plus validation/immutability/revision/Admin
 foundations. Existing event FKs remain `NULL`, `service_profile_key` remains
 authoritative, and 3A created no profile data, performed no backfill, and
-switched no current consumer.
+switched no current consumer. `GENERIC-DEPLOYMENT-CONFIG.4A` adds the generic
+read-only Service Profile identity inventory and the dry-run-first, versioned
+current-state-token mapping command. Its reviewed apply creates one exact
+profile, maps the complete exact legacy-key event set, and advances every
+target scheduling revision exactly once under the existing SQLite CAS/write
+boundary with all-or-nothing rollback. 4A applied no normal-local or production
+mapping, and current readiness/setup/workbook/signing consumers still use
+`service_profile_key`; the Slice 5 consumer switch remains pending.
 
 This project is becoming a lightweight modular church management system.
 Churches should eventually be able to enable only the modules they need, and

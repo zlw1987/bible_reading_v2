@@ -42,9 +42,17 @@ the exact frozen `events.ServiceProfile` table and nullable protected
 `ServiceEvent.service_profile` FK, with validation/immutability/revision/Admin
 foundations. Existing event FKs remain `NULL`, the legacy
 `service_profile_key` remains authoritative, no profile data or FK backfill was
-created, and no current consumer switched. Profile mapping/backfill, defaults,
-materialization, integration gating, MO-S.REQUIRED runtime, and external
-identity mapping remain unimplemented.
+created, and no current consumer switched in 3A.
+`GENERIC-DEPLOYMENT-CONFIG.4A` implements and locally verifies the separate
+generic read-only profile-identity inventory and dry-run-first reviewed mapping
+command. Its versioned current-state token binds the exact complete event set
+and reviewed profile metadata; apply uses the existing SQLite scheduling CAS
+boundary, advances every mapped event revision exactly once, and rolls back all
+profile/event writes on stale, busy, or write failure. 4A applied no
+normal-local or production mapping, and no current consumer switched from
+`service_profile_key`. Defaults, materialization, integration gating,
+MO-S.REQUIRED runtime, the Slice 5 consumer switch, and external identity
+mapping remain unimplemented.
 
 `MO-S.6D-PROFILE.1A` implements one optional validated
 `ServiceEvent.service_profile_key` as stable technical service-profile identity.

@@ -14,7 +14,8 @@ from django.contrib.admin.models import LogEntry
 from django.contrib.auth.models import User
 from django.core import signing
 from django.core.files.uploadedfile import SimpleUploadedFile
-from django.test import SimpleTestCase, TestCase
+from django.http import Http404
+from django.test import RequestFactory, SimpleTestCase, TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 from openpyxl import Workbook
@@ -688,6 +689,9 @@ class WorshipWorkbookMappingAndGovernanceTests(WorshipWorkbookDomainTestBase):
                     decode_parsed_workbook(resigned, user=self.staff)
 
 
+@override_settings(
+    CMS_ENABLED_INTEGRATIONS=["svca_bethany_2026_worship_xlsx"]
+)
 class WorshipWorkbookViewTests(WorshipWorkbookDomainTestBase):
     @classmethod
     def setUpTestData(cls):
@@ -780,6 +784,62 @@ class WorshipWorkbookViewTests(WorshipWorkbookDomainTestBase):
                     self.client.get(reverse("worship_workbook_preview")).status_code,
                     403,
                 )
+
+    def test_enabled_staff_sees_workbook_card(self):
+        self.client.force_login(self.staff)
+        planning = self.client.get(reverse("worship_planning"))
+        self.assertEqual(planning.status_code, 200)
+        self.assertContains(planning, "Annual Workbook Preview")
+        self.assertContains(planning, reverse("worship_workbook_preview"))
+
+    @override_settings(CMS_ENABLED_INTEGRATIONS=[])
+    def test_disabled_integration_hides_card_and_staff_or_superuser_cannot_bypass(self):
+        for user in (self.staff, self.superuser):
+            with self.subTest(user=user.username):
+                self.client.force_login(user)
+                planning = self.client.get(reverse("worship_planning"))
+                self.assertEqual(planning.status_code, 200)
+                self.assertContains(planning, reverse("worship_rotation_planner"))
+                self.assertNotContains(planning, "Annual Workbook Preview")
+                self.assertNotContains(planning, reverse("worship_workbook_preview"))
+                self.assertEqual(
+                    self.client.get(reverse("worship_workbook_preview")).status_code,
+                    404,
+                )
+
+    @override_settings(CMS_ENABLED_INTEGRATIONS=[])
+    def test_disabled_preview_stops_before_upload_read_parser_service_or_query(self):
+        from events.views import worship_workbook_preview
+
+        uploaded = type(
+            "UnreadUpload",
+            (),
+            {
+                "name": "schedule.xlsx",
+                "size": 10,
+                "read": lambda self: (_ for _ in ()).throw(
+                    AssertionError("disabled upload was read")
+                ),
+            },
+        )()
+        request = RequestFactory().post("/disabled-workbook-preview/")
+        request.user = self.staff
+        request._files = {"workbook": uploaded}
+        with (
+            patch(
+                "ministry.services.worship_xlsx_preview.parse_known_worship_workbook"
+            ) as parser,
+            patch(
+                "ministry.services.worship_xlsx_preview.ServiceEvent.objects.filter"
+            ) as event_query,
+            patch("events.forms.WorshipWorkbookUploadForm") as upload_form,
+            self.assertNumQueries(0),
+            self.assertRaises(Http404),
+        ):
+            worship_workbook_preview(request)
+        parser.assert_not_called()
+        event_query.assert_not_called()
+        upload_form.assert_not_called()
 
     def test_wrong_extension_too_large_and_malformed_upload_are_rejected(self):
         self.client.force_login(self.staff)

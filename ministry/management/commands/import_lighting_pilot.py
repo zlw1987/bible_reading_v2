@@ -1,9 +1,8 @@
 from django.core.management.base import BaseCommand, CommandError
 
-from ministry.services.lighting_pilot_import import (
-    ImportStructureError,
-    import_lighting_pilot,
-    read_csv_path,
+from core.integration_registry import (
+    IntegrationDisabled,
+    require_integration_enabled,
 )
 
 
@@ -24,6 +23,17 @@ class Command(BaseCommand):
         )
 
     def handle(self, *args, **options):
+        try:
+            require_integration_enabled("svca_lighting_pilot_csv")
+        except IntegrationDisabled as exc:
+            raise CommandError(str(exc)) from exc
+
+        from ministry.services.lighting_pilot_import import (
+            ImportStructureError,
+            import_lighting_pilot,
+            read_csv_path,
+        )
+
         try:
             rows = read_csv_path(options["csv"])
         except ImportStructureError as exc:

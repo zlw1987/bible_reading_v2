@@ -11,10 +11,6 @@ from accounts.ordering import (
     structure_unit_sibling_sort_key,
 )
 from ministry.models import MinistryTeam
-from ministry.services.worship_xlsx_preview import (
-    MAX_UPLOAD_BYTES,
-    TOKEN_ORDER,
-)
 
 from .models import (
     ServiceEvent,
@@ -556,6 +552,8 @@ class WorshipWorkbookUploadForm(forms.Form):
         )
 
     def clean_workbook(self):
+        from ministry.services.worship_xlsx_preview import MAX_UPLOAD_BYTES
+
         uploaded = self.cleaned_data["workbook"]
         if not uploaded.name.lower().endswith(".xlsx"):
             raise ValidationError(
@@ -589,6 +587,8 @@ class WorshipWorkbookMappingForm(forms.Form):
         candidate_teams=None,
         **kwargs,
     ):
+        from ministry.services.worship_xlsx_preview import TOKEN_ORDER
+
         super().__init__(*args, **kwargs)
         self.language = language
         token_counts = token_counts or {}
@@ -627,6 +627,8 @@ class WorshipWorkbookMappingForm(forms.Form):
             self.fields[f"mapping_{token.lower()}"] = field
 
     def selected_mapping(self):
+        from ministry.services.worship_xlsx_preview import TOKEN_ORDER
+
         return {
             token: self.cleaned_data.get(f"mapping_{token.lower()}")
             for token in TOKEN_ORDER

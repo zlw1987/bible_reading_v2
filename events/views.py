@@ -5,6 +5,7 @@ from django.contrib.contenttypes.models import ContentType
 from django.core.exceptions import PermissionDenied
 from django.db import transaction
 from django.db.models import Q
+from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
@@ -12,6 +13,11 @@ from django.views.decorators.http import require_http_methods, require_POST
 
 from accounts.language import get_user_language
 from accounts.permissions import CAP_MANAGE_SERVICE_EVENTS, has_capability
+from core.integration_registry import (
+    IntegrationDisabled,
+    is_integration_enabled,
+    require_integration_enabled,
+)
 from ministry.models import TeamAssignment
 from ministry.permissions import (
     can_change_worship_team,
@@ -40,30 +46,6 @@ from ministry.services.worship_rotation_planner import (
     confirm_worship_rotation_proposal,
     decode_signed_worship_rotation_proposal,
 )
-from ministry.services.worship_xlsx_confirmation import (
-    CONFIRMATION_CONTRACT_REVISION,
-    WorshipWorkbookConfirmationError,
-    WorshipWorkbookConfirmationProposalError,
-    build_worship_workbook_confirmation_proposal,
-    confirm_worship_workbook,
-    decode_signed_worship_workbook_confirmation,
-)
-from ministry.services.worship_xlsx_preview import (
-    CONTRACT_REVISION,
-    SUPPORTED_SHEET,
-    MappingValidationError,
-    PreviewBlocker,
-    PreviewClassification,
-    SignedWorkbookStateError,
-    WorkbookContractError,
-    WorkbookErrorCode,
-    build_worship_import_preview,
-    decode_parsed_workbook,
-    mapping_candidate_teams,
-    parse_known_worship_workbook,
-    sign_parsed_workbook,
-)
-
 from .scheduling_revision import (
     SchedulingMutationStaleError,
     SchedulingRevisionError,
@@ -77,9 +59,6 @@ from .forms import (
     WorshipRotationConfirmationForm,
     WorshipRotationPlannerForm,
     WorshipTeamSelectionForm,
-    WorshipWorkbookMappingForm,
-    WorshipWorkbookConfirmationForm,
-    WorshipWorkbookUploadForm,
 )
 from .models import (
     ServiceEvent,
@@ -90,6 +69,14 @@ from .models import (
 
 
 WORSHIP_PLANNING_HORIZON_DAYS = 548
+WORSHIP_XLSX_INTEGRATION_KEY = "svca_bethany_2026_worship_xlsx"
+
+
+def _require_worship_xlsx_integration():
+    try:
+        require_integration_enabled(WORSHIP_XLSX_INTEGRATION_KEY)
+    except IntegrationDisabled as exc:
+        raise Http404 from exc
 
 
 def cancel_non_final_assignments_for_event(event):
@@ -733,14 +720,17 @@ def worship_planning(request):
         {
             "planning_rows": worship_planning_rows(request.user, language),
             "rotation_planner_available": len(planner_events) >= 2,
-            "worship_workbook_preview_available": can_preview_worship_workbook(
-                request.user
+            "worship_workbook_preview_available": (
+                is_integration_enabled(WORSHIP_XLSX_INTEGRATION_KEY)
+                and can_preview_worship_workbook(request.user)
             ),
         },
     )
 
 
 def _workbook_error_text(language, error):
+    from ministry.services.worship_xlsx_preview import WorkbookErrorCode
+
     labels = {
         "en": {
             WorkbookErrorCode.INVALID_XLSX: "Invalid XLSX workbook.",
@@ -784,6 +774,11 @@ def _workbook_error_text(language, error):
 
 
 def _workbook_row_labels(language, row):
+    from ministry.services.worship_xlsx_preview import (
+        PreviewBlocker,
+        PreviewClassification,
+    )
+
     classification = {
         "en": {
             PreviewClassification.NO_OP: "No-op",
@@ -850,6 +845,16 @@ def _workbook_preview_context(
     preview=None,
     confirmation_proposal=None,
 ):
+    from ministry.services.worship_xlsx_preview import (
+        CONTRACT_REVISION,
+        SUPPORTED_SHEET,
+    )
+
+    from .forms import (
+        WorshipWorkbookConfirmationForm,
+        WorshipWorkbookUploadForm,
+    )
+
     mapping_rows = []
     if mapping_form is not None and parsed is not None:
         for token in parsed.token_counts:
@@ -902,8 +907,26 @@ def _workbook_preview_context(
 def worship_workbook_preview(request):
     """Staff/superuser-only, request-scoped, zero-write XLSX preview."""
 
+    _require_worship_xlsx_integration()
     if not can_preview_worship_workbook(request.user):
         raise PermissionDenied
+
+    from ministry.services.worship_xlsx_confirmation import (
+        build_worship_workbook_confirmation_proposal,
+    )
+    from ministry.services.worship_xlsx_preview import (
+        MappingValidationError,
+        SignedWorkbookStateError,
+        WorkbookContractError,
+        build_worship_import_preview,
+        decode_parsed_workbook,
+        mapping_candidate_teams,
+        parse_known_worship_workbook,
+        sign_parsed_workbook,
+    )
+
+    from .forms import WorshipWorkbookMappingForm, WorshipWorkbookUploadForm
+
     language = get_user_language(request)
     if request.method == "GET":
         return render(
@@ -1022,8 +1045,20 @@ def worship_workbook_preview(request):
 def worship_workbook_confirm(request):
     """Confirm exactly one reviewed, staff-owned annual workbook proposal."""
 
+    _require_worship_xlsx_integration()
     if not can_preview_worship_workbook(request.user):
         raise PermissionDenied
+
+    from ministry.services.worship_xlsx_confirmation import (
+        CONFIRMATION_CONTRACT_REVISION,
+        WorshipWorkbookConfirmationError,
+        WorshipWorkbookConfirmationProposalError,
+        confirm_worship_workbook,
+        decode_signed_worship_workbook_confirmation,
+    )
+
+    from .forms import WorshipWorkbookConfirmationForm
+
     language = get_user_language(request)
     form = WorshipWorkbookConfirmationForm(request.POST)
     if not form.is_valid():

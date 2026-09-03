@@ -8,6 +8,7 @@ from django.contrib.auth.decorators import login_required
 from django.core.exceptions import ValidationError
 from django.db import OperationalError, transaction
 from django.db.models import Q
+from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
@@ -76,6 +77,10 @@ from .services.assignment_coverage import (
     build_assignment_coverage,
     events_with_coverage_queryset,
 )
+from core.integration_registry import (
+    IntegrationDisabled,
+    require_integration_enabled,
+)
 from events.scheduling_revision import (
     SchedulingMutationStaleError,
     SchedulingRevisionError,
@@ -94,11 +99,6 @@ from .services.copy_forward_suggestions import (
     VALID_MODES as COPY_FORWARD_MODES,
     compare_current_assignments_to_suggestion,
     find_copy_forward_suggestion,
-)
-from .services.lighting_pilot_import import (
-    ImportStructureError,
-    import_lighting_pilot,
-    read_csv_file,
 )
 from .services.sunday_schedule_board import build_sunday_schedule_board
 from .services.worship_context import (
@@ -1321,6 +1321,11 @@ def manage_ministry_team_structure(request, team_id):
 
 @login_required
 def lighting_pilot_import(request):
+    try:
+        require_integration_enabled("svca_lighting_pilot_csv")
+    except IntegrationDisabled as exc:
+        raise Http404 from exc
+
     language = get_user_language(request)
     if not can_import_lighting_pilot(request.user):
         if language == "zh":
@@ -1333,6 +1338,12 @@ def lighting_pilot_import(request):
     structure_error = ""
     dry_run = False
     if request.method == "POST":
+        from .services.lighting_pilot_import import (
+            ImportStructureError,
+            import_lighting_pilot,
+            read_csv_file,
+        )
+
         dry_run = "dry_run" in request.POST
         uploaded_file = request.FILES.get("csv_file")
         if not uploaded_file:

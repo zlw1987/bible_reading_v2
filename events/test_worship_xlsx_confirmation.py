@@ -14,7 +14,7 @@ from django.core import signing
 from django.core.management import call_command
 from django.db import close_old_connections, connections, transaction
 from django.db.models.signals import pre_save
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
@@ -217,6 +217,9 @@ class WorshipWorkbookConfirmationTestBase(TestCase):
         )
 
 
+@override_settings(
+    CMS_ENABLED_INTEGRATIONS=["svca_bethany_2026_worship_xlsx"]
+)
 class WorshipWorkbookConfirmationSuccessTests(WorshipWorkbookConfirmationTestBase):
     def test_staff_all_52_changed_advances_once_audits_shared_operation_and_no_notify(self):
         proposal, payload = self.decoded()
@@ -429,6 +432,9 @@ class WorshipWorkbookConfirmationSuccessTests(WorshipWorkbookConfirmationTestBas
             )
 
 
+@override_settings(
+    CMS_ENABLED_INTEGRATIONS=["svca_bethany_2026_worship_xlsx"]
+)
 class WorshipWorkbookConfirmationTokenAuthorityTests(
     WorshipWorkbookConfirmationTestBase
 ):
@@ -562,6 +568,36 @@ class WorshipWorkbookConfirmationTokenAuthorityTests(
             ),
         ):
             self.assertTrue(can_manage_service_events(self.cap_service_event_manager))
+
+    @override_settings(CMS_ENABLED_INTEGRATIONS=[])
+    def test_disabled_confirmation_staff_and_superuser_cannot_decode_query_or_write(self):
+        proposal = self.proposal()
+        before = self.scheduling_snapshot()
+        before_logs = LogEntry.objects.count()
+        for user in (self.staff, self.superuser):
+            with (
+                self.subTest(user=user.username),
+                patch(
+                    "ministry.services.worship_xlsx_confirmation.decode_signed_worship_workbook_confirmation"
+                ) as decode,
+                patch(
+                    "ministry.services.worship_xlsx_confirmation.ServiceEvent.objects.filter"
+                ) as event_query,
+                patch(
+                    "events.forms.WorshipWorkbookConfirmationForm"
+                ) as confirmation_form,
+            ):
+                self.client.force_login(user)
+                response = self.client.post(
+                    reverse("worship_workbook_confirm"),
+                    {"confirmation_proposal": proposal.signed_payload},
+                )
+                self.assertEqual(response.status_code, 404)
+                decode.assert_not_called()
+                event_query.assert_not_called()
+                confirmation_form.assert_not_called()
+        self.assertEqual(self.scheduling_snapshot(), before)
+        self.assertEqual(LogEntry.objects.count(), before_logs)
 
     def test_authority_loss_inside_transaction_rolls_back_without_claims(self):
         _, payload = self.decoded()
@@ -871,6 +907,9 @@ class WorshipWorkbookConfirmationCurrentTruthTests(
         self.assertEqual(first.scheduling_revision, 1)
 
 
+@override_settings(
+    CMS_ENABLED_INTEGRATIONS=["svca_bethany_2026_worship_xlsx"]
+)
 class WorshipWorkbookConfirmationViewGateTests(WorshipWorkbookConfirmationTestBase):
     def upload(self):
         from django.core.files.uploadedfile import SimpleUploadedFile

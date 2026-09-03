@@ -44,7 +44,10 @@ This is not a broad production-readiness claim (July 2026).
 freezes the deployment-configuration boundary: one generic codebase with a
 separate database per installation, local canonical configuration data, and
 explicit opt-in deployment adapters. It does not introduce multi-tenancy or a
-plugin framework. Its remaining integration/default/materialization proposals
+plugin framework. `GENERIC-DEPLOYMENT-CONFIG.5B` now implements the static
+default-off integration registry, gates the named Worship XLSX and Lighting
+web/command surfaces, and isolates adapter imports from generic events/ministry
+imports. Default/materialization and ServiceProfile consumer-switch proposals
 remain runtime unimplemented pending separately approved slices.
 `GENERIC-DEPLOYMENT-CONFIG.1A` now implements the additive nullable
 `MinistryTeam.team_key` identity foundation, bounded staff/Admin setup, and a
@@ -72,8 +75,12 @@ one reviewed profile, 52 exact dual-consistent mapped events, zero identity
 drift, and exact `1 -> 2` once-only scheduling-revision advances. This is
 deployment-specific evidence only. `runtime_consumer_switched` is false, so
 current readiness/setup/workbook/Admin/signing and other operational identity
-consumers still use `service_profile_key`; the Slice 5 integration boundary and
-consumer switch remain pending.
+consumers still use `service_profile_key`; 5B changes only integration
+enablement/import boundaries, and the ServiceProfile consumer switch remains
+pending. The current SVCA deployment must explicitly enable
+`svca_bethany_2026_worship_xlsx` before or with 5B deployment if the annual
+workbook workflow must remain available. The Lighting key stays disabled until
+its separate retention/identity decision.
 
 This project is becoming a lightweight modular church management system.
 Churches should eventually be able to enable only the modules they need, and

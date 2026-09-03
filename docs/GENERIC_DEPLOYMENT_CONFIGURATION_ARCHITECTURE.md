@@ -18,7 +18,9 @@ mapping/backfill tooling — IMPLEMENTED / LOCAL VERIFIED / PRODUCTION APPLY
 COMPLETE / PRODUCTION POST-AUDIT VERIFIED for the reviewed SVCA mapping; and
 `GENERIC-DEPLOYMENT-CONFIG.5A` — repository-wide read-only Slice 5 audit and
 docs-only implementation planning — COMPLETE, with no Slice 5 runtime behavior
-implemented.** The additive nullable unique
+implemented; and `GENERIC-DEPLOYMENT-CONFIG.5B` — explicit integration registry,
+fail-closed gates, and lazy import isolation — IMPLEMENTED / LOCAL VERIFIED.**
+The additive nullable unique
 `MinistryTeam.team_key`, canonical normalization/validation, write-once ordinary
 staff setup and Admin presentation, read-only identity inventory, and generic
 dry-run-first reviewed configuration command are implemented. 2A itself applied
@@ -34,9 +36,10 @@ consistency validation, existing scheduling-revision integration, and bounded
 technical Admin support. Existing events remain FK `NULL` and
 `service_profile_key` remains authoritative. No profile row was created or
 inferred, no FK was backfilled, and no readiness/setup/workbook consumer was
-switched in 3A. Profile defaults/materialization, integration gating,
-MO-S.REQUIRED runtime, and external identity mapping remain unimplemented and
-separately gated.
+switched in 3A. Integration gating is now implemented by 5B; profile
+defaults/materialization, MO-S.REQUIRED runtime, the ServiceProfile consumer
+switch, and external identity mapping remain unimplemented and separately
+gated.
 
 4A adds the generic read-only `audit_service_profile_identity` inventory and
 the dry-run-first `configure_service_profile_mapping` command. The inventory
@@ -56,6 +59,18 @@ Current readiness, setup/reset, workbook, signing/fingerprint, and operational
 lookup consumers still use `service_profile_key`; the apply reported
 `runtime_consumer_switched: false`, and the Slice 5 consumer switch remains
 pending.
+
+5B adds the static Core `CMS_ENABLED_INTEGRATIONS` registry. Absent, `None`,
+or empty configuration enables no integration. The named SVCA/Bethany 2026
+Worship XLSX and Lighting Pilot CSV integrations each require the enabled
+`events` and `ministry` modules; unknown keys and unmet dependencies fail with
+`ImproperlyConfigured`. The workbook card, workbook preview/confirmation
+routes, Lighting route, and Lighting command now fail closed when disabled,
+and generic events/ministry imports no longer load either adapter service or
+`openpyxl`. Existing URLs remain stable and enabled behavior is preserved
+through gate-first lazy imports. No adapter service file moved, no signed
+workbook contract/version changed, and `service_profile_key` remains current
+runtime authority pending separately approved 5C–5F work.
 
 ### Production closeout: reviewed SVCA mapping only
 
@@ -93,9 +108,10 @@ The legacy string still exists and remains authoritative for current runtime
 consumers. This production evidence does not infer recurrence, default time,
 location, audience, Worship behavior, ministry defaults, or any other generic
 semantics from the reviewed key, names, time, deployment, or 52-event pattern.
-It does not implement profile ministry defaults, materialization,
-`MO-S.REQUIRED`, integration gating, the Slice 5 consumer switch, or legacy-key
-retirement.
+That production mapping did not implement profile ministry defaults,
+materialization, `MO-S.REQUIRED`, the Slice 5 consumer switch, or legacy-key
+retirement. The code-only 5B integration boundary was implemented and locally
+verified later; no production configuration or command was run as part of 5B.
 
 ## 1. Product Deployment Model
 
@@ -490,8 +506,9 @@ a cycle.
 ## 10. Deployment-Specific Adapter Boundary
 
 The existing 2026 SVCA/Bethany Worship XLSX code is a valid specialized
-adapter, not a generic importer. Its unqualified staff exposure and
-unconditional imports are not the target boundary.
+adapter, not a generic importer. `GENERIC-DEPLOYMENT-CONFIG.5B` implements the
+following frozen boundary around the previously unqualified staff exposure and
+unconditional generic imports.
 
 Freeze a small explicit registry, not a plugin framework:
 
@@ -509,15 +526,18 @@ Freeze a small explicit registry, not a plugin framework:
 Unlike `CMS_ENABLED_MODULES`, absence never means enable all. Adapters are
 opt-in so another church cannot accidentally see SVCA UI.
 
-Current URL names may remain, but views must gate them and imports must be
-lazy/isolated so disabled deployments do not load adapter code. Later move the
+Current URL names remain, while 5B view wrappers gate first and lazy-import the
+adapter only after enablement and authority checks. Disabled generic imports do
+not load the adapter services or `openpyxl`. A later focused task may move the
 adapter under an explicit namespace such as
 `ministry/integrations/svca_bethany_2026_worship_xlsx/`. Generic Worship
 Planning provides selector/planner plus enabled adapter links. Future adapters
 are explicitly registered: no auto-discovery, hook bus, or plugin SDK.
 
-The Lighting pilot has the same boundary problem plus name-based team identity.
-If retained, gate it and migrate to `team_key` mapping or retire it.
+The Lighting pilot is now gated at its web and command boundaries and its
+service is lazy-imported. Its name-based team identity remains unresolved. Do
+not enable it in a deployment until a separately approved task migrates it to a
+reviewed `team_key` mapping or retires it.
 
 ## 11. Future External-System Integration Boundary
 
@@ -541,12 +561,12 @@ local keys for reviewed configuration, but cannot overload identity layers.
 |---|---|---|
 | ServiceEvent/audience/required-team models; MinistryTeam taxonomy/assignability; roles; Worship pools/governance | A. Acceptable generic domain | Explicit fields/relationships drive behavior. |
 | Parent-scoped Church Structure codes and generic role/profile codes | A. Acceptable generic domain | Local configuration/taxonomy precedent; not deployment-global team identity. |
-| Strict SVCA/Bethany 2026 XLSX contract | B. Acceptable explicit deployment adapter | Strict constants are correct inside a named adapter; exposure/placement still need work. |
+| Strict SVCA/Bethany 2026 XLSX contract | B. Acceptable explicit deployment adapter | Strict constants remain correct; 5B gates exposure, while physical namespace placement remains optional cleanup. |
 | Bethany rebuild, CHURCH -> campus -> CM resolver, readiness defaults | C. Acceptable one-time historical setup | Bounded operator/history tooling, not generic runtime; future tooling should be profile-data-driven. |
 | Legacy SVCA reading import and SVCA readiness-policy seed | C. Acceptable deployment/historical setup | Explicit command only; keep named and never auto-run. |
-| Workbook card/URLs shown to all staff when modules enabled | D. Should be configuration-gated | New opt-in setting must hide and fail-close routes. |
-| Lighting pilot CSV route/UI | D. Should be configuration-gated | Another deployment must not see/invoke it merely because ministry is enabled. |
-| Unconditional XLSX imports in generic events forms/views and Lighting imports in ministry views | E. Genericity violation / future refactor | Isolate/lazy-load under explicit integration ownership. |
+| Workbook card/URLs shown to all staff when modules enabled | D. Configuration-gating debt resolved in 5B | Card is opt-in; disabled direct routes return 404 before adapter form/service/parser/query work. |
+| Lighting pilot CSV route/UI | D. Configuration-gating debt resolved in 5B | It remains absent from navigation; disabled web and command entry points fail closed before importer/file/data work. |
+| Unconditional XLSX imports in generic events forms/views and Lighting imports in ministry views | E. Generic import violation resolved in 5B | Gate-first lazy imports isolate current service placement; physical namespace cleanup remains optional debt. |
 | Lighting pilot name matching/normalization | E. Genericity violation / future refactor | Mutable names are treated as identity and one taxonomy is encoded; use reviewed key mapping or retire. |
 | Generic team-form placeholder "Lighting Team" | E. Minor genericity debt | Replace with neutral example copy; no current domain behavior effect. |
 | Tests using Bethany/named teams/A-C tokens | F. Deferred, no current impact | Representative fixtures are acceptable when not asserted as universal taxonomy. |
@@ -591,7 +611,7 @@ Each slice requires separate approval.
 | 2. Team key configuration | **IMPLEMENTED / LOCAL VERIFIED (`GENERIC-DEPLOYMENT-CONFIG.2A`)** as `configure_ministry_team_keys`: generic exact-PK reviewed plan, versioned state-bound token, atomic NULL-only CAS apply, and independent post-audit direction. 2A itself applied no configuration; the product owner later reported SVCA production at 11 configured current teams, 0 unconfigured, and 0 identity integrity problems. MEDIUM operationally. | Stop on duplicate/malformed/noncanonical/unreviewed or stale state; owner reviews every apply. |
 | 3. Service Profile/FK expand | **IMPLEMENTED / LOCAL VERIFIED (`GENERIC-DEPLOYMENT-CONFIG.3A`)**: exact frozen profile model, nullable protected FK, validation/immutability/revision/Admin foundations, additive migration, and disposable migration proof; legacy string remains authoritative and no rows/FKs were created or backfilled by 3A. LOW-MEDIUM. | Profile rows required review before creation; Slice 4 was the separately reviewed mapping/backfill gate. |
 | 4. Profile mapping/backfill | **IMPLEMENTED / LOCAL VERIFIED / PRODUCTION APPLY COMPLETE / POST-AUDIT VERIFIED (`GENERIC-DEPLOYMENT-CONFIG.4A`) for the reviewed SVCA mapping**: generic read-only key/type/FK inventory plus one-key-at-a-time reviewed profile creation and complete exact-target FK backfill; `SERVICE_PROFILE_MAPPING_PLAN_V1` binds full metadata and current event state, existing scheduling CAS supplies SQLite serialization and exactly-once revision advance, and independent post-audit proves dual consistency. Production has one reviewed profile, 52 exact dual-consistent mapped events, zero drift, and revisions advanced `1 -> 2` exactly once. `runtime_consumer_switched` remains false. MEDIUM operationally. | Stop on conflict/unmapped/noncanonical/ambiguity/existing profile/non-null FK/stale/busy state; owner reviews every target apply. Repeat initial mapping correctly fails closed after configuration. |
-| 5. Integration boundary + consumer switch | **5A READ-ONLY AUDIT / DOCS-ONLY IMPLEMENTATION PLAN COMPLETE; RUNTIME PENDING**: [`GENERIC_DEPLOYMENT_CONFIGURATION_SLICE5_PLAN.md`](GENERIC_DEPLOYMENT_CONFIGURATION_SLICE5_PLAN.md) inventories every active legacy consumer, adapter exposure/import, signed/fingerprint contract, Admin surface, and genericity leak, then decomposes the runtime into independently testable registry/isolation, canonical identity seam, readiness/setup/Admin, workbook signing/switch, and closure slices. No 5A runtime, setting, template, test, schema, migration, or data behavior changed. MEDIUM-HIGH. | Future focused adapter/workbook/identity-consumer regressions and deployment setting review; stale or old signed payloads fail closed. |
+| 5. Integration boundary + consumer switch | **5A READ-ONLY AUDIT / DOCS-ONLY IMPLEMENTATION PLAN COMPLETE; 5B REGISTRY/GATES/IMPORT ISOLATION IMPLEMENTED / LOCAL VERIFIED; CONSUMER SWITCH PENDING**: [`GENERIC_DEPLOYMENT_CONFIGURATION_SLICE5_PLAN.md`](GENERIC_DEPLOYMENT_CONFIGURATION_SLICE5_PLAN.md) inventories every active legacy consumer and decomposes the runtime. 5B adds the static opt-in registry, gates the workbook and Lighting surfaces, and removes generic eager adapter imports without changing signed contracts or profile authority. 5C–5F remain separately approved work. MEDIUM-HIGH. | The current SVCA deployment must explicitly enable only the workbook key before/with deployment; future identity-consumer and signed-contract changes remain separately gated. |
 | 6. Profile ministry defaults | Add relation, validation/readiness, Admin/setup; no event materialization. LOW-MEDIUM. | Stop on invalid/inactive/non-assignable/Worship mapping; owner reviews configuration. |
 | 7. Materialization/drift | Central new-event initialization and existing-event preview/CAS/apply/audit; additions only. MEDIUM-HIGH. | Exact dry-run, stale/busy/rollback/idempotency tests; owner reviews every production apply. |
 | 8. MO-S.REQUIRED runtime | Effective resolver and bounded coverage/gap/Event-detail consumers; notifications/persisted audits explicit-only. MEDIUM. | Validate Team Schedule, Board, Today/leader attention, Staff Overview, event detail; review 52-event projection. |

@@ -2,6 +2,7 @@ from io import StringIO
 from datetime import datetime, timezone as datetime_timezone
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from unittest.mock import patch
 
 from django.apps import apps
 from django.contrib.auth.models import User
@@ -9,7 +10,8 @@ from django.contrib.messages import get_messages
 from django.core.exceptions import ValidationError
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.core.management import call_command, CommandError
-from django.test import TestCase
+from django.http import Http404
+from django.test import RequestFactory, TestCase, override_settings
 from django.urls import NoReverseMatch, reverse
 from django.utils import timezone
 
@@ -4180,6 +4182,7 @@ class TeamAssignmentV1Tests(TestCase):
         self.assertEqual(assignment.notes, "Updated note only.")
 
 
+@override_settings(CMS_ENABLED_INTEGRATIONS=["svca_lighting_pilot_csv"])
 class LightingPilotImportCommandTests(TestCase):
     def setUp(self):
         self.future_date = timezone.localdate() + timezone.timedelta(days=30)
@@ -4323,6 +4326,70 @@ class LightingPilotImportCommandTests(TestCase):
         self.assertTrue(
             MinistryTeam.objects.filter(name="灯光组", is_assignable=False).exists()
         )
+
+    @override_settings(CMS_ENABLED_INTEGRATIONS=[])
+    def test_disabled_web_route_fails_before_permission_upload_read_import_or_query(self):
+        from ministry.views import lighting_pilot_import
+
+        staff = User.objects.create_user(
+            username="disabled_lighting_staff",
+            password="testpass123",
+            is_staff=True,
+        )
+        superuser = User.objects.create_user(
+            username="disabled_lighting_superuser",
+            password="testpass123",
+            is_superuser=True,
+        )
+        for user in (staff, superuser, self.manager):
+            with self.subTest(user=user.username):
+                self.client.force_login(user)
+                self.assertEqual(
+                    self.client.get(reverse("lighting_pilot_import")).status_code,
+                    404,
+                )
+
+        uploaded = type(
+            "UnreadCsvUpload",
+            (),
+            {
+                "read": lambda self: (_ for _ in ()).throw(
+                    AssertionError("disabled CSV upload was read")
+                )
+            },
+        )()
+        request = RequestFactory().post("/disabled-lighting-import/")
+        request.user = staff
+        request._files = {"csv_file": uploaded}
+        with (
+            patch(
+                "ministry.services.lighting_pilot_import.read_csv_file"
+            ) as read_csv,
+            patch(
+                "ministry.services.lighting_pilot_import.import_lighting_pilot"
+            ) as importer,
+            self.assertNumQueries(0),
+            self.assertRaises(Http404),
+        ):
+            lighting_pilot_import(request)
+        read_csv.assert_not_called()
+        importer.assert_not_called()
+
+    @override_settings(CMS_ENABLED_INTEGRATIONS=[])
+    def test_disabled_command_fails_before_file_processing_or_data_work(self):
+        with patch("builtins.open") as open_file, self.assertRaisesMessage(
+            CommandError,
+            "svca_lighting_pilot_csv",
+        ):
+            call_command(
+                "import_lighting_pilot",
+                "--csv",
+                "must-not-be-opened.csv",
+            )
+        open_file.assert_not_called()
+        self.assertEqual(MinistryTeam.objects.count(), 0)
+        self.assertEqual(ServiceEvent.objects.count(), 0)
+        self.assertEqual(TeamAssignment.objects.count(), 0)
 
     def test_import_cannot_reuse_worship_child_as_assignment_bypass(self):
         anchor = ChurchStructureUnit.objects.create(

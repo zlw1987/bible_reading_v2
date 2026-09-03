@@ -1,15 +1,26 @@
 # Generic Deployment Configuration — Slice 5 Implementation Plan
 
 Status: **`GENERIC-DEPLOYMENT-CONFIG.5A` repository-wide read-only audit and
-docs-only implementation planning complete; Slice 5 runtime is not
+docs-only implementation planning complete; `GENERIC-DEPLOYMENT-CONFIG.5B`
+explicit integration registry, fail-closed gates, and lazy import isolation
+IMPLEMENTED / LOCAL VERIFIED. ServiceProfile consumer switching remains not
 implemented.**
 
-Task ID: `GENERIC-DEPLOYMENT-CONFIG.5A`
+Task IDs: `GENERIC-DEPLOYMENT-CONFIG.5A`,
+`GENERIC-DEPLOYMENT-CONFIG.5B`
 
 Audit baseline: `master` at `C:\dev\bible_reading_v2`, synchronized with
 `origin/master` at `0` ahead / `0` behind and clean before this document was
 created on 2026-09-03. The audit queried no production system and changed no
 runtime, tests, schema, settings, package, templates, static assets, or data.
+
+5B was implemented on the synchronized 5A baseline with no schema, migration,
+normal-local data, or production operation. It adds an explicit default-off
+registry for `svca_bethany_2026_worship_xlsx` and
+`svca_lighting_pilot_csv`, gates their web/command surfaces, and converts
+generic import leaks to gate-first lazy imports. No adapter service file was
+moved, no workbook parser/matching/signing/confirmation semantic or contract
+version changed, and no ServiceProfile runtime consumer switched.
 
 This document turns the canonical architecture in
 [`GENERIC_DEPLOYMENT_CONFIGURATION_ARCHITECTURE.md`](GENERIC_DEPLOYMENT_CONFIGURATION_ARCHITECTURE.md)
@@ -80,17 +91,17 @@ may hard-code that PK or infer behavior from those deployment facts.
    a reviewed precondition, so the model equality check still runs and each
    event advances exactly once. Workbook confirmation uses the same claim-then-
    skip pattern for `rotation_anchor_team`.
-8. Generic `events.forms` and `events.views` import the SVCA workbook adapter at
-   module import time. Importing `events.urls` imports `events.views`, which
-   loads both adapter services and `openpyxl` even when no deployment
-   integration should be enabled.
-9. The workbook card is visible to any active staff/superuser reaching Worship
-   Planning. The preview and confirmation URLs are unconditionally registered,
-   and staff status is the only present adapter gate.
-10. The Lighting Pilot is no longer linked from the staff menu or assignment
-    empty state, but its direct route and management command remain callable.
-    `ministry.views` imports its service unconditionally, and the importer uses
-    mutable Lighting names as team identity.
+8. 5A found that generic `events.forms`, `events.views`, and `events.urls`
+   eagerly loaded both workbook services and `openpyxl`. 5B removes that leak:
+   generic events imports do not load workbook adapter services or `openpyxl`.
+9. 5B makes the workbook card conditional on explicit integration enablement
+   and gates the stable preview/confirmation URLs before adapter form/service,
+   parse, query, decode, CAS, or write work. Staff/superuser status does not
+   bypass disablement.
+10. The Lighting Pilot remains absent from navigation. 5B gates its direct
+    route and command before importer/file/query/data work and removes the
+    eager importer dependency from `ministry.views`; its mutable-name identity
+    remains unchanged and unresolved.
 11. The workbook's parsed, normalized-preview, and confirmation artifacts are
     signed and versioned, but none explicitly binds canonical ServiceProfile
     FK identity. The shared Worship event fingerprint does not include either
@@ -213,19 +224,19 @@ existed.
 
 ### 5.1 Worship XLSX
 
-| Surface | Present behavior | Import/query before a future gate | Required change |
+| Surface | Current 5B behavior | Import boundary | Status |
 |---|---|---|---|
 | `requirements.txt` | Pins `openpyxl==3.1.5` | Package is a deployment dependency | Keep deployable for the enabled adapter; package optionalization is not required for Slice 5 |
-| `events/forms.py` | Imports `MAX_UPLOAD_BYTES` and `TOKEN_ORDER` from adapter preview at module import | Loads preview, `openpyxl`, models, governance, and planner when generic event forms load | Move adapter forms/constants behind the named adapter boundary; generic event forms must load without adapter code |
-| `events/views.py` | Imports both workbook services and all workbook forms at module import | Adapter and `openpyxl` load whenever generic event views load | Keep thin route wrappers if URL names are preserved; check integration first, then lazy-import adapter handler/service |
-| `events/urls.py` | Registers preview and confirm routes unconditionally and imports all `events.views` | Route table itself triggers generic views imports | Routes may remain stable; disabled wrappers return 404 before adapter import, permission check, form construction, file read, or query |
-| `events.views.worship_planning` + `templates/events/worship_planning.html` | Card availability is staff/superuser only | Generic planner/event queries run for the page; no integration check exists | Card requires both staff authority and enabled integration. Generic planner queries may remain; no adapter query may run while disabled |
-| `events.views.worship_workbook_preview` | GET/POST staff gate; upload→parse→target/team queries→preview/proposal | Adapter already imported. GET performs no adapter DB query; upload POST calls event/governance queries after parsing | Integration gate must be the first adapter-specific action; disabled route does no parse/query and does not load adapter |
-| `events.views.worship_workbook_confirm` | POST-only staff gate then decode, revision claims, event/team/governance queries and writes | Adapter already imported; no integration check | Gate before decode/CAS/query; staff must not bypass disablement |
-| `ministry/services/worship_xlsx_preview.py` | Parser, archive preflight, target matching, preview/signing in one explicit but generically located module | Top-level `openpyxl`; ServiceEvent/readiness/governance/planner imports | Move under `ministry/integrations/svca_bethany_2026_worship_xlsx/` without changing parser semantics |
-| `ministry/services/worship_xlsx_confirmation.py` | Confirmation service imports constants/types from preview | Loading confirmation loads preview and `openpyxl` | Move beside preview in the adapter namespace; internal eager imports are acceptable only after the outer gate |
+| `events/forms.py` | Workbook constants are imported only inside workbook form methods | Generic form import loads no workbook service or `openpyxl` | Implemented in 5B; a later physical form move is optional cleanup |
+| `events/views.py` | Imports no workbook service/form at module import | Generic view import loads no workbook adapter or `openpyxl` | Implemented in 5B with thin gate-first route wrappers and lazy service/form imports |
+| `events/urls.py` | Stable preview and confirmation URLs still reference generic wrappers | Importing the route table loads no workbook adapter or `openpyxl` | Implemented in 5B; disabled wrappers return 404 before adapter-specific work |
+| `events.views.worship_planning` + `templates/events/worship_planning.html` | Card requires enabled integration plus existing staff/superuser authority | Generic planner/event queries remain independent of the adapter | Implemented in 5B; disabled state hides only the workbook card |
+| `events.views.worship_workbook_preview` | Gate runs before authority and lazy imports; enabled behavior is unchanged | Disabled GET/POST performs no adapter form/service/parser/query work | Implemented and locally verified in 5B |
+| `events.views.worship_workbook_confirm` | Gate runs before authority and lazy imports, decode, CAS, query, or write | Disabled POST performs no confirmation adapter/data work | Implemented and locally verified in 5B |
+| `ministry/services/worship_xlsx_preview.py` | Parser, archive preflight, target matching, preview/signing remain in the existing service file | Loaded only after the enabled route/form boundary or direct adapter-unit import | 5B leaves physical placement unchanged to avoid a broad relocation; later namespace cleanup remains optional debt |
+| `ministry/services/worship_xlsx_confirmation.py` | Confirmation remains beside the preview service and imports its constants/types | Its internal eager preview import occurs only after the enabled outer boundary or direct adapter-unit import | 5B leaves physical placement and semantics unchanged |
 | Preview/result templates | Explicit Bethany/09:30/52/A-C copy and route links | Rendered only through current staff route, not integration-gated | Keep semantics/copy inside adapter templates; parent generic card is enabled-integration driven |
-| Focused tests | Import services directly and assume route availability | No enablement setting in fixtures | Adapter unit tests may call adapter directly; route/UI tests must explicitly enable the integration and add disabled isolation cases |
+| Focused tests | Adapter unit tests continue to import services directly; route/UI classes explicitly enable the key | Disabled cases and a fresh subprocess cover UI/route/no-work/import isolation | Implemented in 5B without globally enabling integrations |
 
 The ServiceEvent list exposes generic Worship Planning when a user has a
 current manageable/visible Worship event. That parent page and the rotation
@@ -236,14 +247,14 @@ adapter. Only the annual workbook card/routes are integration-owned.
 
 | Surface | Present behavior | Verdict |
 |---|---|---|
-| `ministry/urls.py` | Unconditional `teams/import/lighting-pilot/` route | Direct route remains callable; must be integration-gated |
-| `ministry/views.py` | Top-level importer import; eligible staff or users with all three capabilities can GET/POST | Generic import leak; lazy-import only after the integration gate |
+| `ministry/urls.py` | Stable `teams/import/lighting-pilot/` route targets a gated wrapper | Disabled direct requests return 404 before importer/data work |
+| `ministry/views.py` | No top-level importer import; integration gate precedes authority, and POST lazy-imports the service | Generic import leak resolved in 5B |
 | `ministry/permissions.py` | Staff bypass or three-capability authority | Authority is not enablement; retain only after integration enablement succeeds |
 | `templates/ministry/lighting_pilot_import.html` | Explicit pilot upload/apply UI | Adapter-specific and acceptable only when enabled |
-| `ministry/management/commands/import_lighting_pilot.py` | Direct CLI import, `--dry-run` optional rather than default | Operator entry point must also require enabled integration before reading/importing; broader command safety redesign is outside 5A |
+| `ministry/management/commands/import_lighting_pilot.py` | Requires enabled integration before lazy service import or CSV read; existing `--dry-run` contract is unchanged | Gating implemented in 5B; broader command safety redesign remains out of scope |
 | `ministry/services/lighting_pilot_import.py` | Creates/reuses a Lighting team by Chinese/English mutable names and may normalize names; matches events by mutable titles/time | Genericity violation inside retained legacy pilot code; do not copy this identity pattern |
-| Staff navigation / assignment empty state | Tests explicitly assert no Lighting link | Already non-discoverable, but not disabled; retain no-link state |
-| `ministry/tests.py` | Direct route, permission, dry-run, and apply tests expect unconditional availability | Require explicit integration enablement; add disabled no-query/no-import cases |
+| Staff navigation / assignment empty state | Tests explicitly assert no Lighting link | Non-discoverable and default-disabled; retain no-link state |
+| `ministry/tests.py` | Retained route/permission/dry-run/apply tests explicitly enable the integration | Disabled cases prove 404/CommandError before importer, file, query, or mutation work |
 
 No repository evidence proves continuing production use. The narrowest safe
 Slice 5 treatment is therefore:
@@ -251,7 +262,7 @@ Slice 5 treatment is therefore:
 1. register `svca_lighting_pilot_csv` with required modules `events` and
    `ministry`;
 2. leave it disabled unless a deployment explicitly opts in;
-3. gate route and CLI and isolate imports in 5B;
+3. 5B gates the route and CLI and isolates imports;
 4. do not rewrite name matching in that gating slice;
 5. before any deployment enables it, obtain an owner decision: either retain
    and replace team-name identity with an explicitly reviewed `team_key`, or
@@ -355,10 +366,10 @@ For every profile-aware runtime consumer:
 10. Direct ORM drift remains possible, so the read-only dual audit stays in
     service until the later destructive field-retirement slice.
 
-## 10. Recommended integration registry API and ownership
+## 10. Implemented integration registry API and ownership
 
-Own the registry in `core/integration_registry.py`, alongside but separate from
-`core.module_registry.py`:
+5B owns the registry in `core/integration_registry.py`, alongside but separate
+from `core.module_registry.py`:
 
 ```text
 CmsIntegration(key, required_modules)
@@ -420,7 +431,7 @@ adapter import.
 
 ## 11. Recommended implementation decomposition
 
-### 11.1 `GENERIC-DEPLOYMENT-CONFIG.5B` — Integration registry, gates, and import isolation
+### 11.1 `GENERIC-DEPLOYMENT-CONFIG.5B` — Integration registry, gates, and import isolation — IMPLEMENTED / LOCAL VERIFIED
 
 Scope:
 
@@ -433,6 +444,14 @@ Scope:
   `ministry.views`;
 - preserve workbook parser/matching/signing semantics and Lighting import
   semantics unchanged.
+
+Implemented result: the exact static API above is present; both integrations
+require `events` and `ministry`; absent/`None`/empty configuration enables
+nothing; unknown keys and disabled required modules raise
+`ImproperlyConfigured`; workbook UI/routes and Lighting web/CLI entry points
+fail closed; and isolated imports prove generic modules load no adapter service
+or `openpyxl`. Existing service files remain in place and are loaded lazily,
+so no broad package relocation or compatibility shim was introduced.
 
 Likely files: new `core/integration_registry.py` and focused tests;
 `events/forms.py`, `events/views.py`, possibly `events/urls.py`;
@@ -663,6 +682,9 @@ Two bounded owner decisions remain, neither blocking registry implementation:
    reset, 5D must make it FK/dual-safe and version its approval. If not, retire
    it only through a separately approved cleanup rather than casual rewriting.
 
-The next recommended task is 5B. It needs no schema, migration, data backfill,
-or production data command; it does require an explicit production integration
-setting to preserve the approved workbook entry point.
+5B is complete and locally verified. Any 5C canonical ServiceProfile runtime
+seam remains a separately approved task and was not started. Before deploying
+5B where the current SVCA workbook workflow must remain available, configure
+`CMS_ENABLED_INTEGRATIONS = ["svca_bethany_2026_worship_xlsx"]` before or
+atomically with the code release. Do not enable the Lighting key without the
+separate retention/identity decision.

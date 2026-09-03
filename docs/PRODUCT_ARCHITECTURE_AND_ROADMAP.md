@@ -40,19 +40,27 @@ integrity problems. This is deployment data only; no current operational runtime
 consumes key text. `GENERIC-DEPLOYMENT-CONFIG.3A` implements and locally verifies
 the exact frozen `events.ServiceProfile` table and nullable protected
 `ServiceEvent.service_profile` FK, with validation/immutability/revision/Admin
-foundations. Existing event FKs remain `NULL`, the legacy
-`service_profile_key` remains authoritative, no profile data or FK backfill was
-created, and no current consumer switched in 3A.
+foundations. At the 3A milestone, existing event FKs remained `NULL`, the legacy
+`service_profile_key` remained authoritative, no profile data or FK backfill
+was created, and no current consumer switched.
 `GENERIC-DEPLOYMENT-CONFIG.4A` implements and locally verifies the separate
 generic read-only profile-identity inventory and dry-run-first reviewed mapping
 command. Its versioned current-state token binds the exact complete event set
 and reviewed profile metadata; apply uses the existing SQLite scheduling CAS
 boundary, advances every mapped event revision exactly once, and rolls back all
-profile/event writes on stale, busy, or write failure. 4A applied no
-normal-local or production mapping, and no current consumer switched from
-`service_profile_key`. Defaults, materialization, integration gating,
-MO-S.REQUIRED runtime, the Slice 5 consumer switch, and external identity
-mapping remain unimplemented.
+profile/event writes on stale, busy, or write failure. The implementation task
+itself applied no normal-local or production mapping; the product owner later
+completed and independently audited the reviewed SVCA production apply. The
+deployment now has one reviewed profile and 52 exact dual-consistent mapped
+events with zero identity drift; every target scheduling revision advanced
+`1 -> 2` exactly once, and a repeat dry-run advanced none to `3`. This is
+deployment-specific evidence only. The apply reported
+`runtime_consumer_switched: false`: the legacy `service_profile_key` still
+exists and remains authoritative for current readiness/setup/workbook/Admin/
+signing and other operational identity consumers. Defaults, materialization,
+integration gating, MO-S.REQUIRED runtime, the Slice 5 integration-boundary and
+consumer switch, external identity mapping, and legacy-string retirement remain
+unimplemented.
 
 `MO-S.6D-PROFILE.1A` implements one optional validated
 `ServiceEvent.service_profile_key` as stable technical service-profile identity.

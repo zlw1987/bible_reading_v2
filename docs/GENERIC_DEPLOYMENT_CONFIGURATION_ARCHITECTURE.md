@@ -14,7 +14,8 @@ tooling — IMPLEMENTED / LOCAL VERIFIED; and
 `GENERIC-DEPLOYMENT-CONFIG.3A` — ServiceProfile + nullable ServiceEvent FK
 expansion — IMPLEMENTED / LOCAL VERIFIED; and
 `GENERIC-DEPLOYMENT-CONFIG.4A` — Service Profile identity audit + reviewed
-mapping/backfill tooling — IMPLEMENTED / LOCAL VERIFIED.** The additive nullable unique
+mapping/backfill tooling — IMPLEMENTED / LOCAL VERIFIED / PRODUCTION APPLY
+COMPLETE / PRODUCTION POST-AUDIT VERIFIED for the reviewed SVCA mapping.** The additive nullable unique
 `MinistryTeam.team_key`, canonical normalization/validation, write-once ordinary
 staff setup and Admin presentation, read-only identity inventory, and generic
 dry-run-first reviewed configuration command are implemented. 2A itself applied
@@ -45,10 +46,53 @@ current-state-bound confirmation token is reviewed. Apply uses the existing
 ascending scheduling-revision CAS as SQLite's first-write serialization
 boundary, rechecks complete current truth, advances every target revision
 exactly once, and rolls back the profile plus every event change on any stale,
-busy, validation, or write failure. 4A applied no normal-local or production
-profile mapping. Current readiness, setup/reset, workbook, signing/fingerprint,
-and operational lookup consumers still use `service_profile_key`; the Slice 5
-consumer switch remains pending.
+busy, validation, or write failure. The 4A implementation task itself applied
+no normal-local or production mapping; the product owner later completed and
+independently audited one reviewed production mapping on the SVCA deployment.
+Current readiness, setup/reset, workbook, signing/fingerprint, and operational
+lookup consumers still use `service_profile_key`; the apply reported
+`runtime_consumer_switched: false`, and the Slice 5 consumer switch remains
+pending.
+
+### Production closeout: reviewed SVCA mapping only
+
+The following is deployment-specific production evidence, not generic CMS
+taxonomy or behavior. The product owner verified it on the GoDaddy/cPanel
+deployment using Python `3.11.15`, application directory `~/app_read`, virtual
+environment `/home/rsnwvvl103hc/virtualenv/app_read/3.11/`, and the deployed
+application SQLite `db.sqlite3`.
+
+- Exactly one reviewed `ServiceProfile` exists: PK `1`, key
+  `bethany_0930_cm`, event type `sunday_service`, name
+  `母堂中文部 9:30 主日崇拜`, English name
+  `Bethany 9:30 Chinese Sunday Service`, blank descriptions, and active state.
+- Exactly 52 `ServiceEvent` rows, current IDs `45` through `96`, are mapped to
+  that profile. They span `2026-01-04T17:30:00+00:00` through
+  `2026-12-27T17:30:00+00:00`; status counts stayed `completed = 34` and
+  `published = 18`.
+- Post-apply identity is exact: FK `NULL = 0`, FK non-`NULL = 52`, exact
+  dual-consistent links `= 52`, mismatches/drift `= 0`, and every mapped event
+  references profile PK `1`. No unrelated event is known to have changed.
+- Every target scheduling revision advanced `1 -> 2` exactly once. The guarded
+  apply reported one profile created, 52 events mapped, 52 revisions advanced,
+  `data_mutated: true`, and `runtime_consumer_switched: false`.
+- The independent `audit_service_profile_identity` run reported 52 events, one
+  profile, 52 exact dual-consistent events, zero drift, zero integrity blockers,
+  and zero conflicting multi-type legacy keys. The profile reported 52 linked
+  and exact links, zero mismatches, and
+  `MATCHES_LEGACY_GROUP,EXACT_LINKED_EVENTS` legacy consistency.
+- A later dry-run saw the existing profile, 52 already non-`NULL` exact FKs,
+  zero drift, and all revisions at `2`. It correctly returned `NOT READY` with
+  `TARGET_FK_ALREADY_NON_NULL` and `SERVICE_PROFILE_KEY_ALREADY_EXISTS`; this
+  is fail-closed repeat-run evidence, not an error requiring repair.
+
+The legacy string still exists and remains authoritative for current runtime
+consumers. This production evidence does not infer recurrence, default time,
+location, audience, Worship behavior, ministry defaults, or any other generic
+semantics from the reviewed key, names, time, deployment, or 52-event pattern.
+It does not implement profile ministry defaults, materialization,
+`MO-S.REQUIRED`, integration gating, the Slice 5 consumer switch, or legacy-key
+retirement.
 
 ## 1. Product Deployment Model
 
@@ -292,12 +336,15 @@ Use expand/migrate/switch/contract:
    ServiceProfile-table evidence.
 4. **IMPLEMENTED / LOCAL VERIFIED as reviewed tooling in 4A:** product-owner
    review may create one profile per accepted exact key/type. One key used
-   across conflicting event types is a blocker; 4A itself applied no
-   normal-local or production mapping.
-5. **IMPLEMENTED / LOCAL VERIFIED as reviewed tooling in 4A:** dry-run then
-   separately approved apply maps one exact key to one newly created exact
-   profile. Unmapped, malformed, ambiguous, existing-profile, already-mapped,
-   or type-conflicting data fails closed; never infer from resemblance.
+   across conflicting event types is a blocker. The implementation task itself
+   applied no normal-local or production mapping.
+5. **PRODUCTION APPLY COMPLETE / POST-AUDIT VERIFIED for the reviewed SVCA
+   mapping:** a separately approved guarded apply created one exact profile and
+   mapped its complete 52-event exact-key target set. Independent audit proved
+   52 exact dual-consistent links and zero drift; every scheduling revision
+   advanced `1 -> 2` exactly once. A repeat dry-run failed closed on the
+   existing profile and non-`NULL` FKs without advancing any revision to `3`.
+   This evidence is deployment-specific and grants no generic semantics.
 6. While both fields exist, supported identity writes preserve
    `service_profile.key == service_profile_key`; retain a drift audit.
 7. Switch readiness/setup, workbook preview/confirmation, Admin, tests,
@@ -423,8 +470,9 @@ ministry/0006 = implemented MinistryTeam.team_key foundation
 
 events/0012 = implemented ServiceProfile + nullable ServiceEvent.service_profile
 
-GENERIC-DEPLOYMENT-CONFIG.4A = implemented audit/configuration tooling only;
-no migration and no automatic data operation
+GENERIC-DEPLOYMENT-CONFIG.4A = implemented audit/configuration tooling;
+no migration and no automatic data operation; separately reviewed SVCA
+production apply and independent post-audit complete for one exact mapping
 
 ministry/0006 + events/0012
     -> future create ministry.ServiceProfileMinistryRequirement
@@ -506,14 +554,16 @@ instructions must label them as one deployment's configuration.
 
 ## 13. Production Compatibility and Risk
 
-This audit did not inspect or mutate production. Assessment uses repository and
-documented production contracts.
+The original architecture audit did not inspect or mutate production. The
+current closeout additionally records product-owner-verified production apply
+and post-audit evidence for the reviewed SVCA mapping; it does not generalize
+that deployment data into CMS behavior.
 
 | Area | Risk | Protection |
 |---|---|---|
 | Nullable team key | LOW | Additive; existing rows stay valid `NULL`; no runtime switch. |
-| ServiceProfile table | LOW | Additive/unreferenced. |
-| Nullable event profile FK | LOW-MEDIUM | Additive; preserve Admin/model/revision behavior. |
+| ServiceProfile table | LOW | Additive; the reviewed SVCA production deployment has one profile referenced by the exact 52-event mapped set. This deployment data adds no generic behavior. |
+| Nullable event profile FK | LOW-MEDIUM | Additive; the reviewed SVCA production mapped set has 52 non-`NULL` exact links and zero drift. Current consumers still use the legacy string until Slice 5. |
 | Reviewed profile creation/FK backfill | MEDIUM | Touches identity including 52 canonical rows; exact key/type + dry-run. |
 | Dual consistency/consumer switch | MEDIUM-HIGH | Readiness, setup fingerprints, workbook signing/confirmation, tests, Admin change together. |
 | Profile-ministry table | LOW-MEDIUM | Additive; reject inactive/non-assignable/Worship-rotation teams. |
@@ -536,9 +586,9 @@ Each slice requires separate approval.
 |---|---|---|
 | 1. Team identity foundation | Add nullable unique key, validation/immutability, setup/Admin, tests, read-only inventory; no backfill. LOW. | Additive migration; product owner reviews field/copy. |
 | 2. Team key configuration | **IMPLEMENTED / LOCAL VERIFIED (`GENERIC-DEPLOYMENT-CONFIG.2A`)** as `configure_ministry_team_keys`: generic exact-PK reviewed plan, versioned state-bound token, atomic NULL-only CAS apply, and independent post-audit direction. 2A itself applied no configuration; the product owner later reported SVCA production at 11 configured current teams, 0 unconfigured, and 0 identity integrity problems. MEDIUM operationally. | Stop on duplicate/malformed/noncanonical/unreviewed or stale state; owner reviews every apply. |
-| 3. Service Profile/FK expand | **IMPLEMENTED / LOCAL VERIFIED (`GENERIC-DEPLOYMENT-CONFIG.3A`)**: exact frozen profile model, nullable protected FK, validation/immutability/revision/Admin foundations, additive migration, and disposable migration proof; legacy string remains authoritative and no rows/FKs were created or backfilled. LOW-MEDIUM. | Profile rows reviewed before creation; Slice 4 remains the mapping/backfill gate. |
-| 4. Profile mapping/backfill | **IMPLEMENTED / LOCAL VERIFIED (`GENERIC-DEPLOYMENT-CONFIG.4A`)**: generic read-only key/type/FK inventory plus one-key-at-a-time reviewed profile creation and complete exact-target FK backfill; `SERVICE_PROFILE_MAPPING_PLAN_V1` binds full metadata and current event state, existing scheduling CAS supplies SQLite serialization and exactly-once revision advance, and independent post-audit proves dual consistency. 4A applied no normal-local or production mapping. MEDIUM operationally. | Stop on conflict/unmapped/noncanonical/ambiguity/existing profile/non-null FK/stale/busy state; owner reviews every target apply. |
-| 5. Integration boundary + consumer switch | Registry/gates, isolate SVCA adapters, configure deployment, switch readiness/setup/workbook/Admin/signing to FK with drift audit. MEDIUM-HIGH. | Focused adapter/workbook regressions and deployment setting review; old payloads fail closed. |
+| 3. Service Profile/FK expand | **IMPLEMENTED / LOCAL VERIFIED (`GENERIC-DEPLOYMENT-CONFIG.3A`)**: exact frozen profile model, nullable protected FK, validation/immutability/revision/Admin foundations, additive migration, and disposable migration proof; legacy string remains authoritative and no rows/FKs were created or backfilled by 3A. LOW-MEDIUM. | Profile rows required review before creation; Slice 4 was the separately reviewed mapping/backfill gate. |
+| 4. Profile mapping/backfill | **IMPLEMENTED / LOCAL VERIFIED / PRODUCTION APPLY COMPLETE / POST-AUDIT VERIFIED (`GENERIC-DEPLOYMENT-CONFIG.4A`) for the reviewed SVCA mapping**: generic read-only key/type/FK inventory plus one-key-at-a-time reviewed profile creation and complete exact-target FK backfill; `SERVICE_PROFILE_MAPPING_PLAN_V1` binds full metadata and current event state, existing scheduling CAS supplies SQLite serialization and exactly-once revision advance, and independent post-audit proves dual consistency. Production has one reviewed profile, 52 exact dual-consistent mapped events, zero drift, and revisions advanced `1 -> 2` exactly once. `runtime_consumer_switched` remains false. MEDIUM operationally. | Stop on conflict/unmapped/noncanonical/ambiguity/existing profile/non-null FK/stale/busy state; owner reviews every target apply. Repeat initial mapping correctly fails closed after configuration. |
+| 5. Integration boundary + consumer switch | **PENDING**: add explicit integration registry/gates, isolate SVCA-specific adapters, configure deployment opt-in, and switch readiness/setup/workbook/Admin/signing plus every discovered identity consumer from legacy-string authority to ServiceProfile/FK identity while retaining drift audit. MEDIUM-HIGH. | Focused adapter/workbook/identity-consumer regressions and deployment setting review; stale or old signed payloads fail closed. |
 | 6. Profile ministry defaults | Add relation, validation/readiness, Admin/setup; no event materialization. LOW-MEDIUM. | Stop on invalid/inactive/non-assignable/Worship mapping; owner reviews configuration. |
 | 7. Materialization/drift | Central new-event initialization and existing-event preview/CAS/apply/audit; additions only. MEDIUM-HIGH. | Exact dry-run, stale/busy/rollback/idempotency tests; owner reviews every production apply. |
 | 8. MO-S.REQUIRED runtime | Effective resolver and bounded coverage/gap/Event-detail consumers; notifications/persisted audits explicit-only. MEDIUM. | Validate Team Schedule, Board, Today/leader attention, Staff Overview, event detail; review 52-event projection. |

@@ -3,11 +3,13 @@
 Status: **`GENERIC-DEPLOYMENT-CONFIG.5A` repository-wide read-only audit and
 docs-only implementation planning complete; `GENERIC-DEPLOYMENT-CONFIG.5B`
 explicit integration registry, fail-closed gates, and lazy import isolation
-IMPLEMENTED / LOCAL VERIFIED. ServiceProfile consumer switching remains not
-implemented.**
+IMPLEMENTED / LOCAL VERIFIED; and `GENERIC-DEPLOYMENT-CONFIG.5C` canonical
+ServiceProfile runtime identity seam IMPLEMENTED / LOCAL VERIFIED.
+ServiceProfile consumer switching remains not implemented.**
 
 Task IDs: `GENERIC-DEPLOYMENT-CONFIG.5A`,
-`GENERIC-DEPLOYMENT-CONFIG.5B`
+`GENERIC-DEPLOYMENT-CONFIG.5B`,
+`GENERIC-DEPLOYMENT-CONFIG.5C`
 
 Audit baseline: `master` at `C:\dev\bible_reading_v2`, synchronized with
 `origin/master` at `0` ahead / `0` behind and clean before this document was
@@ -21,6 +23,13 @@ registry for `svca_bethany_2026_worship_xlsx` and
 generic import leaks to gate-first lazy imports. No adapter service file was
 moved, no workbook parser/matching/signing/confirmation semantic or contract
 version changed, and no ServiceProfile runtime consumer switched.
+
+5C was implemented on the synchronized 5B baseline with no schema, migration,
+data, UI, route, integration, or signed-contract change. It adds the typed
+events-owned FK-authoritative runtime inspection/strict-resolution seam and an
+explicit exact pair-write/clear contract. No current readiness, setup/reset,
+Admin, or workbook consumer imports or uses the seam, so
+`runtime_consumer_switched` remains false globally.
 
 This document turns the canonical architecture in
 [`GENERIC_DEPLOYMENT_CONFIGURATION_ARCHITECTURE.md`](GENERIC_DEPLOYMENT_CONFIGURATION_ARCHITECTURE.md)
@@ -65,10 +74,14 @@ may hard-code that PK or infer behavior from those deployment facts.
 
 ## 2. Executive repository findings
 
-1. There is **no central runtime ServiceProfile resolver**. The only shared
-   identity module, `events.service_profile_identity`, is a read-only 4A
-   inventory. Readiness and the two workbook services interpret dual identity
-   independently.
+1. 5C now provides the central runtime ServiceProfile seam in
+   `events.service_profile_runtime`. Its inspection result represents every
+   approved dual-identity state, its strict resolver uses only the FK-linked
+   profile, and its mutation helpers preserve the exact identity pair. The
+   separate `events.service_profile_identity` module remains the read-only 4A
+   inventory. No current consumer has adopted the 5C seam yet, so readiness
+   and the two workbook services still interpret the legacy identity
+   independently pending 5D/5E.
 2. Current profile-aware authority remains the string in exactly three active
    decision areas: readiness, workbook target matching, and workbook
    confirmation current-truth validation. The bounded reset/setup path also
@@ -336,14 +349,34 @@ or production profile PK. The violations are exposure/import placement and the
 Lighting pilot's mutable-name identity, not the strict adapter's internal
 contract constants.
 
-## 9. Recommended post-Slice-5 runtime identity semantics
+## 9. Implemented 5C runtime identity semantics
 
-Create one events-owned canonical runtime service, preferably a focused new
-module such as `events/service_profile_runtime.py` rather than turning each
-consumer into a dual-identity interpreter. It should expose typed, testable
-resolution facts/errors and no deployment-specific constants.
+5C creates the focused events-owned canonical runtime service
+`events/service_profile_runtime.py`, separate from the 4A inventory. It exposes
+typed, testable identity states/results, strict resolution failures, mutation
+failure reasons, and no deployment-specific constants.
 
-For every profile-aware runtime consumer:
+`inspect_service_profile_identity(event)` classifies `PROFILELESS`,
+`LEGACY_ONLY`, `EXACT`, `FK_BLANK_KEY`, `FK_KEY_MISMATCH`, and
+`EVENT_TYPE_MISMATCH`. `require_service_profile(event,
+require_active=False)` returns only the actual FK-linked profile for exact
+identity. It never looks up a profile through `service_profile_key`; the
+active requirement is a separate caller choice, so an exact inactive profile
+remains identity-correct.
+
+`set_service_event_profile(event, profile)` and
+`clear_service_event_profile(event)` are the supported pair-write boundary.
+They write through normal validated model save behavior, advance an existing
+event revision once, and return a no-op without saving for an already exact
+same-profile assignment or already profileless clear. A legacy-only event may
+be assigned only when the caller supplies the actual active, same-type profile
+whose key exactly matches the compatibility key; the seam never infers that
+profile. Clearing legacy-only state is rejected so transition evidence is not
+silently erased. Invalid dual states are rejected rather than repaired.
+Unsaved assignment is supported because it is the same explicit reviewed
+operation and preserves normal creation semantics at revision 0.
+
+Future profile-aware runtime consumers must adopt these semantics:
 
 1. `ServiceEvent.service_profile` is canonical relational identity.
 2. `event.service_profile.key` is the stable deployment-local machine key when
@@ -473,24 +506,35 @@ safe because no data changes.
 Not included: ServiceProfile consumer switch, token shape change, Lighting
 team-key modernization/retirement, arbitrary adapters, plugin framework.
 
-### 11.2 `GENERIC-DEPLOYMENT-CONFIG.5C` — Canonical ServiceProfile runtime seam
+### 11.2 `GENERIC-DEPLOYMENT-CONFIG.5C` — Canonical ServiceProfile runtime seam — IMPLEMENTED / LOCAL VERIFIED
 
 Scope:
 
 - add the events-owned canonical resolver/state contract;
 - distinguish optional-none, exact, legacy-only missing-FK, blank-key-with-FK,
-  mismatch, type mismatch, and inactive states;
+  mismatch, and type mismatch identity states, with inactive status evaluated
+  separately;
 - expose strict “profile required” behavior with no string fallback;
 - define the explicit pair-write contract for later Admin/setup consumers;
 - add exhaustive unit tests including direct-ORM drift construction.
 
-Likely files: new `events/service_profile_runtime.py` and
-`events/test_service_profile_runtime.py`; possibly narrow shared exception/data
-types in `events/service_profile_identity.py` if repository review favors reuse.
+Implemented result: `events.service_profile_runtime` owns the six-state frozen
+identity result, strict FK-only resolver with optional active requirement, and
+typed fail-closed pair-write/clear helpers. The helpers accept explicit
+compatible legacy-only assignment, reject conflicting legacy evidence and all
+invalid drift, preserve inactive exact historical identity, avoid no-op saves,
+advance supported existing changes exactly once, and support unsaved creation
+at revision 0. Focused tests prove zero-query/no-fallback legacy-only reads,
+zero-write inspection/resolution, direct-ORM drift classification, validation
+rollback, and revision/no-op behavior.
+
+Implemented files: new `events/service_profile_runtime.py` and
+`events/test_service_profile_runtime.py`. The separate 4A
+`events/service_profile_identity.py` inventory remains unchanged.
 
 Impact: no schema, migration, data, UI, route, or signing change; no existing
-consumer switches yet. Production prerequisite is still zero drift. Rollback is
-code-only.
+consumer switched. `runtime_consumer_switched` remains false globally.
+Production prerequisite is still zero drift. Rollback is code-only.
 
 Not included: workbook/readiness/Admin adoption, automatic backfill, model
 fallback, legacy-field removal.
@@ -682,9 +726,10 @@ Two bounded owner decisions remain, neither blocking registry implementation:
    reset, 5D must make it FK/dual-safe and version its approval. If not, retire
    it only through a separately approved cleanup rather than casual rewriting.
 
-5B is complete and locally verified. Any 5C canonical ServiceProfile runtime
-seam remains a separately approved task and was not started. Before deploying
-5B where the current SVCA workbook workflow must remain available, configure
+5B and 5C are complete and locally verified. The 5D readiness/setup/Admin
+consumer switch and 5E workbook/signing switch remain separately approved
+tasks and were not started. Before deploying 5B where the current SVCA
+workbook workflow must remain available, configure
 `CMS_ENABLED_INTEGRATIONS = ["svca_bethany_2026_worship_xlsx"]` before or
 atomically with the code release. Do not enable the Lighting key without the
 separate retention/identity decision.

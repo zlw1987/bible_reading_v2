@@ -18,8 +18,10 @@ mapping/backfill tooling — IMPLEMENTED / LOCAL VERIFIED / PRODUCTION APPLY
 COMPLETE / PRODUCTION POST-AUDIT VERIFIED for the reviewed SVCA mapping; and
 `GENERIC-DEPLOYMENT-CONFIG.5A` — repository-wide read-only Slice 5 audit and
 docs-only implementation planning — COMPLETE, with no Slice 5 runtime behavior
-implemented; and `GENERIC-DEPLOYMENT-CONFIG.5B` — explicit integration registry,
-fail-closed gates, and lazy import isolation — IMPLEMENTED / LOCAL VERIFIED.**
+implemented by 5A; and `GENERIC-DEPLOYMENT-CONFIG.5B` — explicit integration registry,
+fail-closed gates, and lazy import isolation — IMPLEMENTED / LOCAL VERIFIED;
+and `GENERIC-DEPLOYMENT-CONFIG.5C` — canonical ServiceProfile runtime identity
+seam — IMPLEMENTED / LOCAL VERIFIED.**
 The additive nullable unique
 `MinistryTeam.team_key`, canonical normalization/validation, write-once ordinary
 staff setup and Admin presentation, read-only identity inventory, and generic
@@ -70,7 +72,22 @@ and generic events/ministry imports no longer load either adapter service or
 `openpyxl`. Existing URLs remain stable and enabled behavior is preserved
 through gate-first lazy imports. No adapter service file moved, no signed
 workbook contract/version changed, and `service_profile_key` remains current
-runtime authority pending separately approved 5C–5F work.
+runtime authority for existing consumers pending separately approved 5D–5F
+work.
+
+5C adds `events.service_profile_runtime`, the generic events-owned inspection,
+strict resolution, and pair-write/clear boundary for future profile-aware
+consumers. Inside this seam, the FK-linked `ServiceProfile` is authoritative;
+the compatibility string is drift evidence only and is never used for profile
+lookup or inference. The seam distinguishes profileless, legacy-only, exact,
+FK/blank-key, FK/key-mismatch, and event-type-mismatch states. Inactive exact
+profiles remain valid identity, while callers may separately require active
+state. Explicit normal assignment/clear writes the exact pair through the
+existing validated `ServiceEvent.save()` boundary, advances an existing
+event's scheduling revision exactly once, and avoids writes/revisions for
+exact no-ops. Drifted states are not silently repaired. 5C switched no
+readiness, setup/reset, Admin, or workbook consumer; no workbook/reset signed
+contract changed and `runtime_consumer_switched` remains false globally.
 
 ### Production closeout: reviewed SVCA mapping only
 
@@ -364,8 +381,11 @@ Use expand/migrate/switch/contract:
    advanced `1 -> 2` exactly once. A repeat dry-run failed closed on the
    existing profile and non-`NULL` FKs without advancing any revision to `3`.
    This evidence is deployment-specific and grants no generic semantics.
-6. While both fields exist, supported identity writes preserve
-   `service_profile.key == service_profile_key`; retain a drift audit.
+6. **IMPLEMENTED / LOCAL VERIFIED in 5C:** while both fields exist, the
+   canonical runtime seam classifies all dual-identity states without legacy
+   fallback, and supported explicit identity writes preserve
+   `service_profile.key == service_profile_key` with one existing-event
+   scheduling revision. Retain the separate read-only drift audit.
 7. Switch readiness/setup, workbook preview/confirmation, Admin, tests,
    reset-surface fingerprints, signed contracts, and every discovered consumer
    to FK/profile key.
@@ -611,7 +631,7 @@ Each slice requires separate approval.
 | 2. Team key configuration | **IMPLEMENTED / LOCAL VERIFIED (`GENERIC-DEPLOYMENT-CONFIG.2A`)** as `configure_ministry_team_keys`: generic exact-PK reviewed plan, versioned state-bound token, atomic NULL-only CAS apply, and independent post-audit direction. 2A itself applied no configuration; the product owner later reported SVCA production at 11 configured current teams, 0 unconfigured, and 0 identity integrity problems. MEDIUM operationally. | Stop on duplicate/malformed/noncanonical/unreviewed or stale state; owner reviews every apply. |
 | 3. Service Profile/FK expand | **IMPLEMENTED / LOCAL VERIFIED (`GENERIC-DEPLOYMENT-CONFIG.3A`)**: exact frozen profile model, nullable protected FK, validation/immutability/revision/Admin foundations, additive migration, and disposable migration proof; legacy string remains authoritative and no rows/FKs were created or backfilled by 3A. LOW-MEDIUM. | Profile rows required review before creation; Slice 4 was the separately reviewed mapping/backfill gate. |
 | 4. Profile mapping/backfill | **IMPLEMENTED / LOCAL VERIFIED / PRODUCTION APPLY COMPLETE / POST-AUDIT VERIFIED (`GENERIC-DEPLOYMENT-CONFIG.4A`) for the reviewed SVCA mapping**: generic read-only key/type/FK inventory plus one-key-at-a-time reviewed profile creation and complete exact-target FK backfill; `SERVICE_PROFILE_MAPPING_PLAN_V1` binds full metadata and current event state, existing scheduling CAS supplies SQLite serialization and exactly-once revision advance, and independent post-audit proves dual consistency. Production has one reviewed profile, 52 exact dual-consistent mapped events, zero drift, and revisions advanced `1 -> 2` exactly once. `runtime_consumer_switched` remains false. MEDIUM operationally. | Stop on conflict/unmapped/noncanonical/ambiguity/existing profile/non-null FK/stale/busy state; owner reviews every target apply. Repeat initial mapping correctly fails closed after configuration. |
-| 5. Integration boundary + consumer switch | **5A READ-ONLY AUDIT / DOCS-ONLY IMPLEMENTATION PLAN COMPLETE; 5B REGISTRY/GATES/IMPORT ISOLATION IMPLEMENTED / LOCAL VERIFIED; CONSUMER SWITCH PENDING**: [`GENERIC_DEPLOYMENT_CONFIGURATION_SLICE5_PLAN.md`](GENERIC_DEPLOYMENT_CONFIGURATION_SLICE5_PLAN.md) inventories every active legacy consumer and decomposes the runtime. 5B adds the static opt-in registry, gates the workbook and Lighting surfaces, and removes generic eager adapter imports without changing signed contracts or profile authority. 5C–5F remain separately approved work. MEDIUM-HIGH. | The current SVCA deployment must explicitly enable only the workbook key before/with deployment; future identity-consumer and signed-contract changes remain separately gated. |
+| 5. Integration boundary + consumer switch | **5A READ-ONLY AUDIT / DOCS-ONLY IMPLEMENTATION PLAN COMPLETE; 5B REGISTRY/GATES/IMPORT ISOLATION IMPLEMENTED / LOCAL VERIFIED; 5C CANONICAL RUNTIME IDENTITY SEAM IMPLEMENTED / LOCAL VERIFIED; CONSUMER SWITCH PENDING**: [`GENERIC_DEPLOYMENT_CONFIGURATION_SLICE5_PLAN.md`](GENERIC_DEPLOYMENT_CONFIGURATION_SLICE5_PLAN.md) inventories every active legacy consumer and decomposes the runtime. 5B adds the static opt-in registry, gates the workbook and Lighting surfaces, and removes generic eager adapter imports without changing signed contracts or profile authority. 5C adds the events-owned typed FK-authoritative inspection/resolution and exact pair-write boundary without adopting it in any current consumer. 5D–5F remain separately approved work. MEDIUM-HIGH. | The current SVCA deployment must explicitly enable only the workbook key before/with deployment; future consumer and signed-contract changes remain separately gated. |
 | 6. Profile ministry defaults | Add relation, validation/readiness, Admin/setup; no event materialization. LOW-MEDIUM. | Stop on invalid/inactive/non-assignable/Worship mapping; owner reviews configuration. |
 | 7. Materialization/drift | Central new-event initialization and existing-event preview/CAS/apply/audit; additions only. MEDIUM-HIGH. | Exact dry-run, stale/busy/rollback/idempotency tests; owner reviews every production apply. |
 | 8. MO-S.REQUIRED runtime | Effective resolver and bounded coverage/gap/Event-detail consumers; notifications/persisted audits explicit-only. MEDIUM. | Validate Team Schedule, Board, Today/leader attention, Staff Overview, event detail; review 52-event projection. |

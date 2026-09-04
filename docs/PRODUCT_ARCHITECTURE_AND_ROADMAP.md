@@ -63,17 +63,21 @@ identity, while ServiceEvent Admin selects the FK and renders the compatibility
 key read-only through one normal save/revision. Workbook matching and post-CAS
 confirmation are now FK/Profile-authoritative; strict V2 parsed, normalized,
 and confirmation artifacts bind the integration plus exact profile PK/key/type,
-and reject V1. All known profile-aware runtime consumers are switched, but 5F
-formal closure proof remains pending and `runtime_consumer_switched` stays
-false. Defaults, materialization, MO-S.REQUIRED runtime, external identity
-mapping, and legacy-string retirement remain incomplete. 5E added no schema,
+and reject V1. All known profile-aware runtime consumers are switched, and 5F
+now proves local repository/runtime closure with Class A legacy authority at
+zero. Production deployment/config/data and fresh-workbook rendered closeout
+remain pending, so `runtime_consumer_switched` stays false. Defaults,
+materialization, MO-S.REQUIRED runtime, external identity mapping, and
+legacy-string retirement remain incomplete. 5E added no schema,
 migration, backfill, production command, or production data change.
 
-`MO-S.6D-PROFILE.1A` implements one optional validated
-`ServiceEvent.service_profile_key` as stable technical service-profile identity.
-It grants no audience, permission, serving, recurrence, location, Host /
-Language, or scheduling-source semantics. Existing rows default empty; the
-first approved workbook setup value is `bethany_0930_cm`, and no event is
+Historically, `MO-S.6D-PROFILE.1A` introduced the optional validated
+`ServiceEvent.service_profile_key` identity foundation. After 5F it is
+transitional compatibility/drift storage only; permanent runtime identity is
+the `ServiceEvent.service_profile` FK to `ServiceProfile`. Neither identity
+grants audience, permission, serving, recurrence, location, Host / Language,
+or scheduling-source semantics. Existing rows originally defaulted empty; the
+first approved workbook setup value was `bethany_0930_cm`, and no event was
 automatically tagged. `MO-S.6D-SLICE8.1A/FU1/UX1` now implements the declared
 strict XLSX dependency/parser, bounded OOXML ZIP resource preflight, and staff/
 superuser-only zero-write preview with exact persisted-profile matching,

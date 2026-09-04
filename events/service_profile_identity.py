@@ -19,14 +19,25 @@ def _canonical_problem(raw_key):
 
 def _event_summary(events):
     events = list(events)
+    nonnull = [event for event in events if event.service_profile_id is not None]
     exact = [
         event
-        for event in events
-        if event.service_profile_id is not None
-        and event.service_profile.key == event.service_profile_key
+        for event in nonnull
+        if event.service_profile.key == event.service_profile_key
         and event.service_profile.event_type == event.event_type
     ]
-    nonnull = [event for event in events if event.service_profile_id is not None]
+    fk_blank_key = [event for event in nonnull if not event.service_profile_key]
+    fk_key_mismatch = [
+        event
+        for event in nonnull
+        if event.service_profile_key
+        and event.service_profile.key != event.service_profile_key
+    ]
+    event_profile_type_mismatch = [
+        event
+        for event in nonnull
+        if event.service_profile.event_type != event.event_type
+    ]
     starts = [event.start_datetime for event in events]
     status_counts = Counter(event.status for event in events)
     return {
@@ -35,6 +46,9 @@ def _event_summary(events):
         "fk_nonnull_count": len(nonnull),
         "exact_match_fk_count": len(exact),
         "fk_mismatch_count": len(nonnull) - len(exact),
+        "fk_blank_key_count": len(fk_blank_key),
+        "fk_key_mismatch_count": len(fk_key_mismatch),
+        "event_profile_type_mismatch_count": len(event_profile_type_mismatch),
         "earliest_start_datetime": min(starts) if starts else None,
         "latest_start_datetime": max(starts) if starts else None,
         "status_counts": {
@@ -163,6 +177,29 @@ def build_service_profile_identity_inventory(*, using="default"):
     )
     fk_nonnull = sum(event.service_profile_id is not None for event in events)
     drifted = fk_nonnull - exact_events
+    legacy_only = sum(
+        event.service_profile_id is None and bool(event.service_profile_key)
+        for event in events
+    )
+    profileless = sum(
+        event.service_profile_id is None and not event.service_profile_key
+        for event in events
+    )
+    fk_blank_key = sum(
+        event.service_profile_id is not None and not event.service_profile_key
+        for event in events
+    )
+    fk_key_mismatch = sum(
+        event.service_profile_id is not None
+        and bool(event.service_profile_key)
+        and event.service_profile.key != event.service_profile_key
+        for event in events
+    )
+    event_profile_type_mismatch = sum(
+        event.service_profile_id is not None
+        and event.service_profile.event_type != event.event_type
+        for event in events
+    )
     for row in legacy_groups:
         if row["fk_mismatch_count"]:
             blockers.append(
@@ -175,6 +212,13 @@ def build_service_profile_identity_inventory(*, using="default"):
         blockers.append(
             "BLANK_LEGACY_KEY_WITH_FK: "
             f"events={blank_summary['fk_nonnull_count']}"
+        )
+    if fk_key_mismatch:
+        blockers.append(f"EVENT_FK_KEY_DRIFT: events={fk_key_mismatch}")
+    if event_profile_type_mismatch:
+        blockers.append(
+            "EVENT_PROFILE_TYPE_DRIFT: "
+            f"events={event_profile_type_mismatch}"
         )
     blockers = list(dict.fromkeys(blockers))
 
@@ -194,8 +238,13 @@ def build_service_profile_identity_inventory(*, using="default"):
             "service_profiles_total": len(profiles),
             "events_fk_null": len(events) - fk_nonnull,
             "events_fk_nonnull": fk_nonnull,
+            "profileless_events": profileless,
+            "legacy_only_events": legacy_only,
             "exact_dual_consistent_events": exact_events,
             "drifted_fk_events": drifted,
+            "fk_blank_key_events": fk_blank_key,
+            "fk_key_mismatch_events": fk_key_mismatch,
+            "event_profile_type_drift_events": event_profile_type_mismatch,
             "integrity_blockers": len(blockers),
         },
     }

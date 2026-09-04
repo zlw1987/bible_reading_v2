@@ -8,15 +8,18 @@ ServiceProfile runtime identity seam IMPLEMENTED / LOCAL VERIFIED; and
 `GENERIC-DEPLOYMENT-CONFIG.5D` readiness/reset/Admin consumer switch
 IMPLEMENTED / LOCAL VERIFIED; and `GENERIC-DEPLOYMENT-CONFIG.5E` Worship XLSX
 FK matching, current-truth confirmation, and V2 signed contracts IMPLEMENTED /
-LOCAL VERIFIED. All known profile-aware runtime consumers are switched, but
-formal closure proof remains pending 5F and the global status stays
-conservative.**
+LOCAL VERIFIED; and `GENERIC-DEPLOYMENT-CONFIG.5F` transition-closure audit and
+local closure proof **LOCAL CLOSURE PROOF COMPLETE / PRODUCTION READ-ONLY
+CLOSEOUT PENDING**. Class A legacy-string runtime authority is zero. The global
+status stays conservative until the separately performed deployed read-only
+closeout.**
 
 Task IDs: `GENERIC-DEPLOYMENT-CONFIG.5A`,
 `GENERIC-DEPLOYMENT-CONFIG.5B`,
 `GENERIC-DEPLOYMENT-CONFIG.5C`,
 `GENERIC-DEPLOYMENT-CONFIG.5D`,
-`GENERIC-DEPLOYMENT-CONFIG.5E`
+`GENERIC-DEPLOYMENT-CONFIG.5E`,
+`GENERIC-DEPLOYMENT-CONFIG.5F`
 
 Audit baseline: `master` at `C:\dev\bible_reading_v2`, synchronized with
 `origin/master` at `0` ahead / `0` behind and clean before this document was
@@ -58,8 +61,16 @@ confirmation contracts are strict V2 artifacts binding
 re-resolves and revalidates the profile after CAS and before anchor writes.
 Every V1 artifact fails closed. `service_profile_key` remains drift evidence
 and rollback compatibility. All known profile-aware runtime consumers are now
-switched, but 5F repository-wide closure/audit proof remains pending, so
-`runtime_consumer_switched` remains false globally.
+switched.
+
+5F reran the post-5E repository inventory and focused behavior suites. No
+Class-A runtime authority remains. The existing read-only identity inventory
+needed only a small generic extension that separates legacy-only, FK/blank-key,
+FK/key, and event/profile-type drift counts; it remains zero-write and has no
+deployment defaults. No schema, signing, readiness, reset, Admin, mapper, or
+field-retirement behavior changed. Production deployment/config/data and fresh
+workbook rendered proof were not performed, so `runtime_consumer_switched`
+remains false globally.
 
 This document turns the canonical architecture in
 [`GENERIC_DEPLOYMENT_CONFIGURATION_ARCHITECTURE.md`](GENERIC_DEPLOYMENT_CONFIGURATION_ARCHITECTURE.md)
@@ -112,8 +123,8 @@ may hard-code that PK or infer behavior from those deployment facts.
    inventory. 5D adopts the seam for readiness, bounded reset, and Admin; 5E
    adopts it for both workbook services.
 2. All currently known profile-aware runtime consumers use FK/Profile
-   authority. `service_profile_key` remains compatibility/drift evidence;
-   5F still must perform the formal repository-wide closure proof.
+   authority. 5F proves the post-5E Class-A count is zero;
+   `service_profile_key` remains compatibility/drift/storage/setup evidence.
 3. `ServiceEvent.clean()` enforces FK/key equality and profile/event-type
    equality when the FK is non-null. `ServiceEvent.save()` always calls
    `full_clean()`. `ServiceProfile.save()` also calls `full_clean()` and makes a
@@ -317,9 +328,13 @@ Slice 5 treatment is therefore:
 This avoids inventing requirements or expanding a retired pilot while ensuring
 another church cannot invoke it accidentally.
 
-## 6. Signed and fingerprint contract inventory
+## 6. Historical pre-5D/pre-5E signed and fingerprint contract inventory
 
-| Contract | Current version | Exact identity currently bound | Canonicalization impact | Future action |
+This table preserves the 5A baseline used to plan the V2 cutover. It is not an
+inventory of the current active workbook contracts; Sections 11.3 and 11.4
+record the post-5E runtime state.
+
+| Contract | 5A/pre-switch version | Exact identity then bound | Canonicalization impact | Planned action at 5A |
 |---|---|---|---|---|
 | 4A mapping plan/token | `SERVICE_PROFILE_MAPPING_PLAN_V1` | Reviewed profile metadata/key, complete exact legacy target set, each event's raw key, FK ID, type, revision and timestamp | Already binds both transition sides for initial mapping | Retain V1 as completed operator tooling; no Slice 5 compatibility parser or bump needed |
 | Reset-surface fingerprint | No separate label; SHA-256 inside reset V1 | Event rows include raw legacy key, not FK/profile | Adding FK ID/profile key changes canonical JSON/digest | Include `service_profile_id` and resolved profile facts if reset remains callable |
@@ -693,32 +708,84 @@ profile state yields no confirmation action and no write.
 Not included: arbitrary workbook support, assignment/member import, durable
 import history, notifications, profile defaults, hard-coded profile PK.
 
-### 11.5 `GENERIC-DEPLOYMENT-CONFIG.5F` — Transition closure and zero-runtime-legacy proof
+### 11.5 `GENERIC-DEPLOYMENT-CONFIG.5F` — LOCAL CLOSURE PROOF COMPLETE / PRODUCTION READ-ONLY CLOSEOUT PENDING
 
-Scope:
+5F used literal, case-sensitive `rg --count-matches -F` searches. Active Python
+means `*.py` excluding basenames `test*.py`, every `tests/` directory, and every
+`migrations/` directory. On the post-extension tree this finds **70 literal
+`service_profile_key` occurrences across 11 files**. Each occurrence has one
+primary classification: **A = 0, B = 39, C = 17, D = 14**. Tests contain 145
+occurrences across 10 modules (E), and immutable migrations contain three
+occurrences across two files (F). For a reproducible file-level documentation
+bucket, “current docs” means the five canonical files named by 5F
+(`GENERIC_DEPLOYMENT_CONFIGURATION_ARCHITECTURE`, this Slice 5 plan,
+`MODULE_BOUNDARIES`, `PRODUCT_ARCHITECTURE_AND_ROADMAP`, and `README`): **32
+occurrences across four occurrence-bearing files**. Every other `docs/*.md` is
+the historical/milestone bucket: **5 occurrences across two files**. The total
+is 37 across six documentation files; the surviving milestone wording was
+reviewed and, where necessary, explicitly labeled historical/superseded.
 
-- rerun exact repository searches and classify every remaining reference;
-- prove no Class A legacy-string authoritative consumer remains;
-- retain only model/write guards, dual audit, bounded mapper/setup history,
-  tests, migrations, and accurately labeled docs;
-- extend/read the identity audit as needed to report profile-required missing
-  FKs and exact dual state without mutating data;
-- run the target production audit and prove the reviewed 52 rows resolve
-  identically through FK/Profile with zero drift;
-- update canonical status docs to mark the consumer switch complete while
-  explicitly leaving legacy field retirement pending.
+Reproducible commands:
 
-Likely files: `events/service_profile_identity.py`, its command/tests, focused
-status docs, and any final stale assertion discovered by the closure search.
+```text
+rg --count-matches -F -g '*.py' -g '!test*.py' -g '!*/tests/*' -g '!*/migrations/*' service_profile_key .
+rg --count-matches -F -g 'test*.py' service_profile_key .
+rg --count-matches -F -g '*.py' service_profile_key events/migrations
+rg --count-matches -F -g '*.md' service_profile_key docs
+```
 
-Impact: no schema/migration/data mutation. This is the gate for a later,
-separately approved destructive contract-retirement plan, not that retirement.
+Current active-code classification:
 
-Rollback/fail-closed: closure fails if any Class A dependency, missing required
-FK, mismatch, or unresolved integration configuration remains.
+| File / symbols | Literal occurrences | Class | Closure justification |
+|---|---:|---|---|
+| `events/models.py` — key validator/field and FK/key/type validation | 15 | B 4 / C 11 | Transitional storage and supported validation/write contract; comparisons reject drift and never resolve identity from the string. |
+| `events/service_profile_runtime.py` — inspection and pair preparation | 4 | B 1 / C 3 | One evidence read classifies drift; remaining references write/clear the exact pair. No string lookup exists. |
+| `events/service_profile_identity.py` — generic inventory | 15 | B | Read-only deployment evidence, including separately counted legacy-only, blank-key, key-mismatch, and type-drift states. |
+| `events/service_profile_readiness.py` — V2 evidence/rendering | 14 | B | Canonical selection is by resolved FK; legacy-only query and payload fields are blocker/review evidence only. |
+| `events/admin.py` — error remapping and read-only field | 3 | C | FK is the selector; compatibility field is read-only and pair preparation owns synchronization. |
+| `ministry/services/worship_xlsx_preview.py` — normalized V2 evidence | 3 | B | Signed payload compatibility fields are evidence checked against the resolved current profile; matching authority is FK plus exact 5C state. |
+| `events/service_profile_mapping.py` — 4A mapper | 9 | D | Bounded historical/onboarding mapper intentionally selects the complete exact legacy set before creating/writing the FK. It is not a runtime consumer. |
+| `events/service_profile_setup.py` — reset V2 fingerprint | 2 | D | Bounded TEST reset evidence binds both identities and creates exact pairs through 5C. |
+| `events/management/commands/configure_service_profile_mapping.py` | 2 | D | Renders retained 4A plan/history, including the historically accurate operation status. |
+| `events/management/commands/rebuild_bethany_0930_service_events.py` | 1 | D | Renders the bounded reset V2 compatibility snapshot only. |
+| `events/management/commands/audit_service_profile_readiness.py` | 2 | B | Uses the shared key validator for the requested actual `ServiceProfile.key`; no legacy event lookup or fallback. |
 
-Not included: deleting the field/migration/tooling, profile ministry defaults,
-materialization, MO-S.REQUIRED runtime.
+Former Class-A closure proof:
+
+- Readiness resolves `ServiceProfile.key` to one active compatible profile,
+  selects canonical rows by `service_profile=profile`, and treats the explicit
+  FK-null/string query only as legacy-only blocker evidence.
+- ServiceEvent Admin edits the FK, renders the compatibility field read-only,
+  and delegates in-memory pair preparation to 5C before Django performs one
+  normal save. Ordinary event forms expose neither technical field.
+- Worship preview resolves the adapter key to the actual profile, requires the
+  event FK to equal that profile PK and 5C state `EXACT`, and classifies
+  legacy-only, drift, and other-profile exact events as non-target blockers.
+  No compatibility-string equality grants target ownership.
+- Worship confirmation binds and current-truth checks signed profile PK/key/
+  type, re-resolves after revision CAS, reloads with the profile relation, and
+  requires exact FK ownership before any anchor save. The legacy string grants
+  no confirmation authority.
+
+Only the active workbook contracts
+`SVCA_BETHANY_0930_2026_V2`,
+`SVCA_BETHANY_0930_2026_PREVIEW_V2`, and
+`SVCA_BETHANY_0930_2026_CONFIRM_V2` remain in non-test Python. V1 names/salts
+remain only in explicit rejection tests and clearly historical documentation;
+there is no V2-then-V1 decoder fallback and no optional profile identity.
+
+The existing identity inventory remains the deployment audit framework. Its
+small 5F extension adds only distinct summary/report facts for profileless,
+legacy-only, FK/blank-key, nonblank FK/key mismatch, and event/profile-type
+drift. Counts for different drift dimensions may overlap when one bypassed row
+has more than one defect; `drifted_fk_events` remains the union/non-exact count.
+The command is still generic, read-only, and has no `--apply` or target default.
+
+Impact: no field retirement, schema, migration, signing, readiness/reset,
+Admin, mapping, or ordinary runtime behavior change; no normal-local or
+production data operation. This is the local gate for the separately performed
+production read-only closeout and a later separately approved destructive
+contract-retirement plan.
 
 ### 11.6 Lighting follow-up decision
 
@@ -742,7 +809,7 @@ those paths is approved.
 | 5C | all six identity states; optional-none; required missing-FK; mismatch/type/inactive; select-related behavior; pair assignment/clear; exact one revision; direct ORM bypass detected | focused model/runtime tests, `manage.py check`, `makemigrations --check --dry-run`, `git diff --check` | Read-only identity audit remains zero drift |
 | 5D | FK-owned readiness; no fallback; schema 0012 check; serialized version; Admin active/inactive choices; key read-only; pair write/clear; reset V2 determinism/staleness/missing profile/rollback/dual creation | focused profile/readiness/setup/Admin tests, checks above | No reset apply; read-only audit before/after; rendered Admin QA |
 | 5E | exact FK target; legacy-only/mismatch/type/inactive blockers; V1 token rejection; V2 strict shape/tamper/user/expiry; profile drift after preview/CAS; full rollback; 52 success/no-op; disabled route still no query | focused XLSX preview/confirmation plus file-backed SQLite tests, checks above | GoDaddy Python 3.11.15/openpyxl 3.1.5 import; read-only preview first; rendered English/Chinese route QA; no hard-coded PK |
-| 5F | audit exact/missing/mismatch counts; command zero-write; repository-search expectation; all surviving refs allowlisted by class | focused audit tests, exact `rg` searches, `manage.py check`, `makemigrations --check --dry-run`, `git diff --check` | Post-switch production read-only audit: one reviewed profile and 52 identical FK-resolved targets, zero drift; report actual facts only |
+| 5F | **LOCAL CLOSURE PROOF COMPLETE:** audit exact/legacy-only/blank-key/key-drift/type-drift counts; command zero-write; current classified repository inventory; Class A = 0 | focused profile/audit/readiness/setup/Admin/workbook/integration suites, exact `rg` searches, `manage.py check`, `makemigrations --check --dry-run`, `git diff --check` | **PENDING:** post-deployment read-only identity + Readiness V2 audit, explicit workbook integration setting, fresh-workbook no-op preview, and English/Chinese rendered verification |
 
 Do not run the full Django suite without separate approval. Browser/manual QA
 is required only for slices that actually change rendered Admin/integration
@@ -784,6 +851,21 @@ surfaces and must not be claimed unless performed.
 12. 5E ran no production reset, mapper apply, migration, or other data command.
     Deployment work must separately report code release, settings, read-only
     audits, and any data mutation.
+13. After 5F is committed and deployed, run exactly:
+    `python manage.py audit_service_profile_identity` and
+    `python manage.py audit_service_profile_readiness --profile-key
+    bethany_0930_cm --year 2026 --time 09:30 --event-type sunday_service`.
+    Require one active reviewed target profile (record its actual deployed PK),
+    52 linked/FK-non-null/exact rows, zero legacy-only/key/blank/type drift,
+    zero multi-type conflicts and integrity blockers, plus Readiness V2 at
+    52 canonical, 52 ready, zero missing, `PROFILE SETUP READY`.
+14. Confirm the deployed setting explicitly enables
+    `svca_bethany_2026_worship_xlsx` and does not enable
+    `svca_lighting_pilot_csv` for this closeout. Then use a fresh workbook
+    upload. Expected deployment evidence is 52 matched canonical FK targets,
+    zero blocked, 52 no-op, zero proposed, and no confirmation action. Stop on
+    any difference. Verify English/Chinese success and error surfaces. These
+    deployment/browser steps were not performed by 5F.
 
 ## 14. Explicit non-goals
 
@@ -818,10 +900,11 @@ Two bounded owner decisions remain, neither blocking registry implementation:
 2. **Bethany TEST reset retention:** 5D retains it as FK/dual-safe V2 tooling.
    Retirement still requires a separately approved cleanup.
 
-5B, 5C, 5D, and 5E are complete and locally verified. All known profile-aware
-runtime consumers have been switched, but 5F repository-wide closure/audit
-proof remains pending; `runtime_consumer_switched` therefore remains false.
-Before production deployment, satisfy the section 13 prerequisites, including
-explicitly enabling `svca_bethany_2026_worship_xlsx`, zero-drift identity and
-52-row Readiness V2 evidence, and operator re-upload after V2 deployment. Do
-not enable the Lighting key without the separate retention/identity decision.
+5B, 5C, 5D, and 5E are complete and locally verified. 5F now proves local
+repository/runtime closure with Class A legacy authority at zero. Production
+read-only closeout remains pending; `runtime_consumer_switched` therefore
+remains false. After the committed 5F code is deployed, satisfy section 13,
+including explicit `svca_bethany_2026_worship_xlsx` enablement, zero-drift
+identity and 52-row Readiness V2 evidence, a fresh no-op workbook preview, and
+English/Chinese rendered verification. Do not enable the Lighting key without
+the separate retention/identity decision.

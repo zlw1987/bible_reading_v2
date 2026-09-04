@@ -27,12 +27,15 @@ The generic replacement architecture is frozen in
 [`GENERIC_DEPLOYMENT_CONFIGURATION_ARCHITECTURE.md`](GENERIC_DEPLOYMENT_CONFIGURATION_ARCHITECTURE.md).
 Bethany, 09:30, the `A`/`C1`/`C2`/`C3` workbook tokens, and named Worship teams
 are deployment or adapter facts, not generic CMS taxonomy. The proposed
-first-class Service Profile, Ministry Team key, defaults, materialization, and
-integration gate remain runtime unimplemented.
+first-class Service Profile/FK, Ministry Team key, and integration gate are now
+implemented through the locally closed 5F consumer switch. Profile ministry
+defaults and materialization remain runtime unimplemented.
 
-`MO-S.6D-PROFILE.1A` now implements the optional stable
-`ServiceEvent.service_profile_key` identity foundation and is committed in the
-current HEAD. `MO-S.6D-SLICE8.1A/FU1/UX1` separately implements the strict Excel
+`MO-S.6D-PROFILE.1A` historically introduced the optional stable
+`ServiceEvent.service_profile_key` identity foundation. After generic
+deployment configuration 5F it remains transitional compatibility/drift
+storage; permanent runtime identity is the `ServiceEvent.service_profile` FK.
+`MO-S.6D-SLICE8.1A/FU1/UX1` separately implements the strict Excel
 dependency/parser, bounded OOXML ZIP resource preflight, and staff/superuser-
 only zero-write preview, including blocked partial-mapping preview and the
 wider operational review surface. Its production read-only smoke passed on
@@ -1288,11 +1291,13 @@ tests and limited-trial review pass.
 
 ### MO-S.6D-PROFILE.1A — Stable Service Profile Identity Foundation
 
-- Status: **IMPLEMENTED AND COMMITTED IN CURRENT HEAD** as one additive,
-  optional ServiceEvent field and migration.
-- `ServiceEvent.service_profile_key` is a non-unique, machine-oriented stable
-  integration/profile identity for the recurring service profile represented
-  by one exact event. Existing rows safely default to an empty key.
+- Status: **IMPLEMENTED HISTORICAL EXPANSION MILESTONE** as one additive,
+  optional ServiceEvent field and migration. Its runtime-authority wording is
+  superseded by generic deployment configuration 5C-5F.
+- `ServiceEvent.service_profile_key` is now non-unique transitional
+  compatibility/drift storage for the recurring service profile represented by
+  one exact event. Existing rows safely default to an empty key; permanent
+  runtime identity is the `ServiceEvent.service_profile` FK.
 - Non-empty keys accept only lowercase ASCII letters, digits, underscore,
   hyphen, and period. The field is deliberately absent from ordinary
   ServiceEvent and recurring-event forms; Django Admin is the narrow technical
@@ -1333,8 +1338,10 @@ tests and limited-trial review pass.
   `sunday_service`. The expected set is independently constructed as every
   seven days from `2026-01-04` through `2026-12-27` (52 Sundays); UTC clock
   time is never used as service-profile identity.
-- Only persisted `ServiceEvent.service_profile_key == "bethany_0930_cm"` is
-  canonical profile identity. Untagged exact-09:30 events are printed only as
+- Current Readiness V2 resolves `ServiceProfile.key == "bethany_0930_cm"` and
+  selects canonical rows by `ServiceEvent.service_profile` FK. A legacy-only
+  compatibility-key row is a blocker, never canonical identity. Untagged
+  exact-09:30 events are printed only as
   `UNTAGGED CANDIDATE / HUMAN REVIEW REQUIRED`; multiple candidates require
   human selection, and title, location, Host / Language, audience, or selected
   Worship Team resemblance never selects or ranks a target.
@@ -1557,13 +1564,15 @@ parallel same-day services. The candidate identity is:
 `contract/service profile + local service date + exact local 09:30 start +`
 `sunday_service event type + configured persisted profile discriminator`.
 
-`MO-S.6D-PROFILE.1A` supersedes the earlier location/Host candidate with the
-explicit optional `ServiceEvent.service_profile_key`. The supported workbook
-contract expects `bethany_0930_cm`; this church-specific expectation is not a
-global CMS semantic. Title, location, `host_language_unit`, end time, audience,
-annotations, and selected Worship Team are not profile identity and must not
-infer or auto-tag the key. `host_language_unit` remains display-only and never
-supplies audience.
+`MO-S.6D-PROFILE.1A` superseded the earlier location/Host candidate with the
+explicit optional `ServiceEvent.service_profile_key`; generic deployment
+configuration 5C-5F later superseded that string as runtime authority with the
+`ServiceEvent.service_profile` FK and actual `ServiceProfile.key`. The supported
+workbook contract expects `bethany_0930_cm`; this church-specific expectation
+is not a global CMS semantic. Title, location, `host_language_unit`, end time,
+audience, annotations, and selected Worship Team are not profile identity and
+must not infer or auto-tag either identity. `host_language_unit` remains
+display-only and never supplies audience.
 
 Matching must use the configured local timezone and require exactly one
 non-cancelled candidate with the exact minute, event type, and profile

@@ -47,8 +47,13 @@ class ServiceProfileIdentityInventoryTests(TestCase):
                 "service_profiles_total": 0,
                 "events_fk_null": 0,
                 "events_fk_nonnull": 0,
+                "profileless_events": 0,
+                "legacy_only_events": 0,
                 "exact_dual_consistent_events": 0,
                 "drifted_fk_events": 0,
+                "fk_blank_key_events": 0,
+                "fk_key_mismatch_events": 0,
+                "event_profile_type_drift_events": 0,
                 "integrity_blockers": 0,
             },
         )
@@ -158,8 +163,12 @@ class ServiceProfileIdentityInventoryTests(TestCase):
         self.assertEqual(row["fk_nonnull_count"], 1)
         self.assertEqual(row["exact_match_fk_count"], 1)
         self.assertEqual(row["fk_mismatch_count"], 0)
+        self.assertEqual(row["fk_blank_key_count"], 0)
+        self.assertEqual(row["fk_key_mismatch_count"], 0)
+        self.assertEqual(row["event_profile_type_mismatch_count"], 0)
         self.assertEqual(row["referenced_service_profile_ids"], [profile.pk])
         self.assertEqual(inventory["summary"]["exact_dual_consistent_events"], 1)
+        self.assertEqual(inventory["summary"]["legacy_only_events"], 1)
 
     def test_fk_profile_key_and_event_type_drift_are_reported(self):
         key_mismatch_profile = ServiceProfile.objects.create(
@@ -188,6 +197,23 @@ class ServiceProfileIdentityInventoryTests(TestCase):
         self.assertEqual(inventory["summary"]["events_fk_nonnull"], 2)
         self.assertEqual(inventory["summary"]["exact_dual_consistent_events"], 0)
         self.assertEqual(inventory["summary"]["drifted_fk_events"], 2)
+        self.assertEqual(inventory["summary"]["fk_blank_key_events"], 0)
+        self.assertEqual(inventory["summary"]["fk_key_mismatch_events"], 1)
+        self.assertEqual(
+            inventory["summary"]["event_profile_type_drift_events"], 1
+        )
+        self.assertTrue(
+            any(
+                "EVENT_FK_KEY_DRIFT" in value
+                for value in inventory["integrity_blockers"]
+            )
+        )
+        self.assertTrue(
+            any(
+                "EVENT_PROFILE_TYPE_DRIFT" in value
+                for value in inventory["integrity_blockers"]
+            )
+        )
         self.assertTrue(
             any("PROFILE_LINK_DRIFT" in value for value in inventory["integrity_blockers"])
         )
@@ -195,6 +221,33 @@ class ServiceProfileIdentityInventoryTests(TestCase):
             all(
                 "MISMATCHED_LINKED_EVENTS" in row["legacy_consistency_status"]
                 for row in inventory["service_profiles"]
+            )
+        )
+
+    def test_fk_blank_key_drift_is_reported_separately(self):
+        profile = ServiceProfile.objects.create(**profile_values())
+        event = ServiceEvent.objects.create(
+            **event_values(service_profile=profile)
+        )
+        ServiceEvent.objects.filter(pk=event.pk).update(service_profile_key="")
+
+        inventory = build_service_profile_identity_inventory()
+
+        self.assertEqual(inventory["summary"]["events_fk_nonnull"], 1)
+        self.assertEqual(inventory["summary"]["exact_dual_consistent_events"], 0)
+        self.assertEqual(inventory["summary"]["drifted_fk_events"], 1)
+        self.assertEqual(inventory["summary"]["fk_blank_key_events"], 1)
+        self.assertEqual(inventory["summary"]["fk_key_mismatch_events"], 0)
+        self.assertEqual(
+            inventory["summary"]["event_profile_type_drift_events"], 0
+        )
+        self.assertEqual(
+            inventory["blank_legacy_key"]["fk_blank_key_count"], 1
+        )
+        self.assertTrue(
+            any(
+                "BLANK_LEGACY_KEY_WITH_FK" in value
+                for value in inventory["integrity_blockers"]
             )
         )
 
@@ -214,3 +267,7 @@ class ServiceProfileIdentityInventoryTests(TestCase):
         self.assertIn("mode: read-only", value)
         self.assertIn("service_profiles_total: 0", value)
         self.assertIn("events_fk_null: 1", value)
+        self.assertIn("legacy_only_events: 1", value)
+        self.assertIn("fk_blank_key_events: 0", value)
+        self.assertIn("fk_key_mismatch_events: 0", value)
+        self.assertIn("event_profile_type_drift_events: 0", value)

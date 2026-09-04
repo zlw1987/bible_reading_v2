@@ -66,7 +66,7 @@ and confirmation artifacts bind the integration plus exact profile PK/key/type,
 and reject V1. All known profile-aware runtime consumers are switched, and 5F
 now proves local repository/runtime closure with Class A legacy authority at
 zero. Production deployment/config/data and fresh-workbook rendered closeout
-remain pending, so `runtime_consumer_switched` stays false. Defaults,
+are now verified, so `runtime_consumer_switched` is formally true. Defaults,
 materialization, MO-S.REQUIRED runtime, external identity mapping, and
 legacy-string retirement remain incomplete. 5E added no schema,
 migration, backfill, production command, or production data change.

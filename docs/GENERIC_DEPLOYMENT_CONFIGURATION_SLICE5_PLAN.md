@@ -9,10 +9,9 @@ ServiceProfile runtime identity seam IMPLEMENTED / LOCAL VERIFIED; and
 IMPLEMENTED / LOCAL VERIFIED; and `GENERIC-DEPLOYMENT-CONFIG.5E` Worship XLSX
 FK matching, current-truth confirmation, and V2 signed contracts IMPLEMENTED /
 LOCAL VERIFIED; and `GENERIC-DEPLOYMENT-CONFIG.5F` transition-closure audit and
-local closure proof **LOCAL CLOSURE PROOF COMPLETE / PRODUCTION READ-ONLY
-CLOSEOUT PENDING**. Class A legacy-string runtime authority is zero. The global
-status stays conservative until the separately performed deployed read-only
-closeout.**
+local closure proof **PRODUCTION CLOSEOUT COMPLETE / VERIFIED**. Class A
+legacy-string runtime authority is zero, and the separately performed deployed
+read-only closeout formally verifies `runtime_consumer_switched` as true.**
 
 Task IDs: `GENERIC-DEPLOYMENT-CONFIG.5A`,
 `GENERIC-DEPLOYMENT-CONFIG.5B`,
@@ -68,9 +67,9 @@ Class-A runtime authority remains. The existing read-only identity inventory
 needed only a small generic extension that separates legacy-only, FK/blank-key,
 FK/key, and event/profile-type drift counts; it remains zero-write and has no
 deployment defaults. No schema, signing, readiness, reset, Admin, mapper, or
-field-retirement behavior changed. Production deployment/config/data and fresh
-workbook rendered proof were not performed, so `runtime_consumer_switched`
-remains false globally.
+field-retirement behavior changed. The product owner later completed the
+separate deployed production closeout, so `runtime_consumer_switched` is now
+formally true globally.
 
 This document turns the canonical architecture in
 [`GENERIC_DEPLOYMENT_CONFIGURATION_ARCHITECTURE.md`](GENERIC_DEPLOYMENT_CONFIGURATION_ARCHITECTURE.md)
@@ -708,7 +707,7 @@ profile state yields no confirmation action and no write.
 Not included: arbitrary workbook support, assignment/member import, durable
 import history, notifications, profile defaults, hard-coded profile PK.
 
-### 11.5 `GENERIC-DEPLOYMENT-CONFIG.5F` — LOCAL CLOSURE PROOF COMPLETE / PRODUCTION READ-ONLY CLOSEOUT PENDING
+### 11.5 `GENERIC-DEPLOYMENT-CONFIG.5F` — PRODUCTION CLOSEOUT COMPLETE / VERIFIED
 
 5F used literal, case-sensitive `rg --count-matches -F` searches. Active Python
 means `*.py` excluding basenames `test*.py`, every `tests/` directory, and every
@@ -789,17 +788,11 @@ contract-retirement plan.
 
 ### 11.6 Lighting follow-up decision
 
-After 5B, but not as an automatic Slice 5 continuation:
-
-- if retained, approve a focused task to resolve one reviewed
-  `MinistryTeam.team_key`, reject missing/duplicate/inactive/non-assignable
-  targets, stop creating/renaming teams by name, and update focused importer
-  tests;
-- if not retained, approve a separate route/command/service/template/docs
-  retirement task.
-
-No production deployment should enable `svca_lighting_pilot_csv` before one of
-those paths is approved.
+The product owner selected retirement rather than identity modernization. The
+Lighting Pilot remains registered but disabled and unreachable; its route,
+command, service, template, registry, and test cleanup require a separately
+approved retirement task. No production deployment should enable
+`svca_lighting_pilot_csv` before that task.
 
 ## 12. Future test and verification matrix
 
@@ -809,7 +802,7 @@ those paths is approved.
 | 5C | all six identity states; optional-none; required missing-FK; mismatch/type/inactive; select-related behavior; pair assignment/clear; exact one revision; direct ORM bypass detected | focused model/runtime tests, `manage.py check`, `makemigrations --check --dry-run`, `git diff --check` | Read-only identity audit remains zero drift |
 | 5D | FK-owned readiness; no fallback; schema 0012 check; serialized version; Admin active/inactive choices; key read-only; pair write/clear; reset V2 determinism/staleness/missing profile/rollback/dual creation | focused profile/readiness/setup/Admin tests, checks above | No reset apply; read-only audit before/after; rendered Admin QA |
 | 5E | exact FK target; legacy-only/mismatch/type/inactive blockers; V1 token rejection; V2 strict shape/tamper/user/expiry; profile drift after preview/CAS; full rollback; 52 success/no-op; disabled route still no query | focused XLSX preview/confirmation plus file-backed SQLite tests, checks above | GoDaddy Python 3.11.15/openpyxl 3.1.5 import; read-only preview first; rendered English/Chinese route QA; no hard-coded PK |
-| 5F | **LOCAL CLOSURE PROOF COMPLETE:** audit exact/legacy-only/blank-key/key-drift/type-drift counts; command zero-write; current classified repository inventory; Class A = 0 | focused profile/audit/readiness/setup/Admin/workbook/integration suites, exact `rg` searches, `manage.py check`, `makemigrations --check --dry-run`, `git diff --check` | **PENDING:** post-deployment read-only identity + Readiness V2 audit, explicit workbook integration setting, fresh-workbook no-op preview, and English/Chinese rendered verification |
+| 5F | **PRODUCTION CLOSEOUT COMPLETE / VERIFIED:** audit exact/legacy-only/blank-key/key-drift/type-drift counts; command zero-write; current classified repository inventory; Class A = 0 | focused profile/audit/readiness/setup/Admin/workbook/integration suites, exact `rg` searches, `manage.py check`, `makemigrations --check --dry-run`, `git diff --check` | Verified: zero-drift production identity audit; Readiness V2 `PROFILE SETUP READY`; only `svca_bethany_2026_worship_xlsx` enabled; fresh V2 preview 52 exact/no-op, 0 proposed/blocked; English/Chinese rendered verification; no confirmation write |
 
 Do not run the full Django suite without separate approval. Browser/manual QA
 is required only for slices that actually change rendered Admin/integration
@@ -826,8 +819,8 @@ surfaces and must not be claimed unless performed.
 3. Configure `CMS_ENABLED_INTEGRATIONS` to explicitly include
    `svca_bethany_2026_worship_xlsx`. Because absence means disabled, a missed
    setting intentionally hides/fail-closes the workbook workflow.
-4. Do not enable the Lighting key until retention and team identity are
-   explicitly decided.
+4. Keep the Lighting key disabled; the product owner selected future retirement
+   rather than identity modernization, and retirement requires a separate task.
 5. Keep GoDaddy Python 3.11.15 and `openpyxl` 3.1.5 deployable. Import smoke is
    required for the enabled adapter, not evidence of workbook correctness by
    itself.
@@ -851,21 +844,16 @@ surfaces and must not be claimed unless performed.
 12. 5E ran no production reset, mapper apply, migration, or other data command.
     Deployment work must separately report code release, settings, read-only
     audits, and any data mutation.
-13. After 5F is committed and deployed, run exactly:
-    `python manage.py audit_service_profile_identity` and
-    `python manage.py audit_service_profile_readiness --profile-key
-    bethany_0930_cm --year 2026 --time 09:30 --event-type sunday_service`.
-    Require one active reviewed target profile (record its actual deployed PK),
-    52 linked/FK-non-null/exact rows, zero legacy-only/key/blank/type drift,
-    zero multi-type conflicts and integrity blockers, plus Readiness V2 at
-    52 canonical, 52 ready, zero missing, `PROFILE SETUP READY`.
-14. Confirm the deployed setting explicitly enables
-    `svca_bethany_2026_worship_xlsx` and does not enable
-    `svca_lighting_pilot_csv` for this closeout. Then use a fresh workbook
-    upload. Expected deployment evidence is 52 matched canonical FK targets,
-    zero blocked, 52 no-op, zero proposed, and no confirmation action. Stop on
-    any difference. Verify English/Chinese success and error surfaces. These
-    deployment/browser steps were not performed by 5F.
+13. The completed 5F production closeout ran the identity audit and Readiness
+    V2 against the deployed application: one active actual-PK-`1` target
+    profile, 52 linked/FK-non-null/exact rows, zero legacy-only/key/blank/type
+    drift, zero multi-type conflicts and integrity blockers, and `PROFILE
+    SETUP READY` at 52 canonical/ready, zero missing.
+14. The deployed setting explicitly enabled only
+    `svca_bethany_2026_worship_xlsx`, not `svca_lighting_pilot_csv`. A fresh
+    V2 upload yielded 52 matched canonical FK targets, 52 no-op, zero blocked,
+    zero proposed, and no confirmation action. English/Chinese rendered
+    success/error surfaces were verified.
 
 ## 14. Explicit non-goals
 
@@ -895,16 +883,17 @@ supplies the shared seam, 5D switches the approved non-workbook consumers, and
 
 Two bounded owner decisions remain, neither blocking registry implementation:
 
-1. **Lighting retention:** confirm operational value before team-key work or
-   retirement. Until then it stays registered but disabled and unreachable.
+1. **Lighting retirement:** the product owner selected retirement rather than
+   identity modernization. It stays registered but disabled and unreachable
+   until a separately approved cleanup task.
 2. **Bethany TEST reset retention:** 5D retains it as FK/dual-safe V2 tooling.
    Retirement still requires a separately approved cleanup.
 
-5B, 5C, 5D, and 5E are complete and locally verified. 5F now proves local
-repository/runtime closure with Class A legacy authority at zero. Production
-read-only closeout remains pending; `runtime_consumer_switched` therefore
-remains false. After the committed 5F code is deployed, satisfy section 13,
-including explicit `svca_bethany_2026_worship_xlsx` enablement, zero-drift
-identity and 52-row Readiness V2 evidence, a fresh no-op workbook preview, and
-English/Chinese rendered verification. Do not enable the Lighting key without
-the separate retention/identity decision.
+5B, 5C, 5D, and 5E are complete and locally verified. 5F proves local
+repository/runtime closure with Class A legacy authority at zero, and its
+production read-only closeout is complete and verified. The deployed setting
+enables only `svca_bethany_2026_worship_xlsx`; zero-drift identity evidence,
+52-row Readiness V2, fresh 52-no-op V2 preview, and English/Chinese rendered
+verification formally establish `runtime_consumer_switched` as true. No
+workbook confirmation occurred. Lighting remains disabled pending its separate
+retirement task.

@@ -55,8 +55,9 @@ web/command surfaces, and isolates adapter imports from generic events/ministry
  and exact profile identity, and V1 artifacts fail closed. All known
  profile-aware runtime consumers are switched. `GENERIC-DEPLOYMENT-CONFIG.5F`
  now provides the local repository/runtime closure proof with Class A legacy
- authority at zero; production deployment/config/data and fresh-workbook
- rendered closeout remain pending, so the global status stays conservative.
+ authority at zero; its completed production closeout verifies deployment
+ configuration/data and fresh-workbook rendered evidence, so the global status
+ is formally closed.
 `GENERIC-DEPLOYMENT-CONFIG.1A` now implements the additive nullable
 `MinistryTeam.team_key` identity foundation, bounded staff/Admin setup, and a
 read-only inventory, and `GENERIC-DEPLOYMENT-CONFIG.2A` implements the generic
@@ -86,12 +87,13 @@ reset, and ServiceEvent Admin to FK/Profile authority while keeping the
 compatibility key as read-only drift evidence. 5E switches workbook matching,
 signed artifacts, and post-CAS confirmation to FK/Profile authority while
 keeping that key as drift evidence. 5F proves the local consumer boundary,
-while `runtime_consumer_switched` remains false until the separate production
-read-only closeout. The current SVCA deployment must explicitly enable
-`svca_bethany_2026_worship_xlsx` before or with 5B deployment if the annual
-workbook workflow must remain available, pass the identity audit and 52-row
-Readiness V2, and re-upload after V2 deployment. The Lighting key stays
-disabled until its separate retention/identity decision.
+and the verified production read-only closeout formally establishes
+`runtime_consumer_switched` as true. The current SVCA deployment explicitly
+enables only `svca_bethany_2026_worship_xlsx`, passed the identity audit and
+52-row Readiness V2, and completed a fresh V2 52-no-op workbook preview with
+English/Chinese rendered verification and no confirmation write. The Lighting
+key remains disabled; the product owner selected separate future retirement
+rather than identity modernization.
 
 This project is becoming a lightweight modular church management system.
 Churches should eventually be able to enable only the modules they need, and

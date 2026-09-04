@@ -1,3 +1,5 @@
+import json
+import os
 import subprocess
 import sys
 import textwrap
@@ -24,6 +26,57 @@ from .integration_registry import (
 WORSHIP_XLSX = "svca_bethany_2026_worship_xlsx"
 LIGHTING_CSV = "svca_lighting_pilot_csv"
 ALL_INTEGRATIONS = (WORSHIP_XLSX, LIGHTING_CSV)
+
+
+class GodaddyIntegrationSettingsTests(SimpleTestCase):
+    @staticmethod
+    def _read_enabled_integrations(value=None, *, unset=False):
+        env = os.environ.copy()
+        env["DJANGO_SECRET_KEY"] = "settings-test-secret"
+        if unset:
+            env.pop("CMS_ENABLED_INTEGRATIONS", None)
+        else:
+            env["CMS_ENABLED_INTEGRATIONS"] = value
+
+        result = subprocess.run(
+            [
+                sys.executable,
+                "-c",
+                "import json; "
+                "from config.settings_godaddy import CMS_ENABLED_INTEGRATIONS; "
+                "print(json.dumps(CMS_ENABLED_INTEGRATIONS))",
+            ],
+            cwd=Path(settings.BASE_DIR),
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=30,
+            check=False,
+        )
+        if result.returncode != 0:
+            raise AssertionError(result.stdout + result.stderr)
+        return json.loads(result.stdout)
+
+    def test_missing_or_blank_environment_enables_nothing(self):
+        cases = ((None, True), ("", False), ("   ", False), (", ,", False))
+        for value, unset in cases:
+            with self.subTest(value=value, unset=unset):
+                self.assertEqual(
+                    self._read_enabled_integrations(value, unset=unset),
+                    [],
+                )
+
+    def test_single_integration_environment_value(self):
+        self.assertEqual(
+            self._read_enabled_integrations(WORSHIP_XLSX),
+            [WORSHIP_XLSX],
+        )
+
+    def test_comma_separated_values_are_trimmed_and_empty_entries_ignored(self):
+        self.assertEqual(
+            self._read_enabled_integrations(" first, ,second,, "),
+            ["first", "second"],
+        )
 
 
 class IntegrationRegistryTests(SimpleTestCase):

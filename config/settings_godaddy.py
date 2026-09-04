@@ -8,6 +8,12 @@ DEBUG = False
 TIME_ZONE = "America/Los_Angeles"
 USE_TZ = True
 
+CMS_ENABLED_INTEGRATIONS = [
+    key.strip()
+    for key in os.environ.get("CMS_ENABLED_INTEGRATIONS", "").split(",")
+    if key.strip()
+]
+
 # Comma-separated list of hostnames, sourced from the environment so the real
 # production domain can be set at deploy time without a code change. Falls back
 # to the temporary domain only when the env var is unset.

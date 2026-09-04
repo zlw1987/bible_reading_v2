@@ -107,7 +107,8 @@ Expected:
 - Service Events.
 - Ministry Teams.
 - Team Assignments.
-- Lighting Pilot Import, if included.
+- Historical Lighting Pilot Import, if included at that milestone (the tool was
+  later retired by `LIGHTING-PILOT-RETIRE.1A`).
 
 Expected:
 

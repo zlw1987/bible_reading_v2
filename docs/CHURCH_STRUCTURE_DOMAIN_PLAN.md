@@ -345,7 +345,10 @@ Recommended next sequence:
 - Later Community Activities V1 with `ChurchStructureUnit` app-specific audience rows
 - Checklist V1 remains deferred
 
-Checklist V1 should remain deferred until Lighting Pilot validation and should not be revived because of Community Activities.
+Historical sequencing note: Checklist V1 was deferred until the then-planned
+Lighting Pilot validation and was not to be revived because of Community
+Activities. The pilot adapter was later retired by
+`LIGHTING-PILOT-RETIRE.1A`.
 
 ## 12. Non-Goals
 

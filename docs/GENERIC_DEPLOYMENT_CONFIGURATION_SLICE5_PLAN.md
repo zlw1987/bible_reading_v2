@@ -11,14 +11,17 @@ FK matching, current-truth confirmation, and V2 signed contracts IMPLEMENTED /
 LOCAL VERIFIED; and `GENERIC-DEPLOYMENT-CONFIG.5F` transition-closure audit and
 local closure proof **PRODUCTION CLOSEOUT COMPLETE / VERIFIED**. Class A
 legacy-string runtime authority is zero, and the separately performed deployed
-read-only closeout formally verifies `runtime_consumer_switched` as true.**
+read-only closeout formally verifies `runtime_consumer_switched` as true.
+`LIGHTING-PILOT-RETIRE.1A` is **IMPLEMENTED / LOCAL VERIFIED** and removes the
+obsolete Lighting Pilot CSV integration from active code.**
 
 Task IDs: `GENERIC-DEPLOYMENT-CONFIG.5A`,
 `GENERIC-DEPLOYMENT-CONFIG.5B`,
 `GENERIC-DEPLOYMENT-CONFIG.5C`,
 `GENERIC-DEPLOYMENT-CONFIG.5D`,
 `GENERIC-DEPLOYMENT-CONFIG.5E`,
-`GENERIC-DEPLOYMENT-CONFIG.5F`
+`GENERIC-DEPLOYMENT-CONFIG.5F`,
+`LIGHTING-PILOT-RETIRE.1A`
 
 Audit baseline: `master` at `C:\dev\bible_reading_v2`, synchronized with
 `origin/master` at `0` ahead / `0` behind and clean before this document was
@@ -70,6 +73,14 @@ deployment defaults. No schema, signing, readiness, reset, Admin, mapper, or
 field-retirement behavior changed. The product owner later completed the
 separate deployed production closeout, so `runtime_consumer_switched` is now
 formally true globally.
+
+`LIGHTING-PILOT-RETIRE.1A` later implemented the separately approved owner
+decision: retire the pilot rather than modernize its mutable-name identity to
+`MinistryTeam.team_key`. The key is no longer registered; its URL/view,
+upload/apply template, management command, importer service, and active tests
+are removed. Configuring the former key now fails as unknown. This code-only
+retirement performed no schema, migration, data, ServiceProfile, or Worship
+XLSX contract change.
 
 This document turns the canonical architecture in
 [`GENERIC_DEPLOYMENT_CONFIGURATION_ARCHITECTURE.md`](GENERIC_DEPLOYMENT_CONFIGURATION_ARCHITECTURE.md)
@@ -150,10 +161,11 @@ may hard-code that PK or infer behavior from those deployment facts.
    and gates the stable preview/confirmation URLs before adapter form/service,
    parse, query, decode, CAS, or write work. Staff/superuser status does not
    bypass disablement.
-10. The Lighting Pilot remains absent from navigation. 5B gates its direct
-    route and command before importer/file/query/data work and removes the
-    eager importer dependency from `ministry.views`; its mutable-name identity
-    remains unchanged and unresolved.
+10. At the 5B milestone the Lighting Pilot remained absent from navigation;
+    its direct route/command were gated before importer/file/query/data work,
+    and the eager importer dependency was removed from `ministry.views`.
+    `LIGHTING-PILOT-RETIRE.1A` later removed the adapter and its unresolved
+    mutable-name identity completely.
 11. The workbook's parsed, normalized-preview, and confirmation artifacts are
     strict V2 signed contracts binding integration plus exact ServiceProfile
     identity. The adapter-specific normalized rows bind canonical FK state;
@@ -299,7 +311,13 @@ current manageable/visible Worship event. That parent page and the rotation
 planner are generic Worship features and must not be disabled with the XLSX
 adapter. Only the annual workbook card/routes are integration-owned.
 
-### 5.2 Lighting Pilot CSV
+### 5.2 Lighting Pilot CSV — historical 5A/5B snapshot, superseded
+
+The table and recommendation below record the state reviewed and implemented
+by 5B. `LIGHTING-PILOT-RETIRE.1A` supersedes the current-state portions: none of
+these route/view/template/command/service/test surfaces remains in active code,
+and the former integration key is now unknown. The historical mutable-name
+finding remains useful evidence for why the product owner chose retirement.
 
 | Surface | Present behavior | Verdict |
 |---|---|---|
@@ -463,7 +481,8 @@ is_integration_enabled(key)
 require_integration_enabled(key)  # thin fail-closed route/command helper
 ```
 
-Initial static registrations:
+Historical initial 5B static registrations (the Lighting entry was later
+removed by `LIGHTING-PILOT-RETIRE.1A`):
 
 | Key | Required modules |
 |---|---|
@@ -485,7 +504,8 @@ Rules:
 - Staff/superuser/capabilities are evaluated only after enablement and never
   override it.
 - The generic Worship Planning view receives an enabled/authorized boolean for
-  the workbook card. Lighting remains absent from navigation.
+  the workbook card. At 5B, Lighting remained absent from navigation; it was
+  later retired completely.
 - Tests use `override_settings`; configuration access must not be cached in a
   way that defeats overrides.
 
@@ -493,21 +513,20 @@ This registry is a static tuple/dict and small accessor set. It must not add
 entry-point discovery, auto-discovery, signals, hooks, an SDK, dynamic packages,
 or third-party registration.
 
-Adapter code should eventually live under explicit namespaces:
+The surviving Worship adapter code may eventually live under an explicit
+namespace:
 
 ```text
 ministry/integrations/svca_bethany_2026_worship_xlsx/
     forms.py
     preview.py        # parser, preflight, target matching, preview/signing
     confirmation.py
-
-ministry/integrations/svca_lighting_pilot_csv/
-    import_service.py
 ```
 
-Current route names may remain stable. A generic events/ministry wrapper may
-own the URL callable only if it performs the integration gate before lazy
-adapter import.
+For surviving adapters, current route names may remain stable. A generic
+events/ministry wrapper may own the URL callable only if it performs the
+integration gate before lazy adapter import. The former Lighting route was
+removed rather than retained under this rule.
 
 ## 11. Recommended implementation decomposition
 
@@ -543,8 +562,9 @@ Impact: no model, migration, or data change. Behavioral change is opt-in
 discoverability/direct-route/CLI failure. No signing version change. Production
 must configure `CMS_ENABLED_INTEGRATIONS =
 ["svca_bethany_2026_worship_xlsx"]` before or atomically with deployment if the
-current workbook UI must remain available. Do not enable Lighting without the
-retention decision.
+current workbook UI must remain available. At the 5B milestone, Lighting was
+not to be enabled without a retention decision; the later decision retired it
+and removed the key entirely.
 
 Rollback/fail-closed: removing the setting disables integrations; disabled
 paths return 404/CommandError before adapter import/query. Rollback of code is
@@ -786,13 +806,15 @@ production data operation. This is the local gate for the separately performed
 production read-only closeout and a later separately approved destructive
 contract-retirement plan.
 
-### 11.6 Lighting follow-up decision
+### 11.6 `LIGHTING-PILOT-RETIRE.1A` — IMPLEMENTED / LOCAL VERIFIED
 
 The product owner selected retirement rather than identity modernization. The
-Lighting Pilot remains registered but disabled and unreachable; its route,
-command, service, template, registry, and test cleanup require a separately
-approved retirement task. No production deployment should enable
-`svca_lighting_pilot_csv` before that task.
+Lighting Pilot registry entry, route/view, command, service, upload/apply
+template, active tests, and pilot-only permission helper are removed. The
+former `svca_lighting_pilot_csv` value has no deprecated alias and now fails
+configuration validation as an unknown key. Historical canonical data is
+unchanged. The only current registered deployment integration is
+`svca_bethany_2026_worship_xlsx`.
 
 ## 12. Future test and verification matrix
 
@@ -803,6 +825,7 @@ approved retirement task. No production deployment should enable
 | 5D | FK-owned readiness; no fallback; schema 0012 check; serialized version; Admin active/inactive choices; key read-only; pair write/clear; reset V2 determinism/staleness/missing profile/rollback/dual creation | focused profile/readiness/setup/Admin tests, checks above | No reset apply; read-only audit before/after; rendered Admin QA |
 | 5E | exact FK target; legacy-only/mismatch/type/inactive blockers; V1 token rejection; V2 strict shape/tamper/user/expiry; profile drift after preview/CAS; full rollback; 52 success/no-op; disabled route still no query | focused XLSX preview/confirmation plus file-backed SQLite tests, checks above | GoDaddy Python 3.11.15/openpyxl 3.1.5 import; read-only preview first; rendered English/Chinese route QA; no hard-coded PK |
 | 5F | **PRODUCTION CLOSEOUT COMPLETE / VERIFIED:** audit exact/legacy-only/blank-key/key-drift/type-drift counts; command zero-write; current classified repository inventory; Class A = 0 | focused profile/audit/readiness/setup/Admin/workbook/integration suites, exact `rg` searches, `manage.py check`, `makemigrations --check --dry-run`, `git diff --check` | Verified: zero-drift production identity audit; Readiness V2 `PROFILE SETUP READY`; only `svca_bethany_2026_worship_xlsx` enabled; fresh V2 preview 52 exact/no-op, 0 proposed/blocked; English/Chinese rendered verification; no confirmation write |
+| `LIGHTING-PILOT-RETIRE.1A` | retired key is unknown; only Worship XLSX registered; no pilot route/view/template/command/service/import/test surface; Worship disabled-route/import isolation and preview/confirmation smoke remain green | focused Core/ministry/Worship tests, exact retirement searches, `manage.py check`, `makemigrations --check --dry-run`, `git diff --check` | No production command or configuration/data migration |
 
 Do not run the full Django suite without separate approval. Browser/manual QA
 is required only for slices that actually change rendered Admin/integration
@@ -867,7 +890,6 @@ surfaces and must not be claimed unless performed.
 - changing generic Worship rotation/governance semantics;
 - expanding the XLSX contract, importing assignments/members, or adding import
   history/notifications;
-- modernizing or retiring Lighting without separate approval;
 - plugin SDK, Python entry points, auto-discovery, signals/hooks/event bus, or
   third-party package discovery;
 - external-system identity mapping without a real contract;
@@ -881,12 +903,9 @@ frozen architecture: 3A is additive, 4A supplies exact dual mapping/audit, 5C
 supplies the shared seam, 5D switches the approved non-workbook consumers, and
 5E switches the final currently known Class-A workbook consumer.
 
-Two bounded owner decisions remain, neither blocking registry implementation:
+One bounded owner decision remains after the Lighting decision was implemented:
 
-1. **Lighting retirement:** the product owner selected retirement rather than
-   identity modernization. It stays registered but disabled and unreachable
-   until a separately approved cleanup task.
-2. **Bethany TEST reset retention:** 5D retains it as FK/dual-safe V2 tooling.
+1. **Bethany TEST reset retention:** 5D retains it as FK/dual-safe V2 tooling.
    Retirement still requires a separately approved cleanup.
 
 5B, 5C, 5D, and 5E are complete and locally verified. 5F proves local
@@ -895,5 +914,6 @@ production read-only closeout is complete and verified. The deployed setting
 enables only `svca_bethany_2026_worship_xlsx`; zero-drift identity evidence,
 52-row Readiness V2, fresh 52-no-op V2 preview, and English/Chinese rendered
 verification formally establish `runtime_consumer_switched` as true. No
-workbook confirmation occurred. Lighting remains disabled pending its separate
-retirement task.
+workbook confirmation occurred. `LIGHTING-PILOT-RETIRE.1A` is implemented and
+locally verified; the former pilot has no active adapter surface and its
+historical canonical rows remain untouched.

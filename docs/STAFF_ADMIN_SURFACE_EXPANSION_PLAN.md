@@ -84,7 +84,10 @@ Gaps:
 
 Current state:
 - Ministry Operations includes `MinistryTeam`, `TeamMembership`, `TeamAssignment`, `TeamAssignmentMember`, manual ServiceEvent-based assignments, per-member confirmation, Playbook link, non-sensitive assignment notes, and My Serving Page V1.
-- Lighting Team pilot data/setup support exists on the generic ministry operations foundation.
+- Historical Lighting Team pilot data/setup support was validated on the generic
+  ministry operations foundation, then its adapter was fully retired by
+  `LIGHTING-PILOT-RETIRE.1A`. Existing canonical model rows remain ordinary
+  data; no pilot route/import/setup tool remains.
 - MO-S.2 keeps `ServiceEvent` required teams as event-level expectations, `TeamAssignment` as actual scheduled assignments, and `TeamAssignmentMember` as assigned people plus confirmation.
 - Batch-created events share the selected required teams; existing events remain valid with no required teams; already-selected inactive teams remain visible/removable on edit.
 - No `TeamAssignment` or `TeamAssignmentMember` is auto-created.

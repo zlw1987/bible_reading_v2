@@ -163,7 +163,7 @@ TeamAssignment V1 is implemented and pilot-validated.
 
 My Serving Page V1 is implemented and pilot-validated.
 
-Lighting Team Pilot Data import support and setup UI are implemented and pilot-validated. The Lighting Pilot Import is retired from the normal discoverable UI while its route/view/service/command remain available.
+Lighting Team Pilot Data import support and setup UI were pilot-validated historically. `LIGHTING-PILOT-RETIRE.1A` is **IMPLEMENTED / LOCAL VERIFIED**: the obsolete Lighting Pilot CSV integration is no longer registered, routable, callable through a management command, or supported as a deployment adapter. The product owner chose retirement rather than `MinistryTeam.team_key` modernization. Existing canonical model rows were not changed.
 
 Ministry Structure architecture is implemented through `MINISTRY-STRUCTURE.1A`–`1H`: `MinistryTeam` was upgraded in place into the ministry-structure unit (kind / assignable / role profile, `MinistryTeamParentLink`, and the additive ministry role system), with a read-only staff Ministry Structure map at `/structure/`, staff-only structure setup and long-term ministry-role assignment UI at `/teams/<id>/structure/`, a seed command, a readiness audit, and `is_assignable` enforcement for new serving assignments. The Ministry Structure setup foundation is complete enough for the current product stage. Ministry Teams / Ministry Structure UI polish is complete: `/teams/` has search and readiness filters, and the `/teams/` ↔ `/structure/` relationship is clearer. The authenticated navbar IA cleanup is complete (see "Navigation cleanup" above).
 
@@ -444,7 +444,7 @@ MO-S.1 Ministry Scheduling Requirements Plan is complete as docs-only planning f
 
 Checklist and advanced scheduling enhancements are still future phases.
 
-The overall project remains in staged development. The stable center is Daily Reading, Prayer, Bible Study V2, ServiceEvent foundation with required MinistryTeams and optional rotation anchors, generic MinistryTeam foundation, manual TeamAssignment V1, My Serving Page V1, limited Lighting Team Pilot Data/setup support, MO-S.1 scheduling requirements, MO-S.2 required-team data capture, MO-S.3 read-only assignment coverage display, MO-S.4 manual team-leader scheduling workspace, MO-S.4A scheduling semantic cleanup, MO-S.5A rotation anchor foundation, MO-S.5B limited copy-forward suggestions, SE-AS.1 through SERVICE-EVENT-CONTEXT.1C ServiceEvent audience-row migration/guard/retirement work, DOCS-AS.1 shared audience-scope direction, BS-AS.1 / BS-AS.2 / BS-AS.2A Bible Study Schedule audience scope using `ChurchStructureUnit`, BS-STRUCT.1L/1M/1O/1P/2A Bible Study V2 structure-native generation / audience-row visibility cleanup, BS-MEETING-MIRROR.1A mirror removal, BS-V1-SCHEMA-RETIRE.1A V1 schema retirement, My Serving Bible Study role confirmation, and Church Calendar limited-trial baseline integration through ServiceEvent, Bible Study, Announcements, Community Activities, and explicit personal serving overlays; future checklist, scheduling operations, later notification producers/integrations, and future module audience work should be added deliberately and kept within clear boundaries.
+The overall project remains in staged development. The stable center is Daily Reading, Prayer, Bible Study V2, ServiceEvent foundation with required MinistryTeams and optional rotation anchors, generic MinistryTeam foundation, manual TeamAssignment V1, My Serving Page V1, MO-S.1 scheduling requirements, MO-S.2 required-team data capture, MO-S.3 read-only assignment coverage display, MO-S.4 manual team-leader scheduling workspace, MO-S.4A scheduling semantic cleanup, MO-S.5A rotation anchor foundation, MO-S.5B limited copy-forward suggestions, SE-AS.1 through SERVICE-EVENT-CONTEXT.1C ServiceEvent audience-row migration/guard/retirement work, DOCS-AS.1 shared audience-scope direction, BS-AS.1 / BS-AS.2 / BS-AS.2A Bible Study Schedule audience scope using `ChurchStructureUnit`, BS-STRUCT.1L/1M/1O/1P/2A Bible Study V2 structure-native generation / audience-row visibility cleanup, BS-MEETING-MIRROR.1A mirror removal, BS-V1-SCHEMA-RETIRE.1A V1 schema retirement, My Serving Bible Study role confirmation, and Church Calendar limited-trial baseline integration through ServiceEvent, Bible Study, Announcements, Community Activities, and explicit personal serving overlays; the formerly pilot-validated Lighting CSV adapter is retired from active code. Future checklist, scheduling operations, later notification producers/integrations, and future module audience work should be added deliberately and kept within clear boundaries.
 
 Church structure domain planning is now implemented for approved local runtime consumers. `ChurchStructureUnit` is the canonical local structure model, `ChurchStructureMembership` is the canonical local belonging model for migrated consumers, and app-specific audience rows such as `ServiceEventAudienceScope`, `BibleStudySeriesAudienceScope`, and `BibleStudyMeetingAudienceScope` drive approved visibility/generation paths. Legacy `Profile.small_group`, `SmallGroup`, `District`, `MinistryContext`, ServiceEvent legacy scope fields, Bible Study Series legacy scope fields, and the V2 meeting `small_group` mirror have been retired from current models. PP-SA.1 records staff/admin surface planning, PP-SA.2 adds the permission-protected read-only staff overview at `/staff/`, PP-SA.3 completes staff membership request workflow polish, PP-SA.4 completes a permission-protected read-only staff moderation queue at `/staff/moderation/`, and PP-SA.5 completes read-only ministry ops health indicators on `/staff/`. See `docs/CHURCH_STRUCTURE_DOMAIN_PLAN.md`, `docs/CHURCH_STRUCTURE_MAPPING_AND_MEMBERSHIP_STRATEGY.md`, `docs/CHURCH_STRUCTURE_SEEDING_VERIFICATION.md`, `docs/CHURCH_STRUCTURE_MEMBERSHIP_BACKFILL_VERIFICATION.md`, `docs/CHURCH_STRUCTURE_MEMBERSHIP_DESIGN.md`, `docs/STAFF_ADMIN_SURFACE_EXPANSION_PLAN.md`, and `docs/SERVICE_EVENT_AUDIENCE_SCOPE_REDESIGN_PLAN.md`.
 
@@ -711,8 +711,8 @@ Implemented V1 foundation includes:
 - TeamAssignmentMember
 - Per-member confirmation
 - My Serving Page
-- Lighting Team Pilot Data import support
-- Lighting Team Pilot setup UI
+- Historical Lighting Team Pilot Data import/setup support (retired from active
+  code by `LIGHTING-PILOT-RETIRE.1A`)
 - Playbook link
 - Non-sensitive assignment notes
 
@@ -771,7 +771,9 @@ changes, 0 blocked rows, and no confirmation action.
   future label; every remaining governance runtime/schema prerequisite and
   later MO-S.6 slice remains separately scoped and unapproved.
 
-Lighting Team should be the first pilot, but there should not be a LightingTeam-specific data model. Models should remain generic enough for other ministry teams.
+Lighting Team was the first pilot, but no LightingTeam-specific data model was
+introduced. Its adapter is now retired; canonical serving models remain generic
+for other ministry teams.
 
 ### G. Church Structure Boundaries
 
@@ -934,7 +936,7 @@ Current V2 correction after browser review:
 
 Current phase:
 
-Reading, Prayer, Bible Study, Bible Study Worship Set, ServiceEvent Foundation, MinistryTeam Foundation, TeamAssignment V1, My Serving Page V1, and Lighting Team Pilot Data/setup support reached pilot validation on `v0.9-pilot-rc1`. Pilot validation passed with no known P0/P1 blockers.
+Reading, Prayer, Bible Study, Bible Study Worship Set, ServiceEvent Foundation, MinistryTeam Foundation, TeamAssignment V1, My Serving Page V1, and the historical Lighting Team Pilot Data/setup support reached pilot validation on `v0.9-pilot-rc1`. Pilot validation passed with no known P0/P1 blockers. The Lighting adapter was later fully retired from active code by `LIGHTING-PILOT-RETIRE.1A`; this does not rewrite that historical validation milestone.
 
 Post-Pilot Backlog Triage led into the completed Church Structure migration and related retirement work. CS-H.1 through CS-H.10, PP-SA.1 through PP-SA.5, ServiceEvent audience/legacy-field retirement, Bible Study V2 structure-native generation/visibility, V1 schema retirement, and legacy structure table retirement are complete for the current codebase. See `docs/POST_PILOT_BACKLOG_TRIAGE.md`, `docs/FLEXIBLE_CHURCH_STRUCTURE_AND_AUDIENCE_SCOPE_DESIGN.md`, `docs/CHURCH_STRUCTURE_MAPPING_AND_MEMBERSHIP_STRATEGY.md`, `docs/CHURCH_STRUCTURE_SEEDING_VERIFICATION.md`, `docs/CHURCH_STRUCTURE_MEMBERSHIP_BACKFILL_VERIFICATION.md`, `docs/CHURCH_STRUCTURE_MEMBERSHIP_DESIGN.md`, and `docs/STAFF_ADMIN_SURFACE_EXPANSION_PLAN.md`.
 
@@ -1100,7 +1102,7 @@ This should prepare future ministry scheduling, not become a full event-manageme
 
 ### Phase 6: Ministry Team Operations V1
 
-Status: MinistryTeam + TeamMembership Foundation, TeamAssignment V1, My Serving Page V1, and limited Lighting Team Pilot Data/setup support implemented / QA.
+Status: MinistryTeam + TeamMembership Foundation, TeamAssignment V1, and My Serving Page V1 implemented / QA. Historical Lighting Team Pilot Data/setup support was validated and later retired from active code by `LIGHTING-PILOT-RETIRE.1A`.
 
 Implemented:
 - MinistryTeam
@@ -1109,8 +1111,7 @@ Implemented:
 - TeamAssignmentMember
 - Assignment confirmation
 - My Serving Page
-- Lighting Team Pilot Data import support
-- Lighting Team Pilot setup UI
+- Historical Lighting Team Pilot Data import/setup support (now retired)
 - Playbook link
 - Non-sensitive assignment notes
 
@@ -1118,13 +1119,14 @@ Future:
 - Basic checklist
 - Review notes
 
-Lighting Team is the pilot, but models must remain generic.
+Lighting Team was the pilot; the surviving canonical models remain generic.
 
-### Phase 7: Lighting Team Pilot
+### Phase 7: Lighting Team Pilot — historical, adapter retired
 
-Status: limited pilot data import and setup UI support implemented / QA.
+Status: limited pilot data import and setup UI support was implemented / QA,
+then fully retired from active code by `LIGHTING-PILOT-RETIRE.1A`.
 
-Only import or model:
+Historical pilot scope included only:
 - Future 2-3 months of assignments
 - Lighting team members
 - Assigned person
@@ -1133,7 +1135,10 @@ Only import or model:
 
 Do not import all historical 2021-2026 data initially.
 
-Do not add a LightingTeam-specific model. Pilot data should continue to use the generic ServiceEvent, MinistryTeam, TeamMembership, TeamAssignment, and TeamAssignmentMember models.
+No LightingTeam-specific model was added. Historical rows created during the
+pilot remain ordinary `ServiceEvent`, `MinistryTeam`, `TeamMembership`,
+`TeamAssignment`, and `TeamAssignmentMember` rows and were not cleaned up or
+rewritten during adapter retirement.
 
 ### Phase 8: Ministry Operations Enhancements
 

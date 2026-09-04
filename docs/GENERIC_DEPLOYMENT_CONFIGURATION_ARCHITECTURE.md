@@ -72,15 +72,22 @@ non-workbook consumers, and 5E later switched the workbook consumer. Formal
 local Slice 5 closure is proved by 5F; its production read-only closeout is
 now verified.
 
-5B adds the static Core `CMS_ENABLED_INTEGRATIONS` registry. Absent, `None`,
-or empty configuration enables no integration. The named SVCA/Bethany 2026
-Worship XLSX and Lighting Pilot CSV integrations each require the enabled
-`events` and `ministry` modules; unknown keys and unmet dependencies fail with
-`ImproperlyConfigured`. The workbook card, workbook preview/confirmation
-routes, Lighting route, and Lighting command now fail closed when disabled,
-and generic events/ministry imports no longer load either adapter service or
-`openpyxl`. Existing URLs remain stable and enabled behavior is preserved
-through gate-first lazy imports. No adapter service file moved in 5B. 5E later
+`LIGHTING-PILOT-RETIRE.1A` — **IMPLEMENTED / LOCAL VERIFIED** — retires the
+obsolete Lighting Pilot CSV integration from active code. It is no longer
+registered, routable, callable through a management command, or supported as a
+deployment adapter. The product owner selected retirement rather than
+`MinistryTeam.team_key` modernization. Historical canonical rows once created
+by the pilot remain ordinary model data and were not changed.
+
+5B added the static Core `CMS_ENABLED_INTEGRATIONS` registry. Absent, `None`,
+or empty configuration enables no integration. At that milestone the named
+SVCA/Bethany 2026 Worship XLSX and Lighting Pilot CSV integrations each
+required the enabled `events` and `ministry` modules; unknown keys and unmet
+dependencies failed with `ImproperlyConfigured`. The workbook routes and the
+then-retained Lighting route/command failed closed when disabled, and generic
+events/ministry imports no longer loaded either adapter service or `openpyxl`.
+`LIGHTING-PILOT-RETIRE.1A` later removed the Lighting surfaces and registration;
+the retired key is now unknown. No adapter service file moved in 5B. 5E later
 versioned the workbook contracts and made `service_profile_key` compatibility/
 drift evidence rather than workbook identity authority. Overall
 source/runtime consumer-switch closure is proved locally by 5F; deployment
@@ -632,9 +639,10 @@ Freeze a small explicit registry, not a plugin framework:
 
 - setting: **`CMS_ENABLED_INTEGRATIONS`**;
 - absent, `None`, or empty means no deployment integrations;
-- registered keys initially include
-  **`svca_bethany_2026_worship_xlsx`** and, while retained,
-  **`svca_lighting_pilot_csv`**;
+- the current registered key is **`svca_bethany_2026_worship_xlsx`**;
+- 5B initially also registered **`svca_lighting_pilot_csv`**, but
+  `LIGHTING-PILOT-RETIRE.1A` removed it without an alias, so configuring that
+  retired key now fails unknown-key validation;
 - each entry declares required modules; workbook requires `events` + `ministry`;
 - unknown keys or unmet module dependencies raise `ImproperlyConfigured` when
   configuration is evaluated;
@@ -652,10 +660,12 @@ adapter under an explicit namespace such as
 Planning provides selector/planner plus enabled adapter links. Future adapters
 are explicitly registered: no auto-discovery, hook bus, or plugin SDK.
 
-The Lighting pilot is now gated at its web and command boundaries and its
-service is lazy-imported. Its name-based team identity remains unresolved. Do
-not enable it in a deployment until a separately approved task migrates it to a
-reviewed `team_key` mapping or retires it.
+The Lighting pilot is retired from active code by
+`LIGHTING-PILOT-RETIRE.1A`. Its registry entry, route/view, upload template,
+management command, importer service, and active tests were removed. The
+product owner chose retirement instead of converting its unsafe mutable-name
+identity to `MinistryTeam.team_key`. No canonical model rows were deleted or
+rewritten.
 
 ## 11. Future External-System Integration Boundary
 
@@ -683,9 +693,9 @@ local keys for reviewed configuration, but cannot overload identity layers.
 | Bethany rebuild, CHURCH -> campus -> CM resolver, readiness defaults | C. Acceptable one-time historical setup | Bounded operator/history tooling, not generic runtime; future tooling should be profile-data-driven. |
 | Legacy SVCA reading import and SVCA readiness-policy seed | C. Acceptable deployment/historical setup | Explicit command only; keep named and never auto-run. |
 | Workbook card/URLs shown to all staff when modules enabled | D. Configuration-gating debt resolved in 5B | Card is opt-in; disabled direct routes return 404 before adapter form/service/parser/query work. |
-| Lighting pilot CSV route/UI | D. Configuration-gating debt resolved in 5B | It remains absent from navigation; disabled web and command entry points fail closed before importer/file/data work. |
-| Unconditional XLSX imports in generic events forms/views and Lighting imports in ministry views | E. Generic import violation resolved in 5B | Gate-first lazy imports isolate current service placement; physical namespace cleanup remains optional debt. |
-| Lighting pilot name matching/normalization | E. Genericity violation / future refactor | Mutable names are treated as identity and one taxonomy is encoded; use reviewed key mapping or retire. |
+| Lighting pilot CSV route/UI | D. Resolved by retirement in `LIGHTING-PILOT-RETIRE.1A` | No route, view, template, command, service, or registry entry remains. |
+| Unconditional XLSX imports in generic events forms/views and former Lighting imports in ministry views | E. Generic import violation resolved | 5B isolated adapter imports; `LIGHTING-PILOT-RETIRE.1A` removed the Lighting importer entirely. Worship XLSX remains gate-first and lazy. |
+| Historical Lighting pilot name matching/normalization | E. Genericity violation retired | The product owner chose complete retirement rather than reviewed `team_key` modernization. |
 | Generic team-form placeholder "Lighting Team" | E. Minor genericity debt | Replace with neutral example copy; no current domain behavior effect. |
 | Tests using Bethany/named teams/A-C tokens | F. Deferred, no current impact | Representative fixtures are acceptable when not asserted as universal taxonomy. |
 | Generic `CHURCH` root seed | A. Acceptable generic domain | One local root concept; Bethany/CM assumptions remain bounded setup. |

@@ -9,11 +9,6 @@ urlpatterns = [
         views.confirm_bible_study_role_serving,
         name="confirm_bible_study_role_serving",
     ),
-    path(
-        "teams/import/lighting-pilot/",
-        views.lighting_pilot_import,
-        name="lighting_pilot_import",
-    ),
     path("assignments/", views.team_assignment_list, name="team_assignment_list"),
     path(
         "assignments/sunday-board/",

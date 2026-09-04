@@ -184,20 +184,6 @@ def can_change_worship_team(user, event):
     ).exists()
 
 
-def can_import_lighting_pilot(user):
-    if not getattr(user, "is_authenticated", False):
-        return False
-
-    if getattr(user, "is_staff", False) or getattr(user, "is_superuser", False):
-        return True
-
-    return (
-        has_capability(user, CAP_MANAGE_SERVICE_EVENTS)
-        and has_capability(user, CAP_MANAGE_MINISTRY_TEAMS)
-        and has_capability(user, CAP_MANAGE_TEAM_ASSIGNMENTS)
-    )
-
-
 def can_manage_team_assignment_for_team(user, team):
     if team is None or not getattr(user, "is_authenticated", False):
         return False

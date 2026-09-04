@@ -217,7 +217,8 @@ After Bible Study V1 stabilization, future planning should follow Bible Study V2
 - optional ServiceEvent relationship
 
 Do not begin:
-- [ ] Lighting Pilot Checklist V1
+- [ ] Historical Lighting Pilot Checklist V1 (the adapter was later retired by
+  `LIGHTING-PILOT-RETIRE.1A`)
 - [ ] Automatic scheduling
 - [ ] Treating ServiceEvent as the Bible Study content model
 

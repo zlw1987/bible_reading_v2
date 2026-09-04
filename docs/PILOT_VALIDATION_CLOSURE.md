@@ -67,7 +67,8 @@ Recommended next categories, without implementing them:
 - Staff Admin Surface Expansion planning.
 - Flexible Church Structure and Audience Scope design doc.
 - Community Activities V1 planning refinement.
-- Lighting Pilot operational follow-up.
+- Historical Lighting Pilot operational follow-up (the adapter was later
+  retired by `LIGHTING-PILOT-RETIRE.1A`).
 - Checklist V1 reconsideration only after pilot feedback proves need.
 - Deployment/operations hardening.
 

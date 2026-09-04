@@ -193,7 +193,9 @@ complete. The Ministry Team list (`/teams/`) gained search / kind / assignable /
 active filters plus readiness checkboxes (missing required role, missing role
 profile, unanchored), the `/teams/` ↔ `/structure/` relationship was made
 clearer, and the Lighting Pilot Import was retired from the normal discoverable
-UI (its route/view/service/command remain available). The authenticated navbar
+UI. `LIGHTING-PILOT-RETIRE.1A` later completed retirement by removing its
+registry, route/view, template, command, service, and active tests rather than
+modernizing its mutable-name identity. The authenticated navbar
 was reorganized so primary nav keeps the main user workflows while staff/admin
 and account functions are grouped into caret dropdowns, and the staff menu has a
 Structure Setup / 结构设置 section linking both Church Structure and Ministry
@@ -414,7 +416,9 @@ Surfaces that reference ministry teams today and must keep working:
   (`ministry_team_list`) and "Team Assignments" (`team_assignment_list`) buttons.
 - Team list/detail, manage members, team schedule, assignment list/detail,
   My Serving (`templates/ministry/*`).
-- Lighting pilot import (`ministry/services/lighting_pilot_import.py`).
+
+The Lighting pilot importer appeared in the historical foundation inventory
+but is no longer a current surface after `LIGHTING-PILOT-RETIRE.1A`.
 
 **Compatibility requirement:** every existing `MinistryTeam` row keeps working
 as an assignable team with its current membership pool. New structure fields must

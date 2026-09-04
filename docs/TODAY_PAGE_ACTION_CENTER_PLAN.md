@@ -37,7 +37,16 @@ Scope guardrails inherited from AGENTS.md and the task prompt:
 
 ### Existing product-direction tension (must be decided consciously)
 
-Pilot-era docs (`LIGHTING_PILOT_PREFLIGHT_REQUIREMENTS.md`, `LIGHTING_TEAM_PILOT_QA_CHECKLIST.md`, `IA_NAVIGATION_REDESIGN_PLAN.md`, `BIBLE_STUDY_V1_QA_CHECKLIST.md`) state that **Today stays a lightweight summary surface and My Serving owns serving details/management**. The "action center" hypothesis evolves this. This plan keeps the boundary by interpreting "action center" as: *Today surfaces and counts the user's personal items and links to the owning module page for the action itself*. Today does not become the management or detail surface. If the user instead wants in-place actions on Today (e.g., confirm buttons), that is an explicit product decision recorded in Section 8.
+Pilot-era IA and Bible Study V1 documents, together with the now-retired
+Lighting Pilot preflight/checklist guidance, established that **Today stays a
+lightweight summary surface and My Serving owns serving details/management**.
+The obsolete Lighting operator documents were removed by
+`LIGHTING-PILOT-RETIRE.1A`; this historical product boundary remains. The
+"action center" hypothesis evolves it by interpreting "action center" as:
+*Today surfaces and counts the user's personal items and links to the owning
+module page for the action itself*. Today does not become the management or
+detail surface. If the user instead wants in-place actions on Today (e.g.,
+confirm buttons), that is an explicit product decision recorded in Section 8.
 
 ## 2. Product Goal
 

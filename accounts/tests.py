@@ -739,9 +739,6 @@ class AccountProfileTests(TestCase):
         self.assertContains(response, "Manage Church Gatherings")
         self.assertContains(response, "Ministry Teams")
         self.assertContains(response, "Team Assignments")
-        # The Lighting Pilot Import is retired from the discoverable staff
-        # menu; its route remains available but is not linked here.
-        self.assertNotContains(response, "Lighting Pilot Import")
         self.assertContains(response, "Church Structure")
         self.assertContains(response, "Church Structure Setup &amp; Review")
         self.assertContains(response, reverse("staff_structure_map"))

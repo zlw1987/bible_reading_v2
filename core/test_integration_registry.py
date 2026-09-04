@@ -24,8 +24,7 @@ from .integration_registry import (
 
 
 WORSHIP_XLSX = "svca_bethany_2026_worship_xlsx"
-LIGHTING_CSV = "svca_lighting_pilot_csv"
-ALL_INTEGRATIONS = (WORSHIP_XLSX, LIGHTING_CSV)
+ALL_INTEGRATIONS = (WORSHIP_XLSX,)
 
 
 class GodaddyIntegrationSettingsTests(SimpleTestCase):
@@ -86,7 +85,6 @@ class IntegrationRegistryTests(SimpleTestCase):
             get_registered_integrations(),
             (
                 CmsIntegration(WORSHIP_XLSX, ("events", "ministry")),
-                CmsIntegration(LIGHTING_CSV, ("events", "ministry")),
             ),
         )
         for integration in get_registered_integrations():
@@ -113,14 +111,13 @@ class IntegrationRegistryTests(SimpleTestCase):
     def test_one_known_key_is_enabled(self):
         self.assertEqual(get_enabled_integration_keys(), frozenset({WORSHIP_XLSX}))
         self.assertTrue(is_integration_enabled(WORSHIP_XLSX))
-        self.assertFalse(is_integration_enabled(LIGHTING_CSV))
         self.assertEqual(
             require_integration_enabled(WORSHIP_XLSX),
             get_integration(WORSHIP_XLSX),
         )
 
     @override_settings(CMS_ENABLED_INTEGRATIONS=ALL_INTEGRATIONS)
-    def test_both_known_keys_are_enabled_in_registration_order(self):
+    def test_known_keys_are_enabled_in_registration_order(self):
         self.assertEqual(get_enabled_integration_keys(), frozenset(ALL_INTEGRATIONS))
         self.assertEqual(
             tuple(item.key for item in get_enabled_integrations()),
@@ -150,10 +147,10 @@ class IntegrationRegistryTests(SimpleTestCase):
     def test_override_settings_results_are_not_cached(self):
         with override_settings(CMS_ENABLED_INTEGRATIONS=[]):
             self.assertEqual(get_enabled_integration_keys(), frozenset())
-        with override_settings(CMS_ENABLED_INTEGRATIONS=[LIGHTING_CSV]):
+        with override_settings(CMS_ENABLED_INTEGRATIONS=[WORSHIP_XLSX]):
             self.assertEqual(
                 get_enabled_integration_keys(),
-                frozenset({LIGHTING_CSV}),
+                frozenset({WORSHIP_XLSX}),
             )
         with override_settings(CMS_ENABLED_INTEGRATIONS=None):
             self.assertEqual(get_enabled_integration_keys(), frozenset())
@@ -181,7 +178,6 @@ class DisabledIntegrationImportIsolationTests(SimpleTestCase):
             forbidden = {
                 "ministry.services.worship_xlsx_preview",
                 "ministry.services.worship_xlsx_confirmation",
-                "ministry.services.lighting_pilot_import",
             }
             if forbidden.intersection(sys.modules):
                 raise AssertionError("Django setup eagerly loaded an adapter module")
@@ -214,7 +210,6 @@ class DisabledIntegrationImportIsolationTests(SimpleTestCase):
                 worship_workbook_confirm,
                 worship_workbook_preview,
             )
-            from ministry.views import lighting_pilot_import
 
             user = SimpleNamespace(
                 is_authenticated=True,
@@ -227,7 +222,6 @@ class DisabledIntegrationImportIsolationTests(SimpleTestCase):
                 for view in (
                     worship_workbook_preview,
                     worship_workbook_confirm,
-                    lighting_pilot_import,
                 ):
                     request = request_factory.post("/disabled-integration/")
                     request.user = user

@@ -119,7 +119,6 @@ STAFF_NAV_URLS = {
     "edit_team_assignment",
     "cancel_team_assignment",
     "confirm_team_assignment",
-    "lighting_pilot_import",
     "bible_study_schedule_manage_list",
     "create_bible_study_schedule",
     "bible_study_schedule_detail",

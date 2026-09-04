@@ -44,10 +44,13 @@ This is not a broad production-readiness claim (July 2026).
 freezes the deployment-configuration boundary: one generic codebase with a
 separate database per installation, local canonical configuration data, and
 explicit opt-in deployment adapters. It does not introduce multi-tenancy or a
-plugin framework. `GENERIC-DEPLOYMENT-CONFIG.5B` now implements the static
-default-off integration registry, gates the named Worship XLSX and Lighting
-web/command surfaces, and isolates adapter imports from generic events/ministry
- imports. Profile defaults/materialization remain runtime unimplemented. 5D has
+plugin framework. `GENERIC-DEPLOYMENT-CONFIG.5B` implemented the static
+default-off integration registry and isolated adapter imports from generic
+events/ministry imports. `LIGHTING-PILOT-RETIRE.1A` is **IMPLEMENTED / LOCAL
+VERIFIED**: the obsolete Lighting Pilot CSV key and its route/view, template,
+command, service, tests, and pilot-only permission helper are removed. The
+product owner selected retirement rather than `MinistryTeam.team_key`
+modernization. Profile defaults/materialization remain runtime unimplemented. 5D has
  switched readiness, the retained bounded reset, and ServiceEvent Admin to
  FK/Profile authority. `GENERIC-DEPLOYMENT-CONFIG.5E` is IMPLEMENTED / LOCAL
  VERIFIED: Worship XLSX matching/confirmation is FK/Profile-authoritative,
@@ -92,8 +95,9 @@ and the verified production read-only closeout formally establishes
 enables only `svca_bethany_2026_worship_xlsx`, passed the identity audit and
 52-row Readiness V2, and completed a fresh V2 52-no-op workbook preview with
 English/Chinese rendered verification and no confirmation write. The Lighting
-key remains disabled; the product owner selected separate future retirement
-rather than identity modernization.
+pilot is now fully retired from active code; its former key is unknown rather
+than a disabled/deprecated alias. The production Worship XLSX integration
+remains the sole registered deployment adapter and its contracts are unchanged.
 
 This project is becoming a lightweight modular church management system.
 Churches should eventually be able to enable only the modules they need, and

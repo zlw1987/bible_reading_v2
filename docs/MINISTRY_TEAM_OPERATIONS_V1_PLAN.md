@@ -1,6 +1,13 @@
 # Ministry Team Operations V1 Plan
 
-Source of product boundaries: `docs/ROADMAP_REVISED_PRE_PILOT.md`, `docs/IA_NAVIGATION_REDESIGN_PLAN.md`, and `docs/LIGHTING_PILOT_PREFLIGHT_REQUIREMENTS.md`.
+Historical source of product boundaries: `docs/ROADMAP_REVISED_PRE_PILOT.md` and
+`docs/IA_NAVIGATION_REDESIGN_PLAN.md`. The obsolete Lighting Pilot preflight
+operator guide was removed when `LIGHTING-PILOT-RETIRE.1A` retired that adapter;
+the generic Ministry Operations boundaries remain applicable.
+
+Historical status: this document preserves the original V1/pilot plan and is
+not an operator guide. The Lighting Pilot registry, route/view, command,
+service, and template no longer exist.
 
 ## 1. Purpose
 

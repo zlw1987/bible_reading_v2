@@ -601,4 +601,5 @@ Current recommended sequence:
 
 Checklist V1 remains deferred.
 
-Lighting Pilot remains paused until IA/Bible Study flow stabilizes.
+Historical note: the Lighting Pilot was paused at this planning milestone. It
+was later fully retired from active code by `LIGHTING-PILOT-RETIRE.1A`.

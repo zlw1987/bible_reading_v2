@@ -135,8 +135,9 @@ Shipped staff dropdown groups (updated to match the shipped IA):
 - Django Admin
 
 Lighting Pilot Import/Setup is no longer listed in the staff dropdown: it is
-retired from normal discoverable UI and remains only as a retained
-route/view/service/command tool if needed.
+retired from normal discoverable UI. `LIGHTING-PILOT-RETIRE.1A` later removed
+the retained route/view/service/command and registry surface completely; this
+historical IA decision does not imply a callable hidden tool remains.
 
 ## 6. Bilingual UI Principles
 

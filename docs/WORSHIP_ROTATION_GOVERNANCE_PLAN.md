@@ -149,6 +149,12 @@ endpoint and selected-team write runtime, and that confirmation is production-
 applied and verified. It still provides no durable `ImportRun` schema and no
 `TeamAssignment`/`TeamAssignmentMember` import.
 
+`LIGHTING-PILOT-RETIRE.1A` is **IMPLEMENTED / LOCAL VERIFIED**. The separate
+obsolete Lighting Pilot CSV adapter was retired rather than modernized to
+`MinistryTeam.team_key`; it has no registry, route/view, command, service, or
+template surface. This retirement did not change the annual Worship XLSX
+parser, V2 signing, preview, or confirmation contracts.
+
 `created_by` is creation attribution, not durable planner responsibility or
 runtime authority. `MinistryTeamParentLink.parent_church_unit` is a display/
 organization anchor and an input to implemented `MO-S.6D-1D-A` Worship event/
@@ -491,16 +497,13 @@ without widening their present authority:
   `TeamScheduleAssignmentForm` create/edit path can create, retarget,
   reactivate, complete, or cancel an assignment;
 - Django Admin exposes `TeamAssignment` and `TeamAssignmentMember` directly;
-- the retained Lighting pilot import service/management command can create a
-  scheduled `TeamAssignment` (currently for the Lighting team) and membership
-  row; and
 - dedicated assignment cancellation and member confirmation can move rows out
   of or within the current status set, while ServiceEvent cancellation cancels
   non-final assignments.
 
 No other current management command writes `rotation_anchor_team`; no current
-management command other than the retained Lighting pilot importer creates
-`TeamAssignment`. `1D-B` removes the anchor from normal and recurring event
+management command creates `TeamAssignment`. `1D-B` removes the anchor from
+normal and recurring event
 forms, makes it read-only in ServiceEvent Admin, and adds the model-level
 Worship ownership guard used by generic forms, Team Schedule, Admin, direct
 `save()` / known `get_or_create()` callers, and member confirmation. Safe
@@ -848,8 +851,9 @@ changes because target SQLite cannot provide the proposed ServiceEvent
 `select_for_update()` lock. Docs-only `1B-A0` closes the replacement
 architecture decision; implemented `1B-A1` adds one monotonic event-owned
 scheduling revision and retrofits supported ServiceEvent, current-assignment, required-
-team/audience, Admin/delete/cascade, member-confirmation parent-status, and
-Lighting writes. Implemented `1B-B` claims every selected event revision with an
+team/audience, Admin/delete/cascade, member-confirmation parent-status, and the
+then-retained Lighting writes. That pilot writer was later removed by
+`LIGHTING-PILOT-RETIRE.1A`. Implemented `1B-B` claims every selected event revision with an
 atomic expected-value CAS before full governance/authority/fingerprint
 recomputation. SQLite's first successful CAS supplies a database-wide writer
 boundary, not a row lock. Read-only preview `1A` remains unaffected.

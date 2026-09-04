@@ -439,10 +439,12 @@ transaction before final validation and mutation for:
 - transitions between current and cancelled/completed history in either
   direction, including cancellation, completion, and reactivation;
 - the parent status change to `confirmed` caused by final member confirmation;
-- the retained Lighting pilot when it creates or changes fingerprinted
-  assignment truth; and
 - supported Admin create/edit/status/retarget/object-delete/bulk-delete and
   MinistryTeam deletion cascades affecting current assignments.
+
+The former Lighting pilot writer was included in the historical audit that
+shaped this coverage, but `LIGHTING-PILOT-RETIRE.1A` later removed that writer
+from active code.
 
 A current ordinary downstream retarget from Event A to Event B advances both
 surviving events once, in ascending event-ID order, in the same transaction.

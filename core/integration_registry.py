@@ -30,10 +30,6 @@ _REGISTERED_INTEGRATIONS = (
         key="svca_bethany_2026_worship_xlsx",
         required_modules=("events", "ministry"),
     ),
-    CmsIntegration(
-        key="svca_lighting_pilot_csv",
-        required_modules=("events", "ministry"),
-    ),
 )
 
 _INTEGRATIONS_BY_KEY = {

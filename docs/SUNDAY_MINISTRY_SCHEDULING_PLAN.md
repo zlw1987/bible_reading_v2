@@ -148,11 +148,11 @@ or a production import in this planning slice.
   interactive TeamAssignment create/edit scheduling writes; it does not make
   notifications a schedule database or authorize imports/admin/direct ORM
   writes. Future board/import notifications require a separate producer slice.
-- A narrow Lighting pilot CSV importer exists, but it is not the proposed
-  annual Excel importer. It demonstrates the need for strict columns,
-  sensitive-column rejection, dry-run capability, and generic model reuse;
-  its current direct import behavior must not be copied into a production
-  upload flow without the preview/confirmation gate defined below.
+- A narrow Lighting pilot CSV importer historically existed, but it was never
+  the annual Excel importer. `LIGHTING-PILOT-RETIRE.1A` later retired it
+  completely rather than modernizing its mutable-name identity. Its historical
+  limitations helped motivate the strict preview/confirmation gate below, but
+  it is no longer a current writer or supported adapter.
 
 ### Material gaps
 
@@ -534,7 +534,7 @@ semantic. `ServiceEvent.updated_at` means the event timestamp;
 | ServiceEvent cancellation | current Worship assignment becomes cancelled and scheduling surfaces lose the event | Event save advances event `updated_at`/revision; current assignments are then bulk-updated to cancelled with assignment `updated_at`. |
 | `TeamAssignment.save()` / object delete, Django Admin object edit/delete, Admin bulk delete, `MinistryTeam` delete cascade | assignment create/edit/status/retarget/delete or cascade can change consistent/unscheduled/conflict state | Supported parent save changes assignment `updated_at`; current assignment create/delete/retarget/status changes advance revision. Hard delete leaves no assignment timestamp; delete paths preserve only revision on the surviving event. |
 | `TeamAssignmentMember` model/Admin create, edit, object delete, Admin bulk delete, and normal member sync | roster add/remove/replace/last removal | Add leaves only child `created_at`; child has no `updated_at`. Removal/delete leaves no timestamp or tombstone and does not advance parent/event/revision. Admin/direct child paths bypass the normal parent form save. |
-| Narrow Lighting pilot importer | theoretically material only if its exact resolved Lighting row is also the selected eligible Worship Team for that event | `get_or_create` parent/member writes use model validation; child creation does not advance parent/event/revision. This legacy importer is not the annual Worship importer and is not a general identity mechanism. |
+| Historical narrow Lighting pilot importer (retired by `LIGHTING-PILOT-RETIRE.1A`) | Was theoretically material only if its exact resolved Lighting row was also the selected eligible Worship Team for that event | Historical audit evidence only; this writer no longer exists and was never the annual Worship importer or a general identity mechanism. |
 | TeamMembership create/edit/deactivate/delete through team-member UI, model, or Admin | assigned membership activation, deactivation, deletion, linked-user replacement, or unlinked canonical display-identity change | Membership save advances only membership `updated_at`; deactivation does not touch parent assignment/event/revision. Hard deletion cascades the member row and removes the evidence. Linked-user label and contact/note-only edits are non-semantic; an unlinked visible-identity edit is material. |
 | MinistryTeam metadata and MinistryTeamParentLink setup/Admin paths | activity, assignability, pool/path usability, or selected-team eligibility/governance change | Team saves have their own `updated_at`; parent-link saves have only link `updated_at`. Neither centrally advances event/assignment timestamps or revision. Team deletion has special current-assignment revision coverage, but ordinary metadata/path changes do not. |
 | ServiceEvent audience-row sync/Admin inline and Church Structure unit activity/ancestry changes | applicable pool/ownership state change | Normal event-form sync happens after a parent event save, but audience rows and structure changes have no universal event/assignment timestamp or revision hook. Direct supported Admin/structure paths can therefore change governance projection without centralized time evidence. |
@@ -1669,9 +1669,9 @@ contract, not keyword inference.
 #### Preview state and confirmation invariants
 
 There is no repository-wide signed preview/import-run pattern. The recurring
-event form previews and writes within one POST, while the lighting pilot CSV
-import can directly create data and is not a safe pattern for this audience-
-and-identity-sensitive flow.
+event form previews and writes within one POST. The retired Lighting pilot CSV
+importer historically could create data directly; that unsafe pattern was not
+copied into this audience-and-identity-sensitive flow.
 
 For an annual workbook of this size (about 258 KB and 52 supported rows), the
 smallest no-schema option is a timestamped, signed normalized proposal, with

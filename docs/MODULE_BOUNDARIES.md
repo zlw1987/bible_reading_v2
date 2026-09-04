@@ -49,8 +49,12 @@ default-off integration registry, gates the named Worship XLSX and Lighting
 web/command surfaces, and isolates adapter imports from generic events/ministry
  imports. Profile defaults/materialization remain runtime unimplemented. 5D has
  switched readiness, the retained bounded reset, and ServiceEvent Admin to
- FK/Profile authority; workbook matching/signing and overall consumer-switch
- closure remain pending 5E/5F.
+ FK/Profile authority. `GENERIC-DEPLOYMENT-CONFIG.5E` is IMPLEMENTED / LOCAL
+ VERIFIED: Worship XLSX matching/confirmation is FK/Profile-authoritative,
+ strict V2 parsed/preview/confirmation artifacts bind the enabled integration
+ and exact profile identity, and V1 artifacts fail closed. All known
+ profile-aware runtime consumers are switched, but 5F formal closure remains
+ pending and the global status stays conservative.
 `GENERIC-DEPLOYMENT-CONFIG.1A` now implements the additive nullable
 `MinistryTeam.team_key` identity foundation, bounded staff/Admin setup, and a
 read-only inventory, and `GENERIC-DEPLOYMENT-CONFIG.2A` implements the generic
@@ -77,12 +81,14 @@ one reviewed profile, 52 exact dual-consistent mapped events, zero identity
 drift, and exact `1 -> 2` once-only scheduling-revision advances. This is
 deployment-specific evidence only. 5D switches readiness, the retained bounded
 reset, and ServiceEvent Admin to FK/Profile authority while keeping the
-compatibility key as read-only drift evidence. Workbook matching/signing stays
-legacy-authoritative pending 5E, so `runtime_consumer_switched` remains false
-globally and overall consumer-switch closure remains pending. The current SVCA deployment must explicitly enable
+compatibility key as read-only drift evidence. 5E switches workbook matching,
+signed artifacts, and post-CAS confirmation to FK/Profile authority while
+keeping that key as drift evidence. `runtime_consumer_switched` remains false
+until 5F closure proof. The current SVCA deployment must explicitly enable
 `svca_bethany_2026_worship_xlsx` before or with 5B deployment if the annual
-workbook workflow must remain available. The Lighting key stays disabled until
-its separate retention/identity decision.
+workbook workflow must remain available, pass the identity audit and 52-row
+Readiness V2, and re-upload after V2 deployment. The Lighting key stays
+disabled until its separate retention/identity decision.
 
 This project is becoming a lightweight modular church management system.
 Churches should eventually be able to enable only the modules they need, and

@@ -47,6 +47,9 @@ from ministry.services.worship_xlsx_confirmation import (
     decode_signed_worship_workbook_confirmation,
 )
 from ministry.services.worship_xlsx_preview import (
+    CONTRACT_REVISION,
+    INTEGRATION_KEY,
+    NORMALIZED_PREVIEW_CONTRACT_REVISION,
     TOKEN_ORDER,
     build_worship_import_preview,
     parse_known_worship_workbook,
@@ -62,10 +65,12 @@ from .models import (
     ServiceEventAudienceScope,
     ServiceEventPlannerAssignment,
     ServiceEventRequiredTeam,
+    ServiceProfile,
 )
 from .scheduling_revision import (
     SchedulingRevisionError,
     advance_scheduling_revisions,
+    claim_scheduling_revisions,
 )
 from .test_worship_xlsx_preview import build_known_workbook
 from .views import can_manage_service_events
@@ -76,6 +81,11 @@ class WorshipWorkbookConfirmationTestBase(TestCase):
     def setUpTestData(cls):
         cls.parsed = parse_known_worship_workbook(
             build_known_workbook(), filename="reviewed-schedule.xlsx"
+        )
+        cls.target_profile = ServiceProfile.objects.create(
+            key="bethany_0930_cm",
+            name="Bethany 09:30",
+            event_type=ServiceEvent.EVENT_SUNDAY_SERVICE,
         )
         cls.root = ChurchStructureUnit.objects.create(
             code="ROOT",
@@ -155,6 +165,7 @@ class WorshipWorkbookConfirmationTestBase(TestCase):
             event = ServiceEvent.objects.create(
                 title=f"Sunday {index}",
                 title_en=f"Sunday {index}",
+                service_profile=cls.target_profile,
                 service_profile_key="bethany_0930_cm",
                 event_type=ServiceEvent.EVENT_SUNDAY_SERVICE,
                 start_datetime=timezone.make_aware(
@@ -209,6 +220,7 @@ class WorshipWorkbookConfirmationTestBase(TestCase):
                 "id",
                 "scheduling_revision",
                 "rotation_anchor_team_id",
+                "service_profile_id",
                 "service_profile_key",
                 "event_type",
                 "start_datetime",
@@ -223,6 +235,23 @@ class WorshipWorkbookConfirmationTestBase(TestCase):
 class WorshipWorkbookConfirmationSuccessTests(WorshipWorkbookConfirmationTestBase):
     def test_staff_all_52_changed_advances_once_audits_shared_operation_and_no_notify(self):
         proposal, payload = self.decoded()
+        self.assertEqual(payload["integration_key"], INTEGRATION_KEY)
+        self.assertEqual(payload["profile_id"], self.target_profile.pk)
+        self.assertEqual(payload["profile_key"], self.target_profile.key)
+        self.assertEqual(
+            payload["profile_event_type"], self.target_profile.event_type
+        )
+        self.assertEqual(payload["parser_contract_revision"], CONTRACT_REVISION)
+        self.assertEqual(
+            payload["preview_contract_revision"],
+            NORMALIZED_PREVIEW_CONTRACT_REVISION,
+        )
+        self.assertTrue(
+            all(
+                row["expected_service_profile_id"] == self.target_profile.pk
+                for row in payload["rows"]
+            )
+        )
         self.assertEqual(proposal.selected_count, 52)
         self.assertEqual(proposal.changed_count, 52)
         self.assertEqual(proposal.no_op_count, 0)
@@ -378,6 +407,7 @@ class WorshipWorkbookConfirmationSuccessTests(WorshipWorkbookConfirmationTestBas
         identity_before = list(
             ServiceEvent.objects.order_by("id").values_list(
                 "id",
+                "service_profile_id",
                 "service_profile_key",
                 "event_type",
                 "start_datetime",
@@ -401,6 +431,7 @@ class WorshipWorkbookConfirmationSuccessTests(WorshipWorkbookConfirmationTestBas
             list(
                 ServiceEvent.objects.order_by("id").values_list(
                     "id",
+                    "service_profile_id",
                     "service_profile_key",
                     "event_type",
                     "start_datetime",
@@ -457,6 +488,13 @@ class WorshipWorkbookConfirmationTokenAuthorityTests(
             "duplicate_source_row",
             "malformed_sha256",
             "wrong_parser_contract",
+            "wrong_preview_contract",
+            "wrong_integration",
+            "missing_profile_id",
+            "wrong_profile_id",
+            "wrong_profile_key",
+            "wrong_profile_event_type",
+            "wrong_row_profile_id",
             "missing_mapping_token",
             "extra_field",
         ):
@@ -485,6 +523,22 @@ class WorshipWorkbookConfirmationTokenAuthorityTests(
                 payload["workbook_sha256"] = "not-a-sha"
             elif name == "wrong_parser_contract":
                 payload["parser_contract_revision"] = "UNKNOWN"
+            elif name == "wrong_preview_contract":
+                payload["preview_contract_revision"] = "UNKNOWN"
+            elif name == "wrong_integration":
+                payload["integration_key"] = "other_adapter"
+            elif name == "missing_profile_id":
+                payload.pop("profile_id")
+            elif name == "wrong_profile_id":
+                payload["profile_id"] = self.target_profile.pk + 1000
+                for row in payload["rows"]:
+                    row["expected_service_profile_id"] = payload["profile_id"]
+            elif name == "wrong_profile_key":
+                payload["profile_key"] = "wrong"
+            elif name == "wrong_profile_event_type":
+                payload["profile_event_type"] = ServiceEvent.EVENT_SPECIAL_MEETING
+            elif name == "wrong_row_profile_id":
+                payload["rows"][0]["expected_service_profile_id"] += 1
             elif name == "missing_mapping_token":
                 payload["mapping_team_ids"].pop("C3")
             else:
@@ -502,6 +556,27 @@ class WorshipWorkbookConfirmationTokenAuthorityTests(
         self.assertEqual(self.scheduling_snapshot(), before)
         self.assertEqual(LogEntry.objects.count(), 0)
         self.assertEqual(Notification.objects.count(), 0)
+
+    def test_v1_confirmation_proposal_is_rejected_without_compatibility_decode(self):
+        proposal = self.proposal()
+        payload = signing.loads(
+            proposal.signed_payload,
+            salt=CONFIRMATION_SIGNING_SALT,
+        )
+        payload["confirmation_contract_revision"] = (
+            "SVCA_BETHANY_0930_2026_CONFIRM_V1"
+        )
+        payload["confirmation_signing_version"] = 1
+        v1_token = signing.dumps(
+            payload,
+            compress=True,
+            salt="ministry.worship-xlsx-confirmation.v1",
+        )
+        with self.assertRaises(WorshipWorkbookConfirmationProposalError):
+            decode_signed_worship_workbook_confirmation(
+                v1_token,
+                user=self.staff,
+            )
 
     def test_wrong_user_expired_and_tampered_tokens_fail_zero_write(self):
         proposal = self.proposal()
@@ -670,6 +745,90 @@ class WorshipWorkbookConfirmationCurrentTruthTests(
         for name, mutate in cases:
             with self.subTest(name=name):
                 self.assert_drift_case(mutate)
+
+    def test_profile_and_fk_current_truth_drift_matrix_rolls_back_all_52(self):
+        def target_id(payload):
+            return payload["rows"][0]["event_id"]
+
+        def recreate_profile(_payload):
+            ServiceEvent.objects.all().update(service_profile=None)
+            ServiceProfile.objects.filter(pk=self.target_profile.pk).delete()
+            ServiceProfile.objects.create(
+                key="bethany_0930_cm",
+                name="Recreated target",
+                event_type=ServiceEvent.EVENT_SUNDAY_SERVICE,
+            )
+
+        def remap_event(payload):
+            other = ServiceProfile.objects.create(
+                key="remapped_profile",
+                name="Remapped profile",
+                event_type=ServiceEvent.EVENT_SUNDAY_SERVICE,
+            )
+            ServiceEvent.objects.filter(pk=target_id(payload)).update(
+                service_profile=other,
+                service_profile_key=other.key,
+            )
+
+        cases = (
+            (
+                "profile_inactive",
+                lambda payload: ServiceProfile.objects.filter(
+                    pk=self.target_profile.pk
+                ).update(is_active=False),
+            ),
+            ("profile_recreated", recreate_profile),
+            (
+                "event_fk_cleared",
+                lambda payload: ServiceEvent.objects.filter(
+                    pk=target_id(payload)
+                ).update(service_profile=None),
+            ),
+            ("event_fk_remapped", remap_event),
+            (
+                "compatibility_key_drift",
+                lambda payload: ServiceEvent.objects.filter(
+                    pk=target_id(payload)
+                ).update(service_profile_key="wrong"),
+            ),
+            (
+                "event_type_drift",
+                lambda payload: ServiceEvent.objects.filter(
+                    pk=target_id(payload)
+                ).update(event_type=ServiceEvent.EVENT_SPECIAL_MEETING),
+            ),
+            (
+                "profile_type_drift",
+                lambda payload: ServiceProfile.objects.filter(
+                    pk=self.target_profile.pk
+                ).update(event_type=ServiceEvent.EVENT_SPECIAL_MEETING),
+            ),
+        )
+        for name, mutate in cases:
+            with self.subTest(name=name):
+                self.assert_drift_case(
+                    mutate,
+                    error=WorshipWorkbookConfirmationError,
+                )
+
+    def test_signed_profile_id_mismatch_is_revalidated_after_claim_and_rolled_back(self):
+        _, payload = self.decoded()
+        payload = copy.deepcopy(payload)
+        payload["profile_id"] += 1000
+        for row in payload["rows"]:
+            row["expected_service_profile_id"] = payload["profile_id"]
+        before = self.scheduling_snapshot()
+        with (
+            patch(
+                "ministry.services.worship_xlsx_confirmation.claim_scheduling_revisions",
+                wraps=claim_scheduling_revisions,
+            ) as claim,
+            self.assertRaises(WorshipWorkbookConfirmationError),
+        ):
+            confirm_worship_workbook(user=self.staff, payload=payload)
+        claim.assert_called_once()
+        self.assertEqual(self.scheduling_snapshot(), before)
+        self.assertEqual(LogEntry.objects.count(), 0)
 
     def test_audience_team_pool_hierarchy_and_destination_drift_matrix(self):
         def target_id(payload):
@@ -1013,6 +1172,11 @@ class FileBackedSQLiteAnnualWorshipConfirmationTests(unittest.TestCase):
 
     def build_fixture(self):
         parsed = parse_known_worship_workbook(build_known_workbook())
+        target_profile = ServiceProfile.objects.create(
+            key="bethany_0930_cm",
+            name="Bethany 09:30",
+            event_type=ServiceEvent.EVENT_SUNDAY_SERVICE,
+        )
         root = ChurchStructureUnit.objects.create(
             code="ROOT", name="Root", unit_type=ChurchStructureUnit.UNIT_ROOT
         )
@@ -1037,6 +1201,7 @@ class FileBackedSQLiteAnnualWorshipConfirmationTests(unittest.TestCase):
         for index, row in enumerate(parsed.rows):
             event = ServiceEvent.objects.create(
                 title=f"Sunday {index}",
+                service_profile=target_profile,
                 service_profile_key="bethany_0930_cm",
                 event_type=ServiceEvent.EVENT_SUNDAY_SERVICE,
                 start_datetime=timezone.make_aware(
@@ -1091,6 +1256,7 @@ class FileBackedSQLiteAnnualWorshipConfirmationTests(unittest.TestCase):
         # A second supported writer that wins after preview makes the importer
         # stale; no importer row or audit commits partially.
         ServiceEvent.objects.all().delete()
+        ServiceProfile.objects.all().delete()
         LogEntry.objects.all().delete()
         User.objects.all().delete()
         MinistryTeamParentLink.objects.all().delete()

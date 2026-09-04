@@ -1,5 +1,6 @@
 """Focused MO-S.6D-SLICE8.1A parser and read-only preview tests."""
 
+import copy
 from datetime import date, datetime, time, timedelta
 from io import BytesIO
 import os
@@ -14,6 +15,7 @@ from django.contrib.admin.models import LogEntry
 from django.contrib.auth.models import User
 from django.core import signing
 from django.core.files.uploadedfile import SimpleUploadedFile
+from django.db import transaction
 from django.http import Http404
 from django.test import RequestFactory, SimpleTestCase, TestCase, override_settings
 from django.urls import reverse
@@ -40,16 +42,21 @@ from ministry.services.worship_xlsx_preview import (
     EXPECTED_REAL_WORKBOOK_SHA256,
     EXPECTED_SHEET_NAMES,
     EXPECTED_TITLE,
+    INTEGRATION_KEY,
     MAX_UPLOAD_BYTES,
     MAX_ZIP_MEMBERS,
     MAX_ZIP_UNCOMPRESSED_BYTES,
     OBSERVED_REAL_WORKBOOK_TOKEN_COUNTS,
+    NORMALIZED_PREVIEW_CONTRACT_REVISION,
+    NORMALIZED_PREVIEW_SIGNING_SALT,
     SIGNING_SALT,
     TOKEN_ORDER,
     MappingValidationError,
     PreviewBlocker,
     PreviewClassification,
     SignedWorkbookStateError,
+    TargetServiceProfileError,
+    TargetServiceProfileErrorCode,
     TargetMatchState,
     WorkbookContractError,
     WorkbookErrorCode,
@@ -69,11 +76,13 @@ from .models import (
     ServiceEventAudienceScope,
     ServiceEventPlannerAssignment,
     ServiceEventRequiredTeam,
+    ServiceProfile,
 )
 
 
 WORKBOOK_PATH = os.environ.get("SVCA_WORSHIP_WORKBOOK_PATH", "")
 _XML_NS = "http://schemas.openxmlformats.org/spreadsheetml/2006/main"
+_DEFAULT_PROFILE = object()
 
 
 def _supported_rows():
@@ -366,6 +375,16 @@ class WorshipWorkbookDomainTestBase(TestCase):
     @classmethod
     def setUpTestData(cls):
         cls.parsed = parse_known_worship_workbook(build_known_workbook())
+        cls.target_profile = ServiceProfile.objects.create(
+            key="bethany_0930_cm",
+            name="Bethany 09:30",
+            event_type=ServiceEvent.EVENT_SUNDAY_SERVICE,
+        )
+        cls.other_profile = ServiceProfile.objects.create(
+            key="other_profile",
+            name="Other profile",
+            event_type=ServiceEvent.EVENT_SUNDAY_SERVICE,
+        )
         cls.root = ChurchStructureUnit.objects.create(
             code="ROOT", name="Whole Church", name_en="Whole Church",
             unit_type=ChurchStructureUnit.UNIT_ROOT,
@@ -409,7 +428,8 @@ class WorshipWorkbookDomainTestBase(TestCase):
         self,
         row_index=0,
         *,
-        profile="bethany_0930_cm",
+        service_profile=_DEFAULT_PROFILE,
+        compatibility_key=None,
         event_type=ServiceEvent.EVENT_SUNDAY_SERVICE,
         local_time=time(9, 30),
         status=ServiceEvent.STATUS_PUBLISHED,
@@ -420,9 +440,20 @@ class WorshipWorkbookDomainTestBase(TestCase):
         local_value = datetime.combine(
             self.parsed.rows[row_index].local_date, local_time
         )
+        selected_profile = (
+            self.target_profile
+            if service_profile is _DEFAULT_PROFILE
+            else service_profile
+        )
+        if compatibility_key is None:
+            compatibility_key = (
+                selected_profile.key if selected_profile is not None else ""
+            )
         event = ServiceEvent.objects.create(
             title=f"Sunday {row_index}", title_en=f"Sunday {row_index}",
-            service_profile_key=profile, event_type=event_type,
+            service_profile=selected_profile,
+            service_profile_key=compatibility_key,
+            event_type=event_type,
             start_datetime=timezone.make_aware(
                 local_value, timezone.get_current_timezone()
             ),
@@ -447,14 +478,119 @@ class WorshipWorkbookDomainTestBase(TestCase):
 
 
 class WorshipWorkbookTargetMatchingTests(WorshipWorkbookDomainTestBase):
+    def test_all_52_exact_fk_targets_match(self):
+        for index in range(len(self.parsed.rows)):
+            self.event_for_row(index)
+        matches = match_exact_service_event_targets(self.parsed)
+        self.assertEqual(len(matches), 52)
+        self.assertTrue(
+            all(
+                match.state == TargetMatchState.EXACT_TARGET_MATCHED
+                for match in matches
+            )
+        )
+
+    def test_target_profile_missing_inactive_and_wrong_type_block_before_matching(self):
+        cases = (
+            (
+                "missing",
+                lambda: ServiceProfile.objects.filter(
+                    pk=self.target_profile.pk
+                ).delete(),
+                TargetServiceProfileErrorCode.MISSING,
+            ),
+            (
+                "inactive",
+                lambda: ServiceProfile.objects.filter(
+                    pk=self.target_profile.pk
+                ).update(is_active=False),
+                TargetServiceProfileErrorCode.INACTIVE,
+            ),
+            (
+                "wrong_type",
+                lambda: ServiceProfile.objects.filter(
+                    pk=self.target_profile.pk
+                ).update(event_type=ServiceEvent.EVENT_SPECIAL_MEETING),
+                TargetServiceProfileErrorCode.EVENT_TYPE_MISMATCH,
+            ),
+        )
+        for name, mutate, expected_code in cases:
+            with self.subTest(name=name), transaction.atomic():
+                mutate()
+                with self.assertRaises(TargetServiceProfileError) as raised:
+                    match_exact_service_event_targets(self.parsed)
+                self.assertEqual(raised.exception.code, expected_code)
+                transaction.set_rollback(True)
+
     def test_exact_target_and_same_date_parallel_event_is_never_selected(self):
         target = self.event_for_row()
-        parallel = self.event_for_row(profile="other_profile")
+        parallel = self.event_for_row(service_profile=self.other_profile)
         match = match_exact_service_event_targets(self.parsed)[0]
         self.assertEqual(match.state, TargetMatchState.EXACT_TARGET_MATCHED)
         self.assertEqual(match.event, target)
         self.assertNotEqual(match.event, parallel)
         self.assertEqual(match.parallel_evidence_count, 1)
+
+    def test_profile_identity_failures_and_other_profile_are_explicit(self):
+        cases = (
+            (
+                "legacy_only",
+                lambda: self.event_for_row(
+                    service_profile=None,
+                    compatibility_key="bethany_0930_cm",
+                ),
+                TargetMatchState.TARGET_EVENT_PROFILE_FK_MISSING,
+            ),
+            (
+                "profileless",
+                lambda: self.event_for_row(
+                    service_profile=None,
+                    compatibility_key="",
+                ),
+                TargetMatchState.NO_TARGET,
+            ),
+            (
+                "fk_key_mismatch",
+                lambda: ServiceEvent.objects.filter(
+                    pk=self.event_for_row().pk
+                ).update(service_profile_key="wrong"),
+                TargetMatchState.TARGET_EVENT_PROFILE_IDENTITY_DRIFT,
+            ),
+            (
+                "fk_blank_key",
+                lambda: ServiceEvent.objects.filter(
+                    pk=self.event_for_row().pk
+                ).update(service_profile_key=""),
+                TargetMatchState.TARGET_EVENT_PROFILE_IDENTITY_DRIFT,
+            ),
+            (
+                "fk_event_type_mismatch",
+                lambda: ServiceEvent.objects.filter(
+                    pk=self.event_for_row().pk
+                ).update(event_type=ServiceEvent.EVENT_SPECIAL_MEETING),
+                TargetMatchState.TARGET_EVENT_PROFILE_IDENTITY_DRIFT,
+            ),
+            (
+                "other_profile",
+                lambda: self.event_for_row(service_profile=self.other_profile),
+                TargetMatchState.TARGET_EVENT_OWNED_BY_OTHER_PROFILE,
+            ),
+        )
+        for name, create_case, expected_state in cases:
+            with self.subTest(name=name), transaction.atomic():
+                create_case()
+                match = match_exact_service_event_targets(self.parsed)[0]
+                self.assertEqual(match.state, expected_state)
+                self.assertNotEqual(
+                    match.state, TargetMatchState.EXACT_TARGET_MATCHED
+                )
+                transaction.set_rollback(True)
+
+    def test_multiple_canonical_fk_targets_remain_blocked(self):
+        self.event_for_row()
+        self.event_for_row()
+        match = match_exact_service_event_targets(self.parsed)[0]
+        self.assertEqual(match.state, TargetMatchState.MULTIPLE_EXACT_TARGETS)
 
     def test_missing_duplicate_wrong_time_lifecycle_and_audience_conflicts(self):
         self.assertEqual(
@@ -642,6 +778,16 @@ class WorshipWorkbookMappingAndGovernanceTests(WorshipWorkbookDomainTestBase):
     def test_signed_state_is_user_bound_expiring_tamper_rejected_and_bounded(self):
         self.event_for_row()
         parsed_token = sign_parsed_workbook(self.parsed, user=self.staff)
+        parsed_payload = signing.loads(parsed_token, salt=SIGNING_SALT)
+        self.assertEqual(parsed_payload["integration_key"], INTEGRATION_KEY)
+        self.assertEqual(
+            parsed_payload["target_profile"],
+            {
+                "profile_id": self.target_profile.pk,
+                "profile_key": self.target_profile.key,
+                "profile_event_type": self.target_profile.event_type,
+            },
+        )
         decoded = decode_parsed_workbook(parsed_token, user=self.staff)
         self.assertEqual(decoded.rows, self.parsed.rows)
         with self.assertRaises(SignedWorkbookStateError):
@@ -652,12 +798,112 @@ class WorshipWorkbookMappingAndGovernanceTests(WorshipWorkbookDomainTestBase):
             decode_parsed_workbook(parsed_token, user=self.staff, max_age=-1)
         preview, _ = self.first_preview_row()
         self.assertLess(preview.signed_payload_bytes, 64 * 1024)
-        self.assertEqual(
-            decode_signed_worship_import_preview(
-                preview.signed_payload, user=self.staff
-            )["contract_revision"],
-            CONTRACT_REVISION,
+        normalized = decode_signed_worship_import_preview(
+            preview.signed_payload, user=self.staff
         )
+        self.assertEqual(
+            normalized["contract_revision"],
+            NORMALIZED_PREVIEW_CONTRACT_REVISION,
+        )
+        self.assertEqual(normalized["integration_key"], INTEGRATION_KEY)
+        self.assertEqual(normalized["target_profile"], parsed_payload["target_profile"])
+        matched_row = normalized["rows"][0]
+        self.assertEqual(matched_row["service_profile_id"], self.target_profile.pk)
+        self.assertEqual(matched_row["service_profile_key"], self.target_profile.key)
+        self.assertEqual(
+            matched_row["service_profile_event_type"],
+            self.target_profile.event_type,
+        )
+        self.assertEqual(matched_row["profile_identity_state"], "exact")
+
+    def test_v1_parsed_and_normalized_tokens_are_rejected(self):
+        self.event_for_row()
+        parsed_token = sign_parsed_workbook(self.parsed, user=self.staff)
+        parsed_payload = signing.loads(parsed_token, salt=SIGNING_SALT)
+        parsed_payload["contract_revision"] = "SVCA_BETHANY_0930_2026_V1"
+        parsed_payload["signing_version"] = 1
+        v1_parsed = signing.dumps(
+            parsed_payload,
+            compress=True,
+            salt="ministry.worship-xlsx-preview.v1",
+        )
+        with self.assertRaises(SignedWorkbookStateError):
+            decode_parsed_workbook(v1_parsed, user=self.staff)
+
+        preview, _ = self.first_preview_row()
+        normalized_payload = signing.loads(
+            preview.signed_payload,
+            salt=NORMALIZED_PREVIEW_SIGNING_SALT,
+        )
+        normalized_payload["contract_revision"] = (
+            "SVCA_BETHANY_0930_2026_V1"
+        )
+        normalized_payload["signing_version"] = 1
+        v1_normalized = signing.dumps(
+            normalized_payload,
+            compress=True,
+            salt="ministry.worship-xlsx-preview.v1",
+        )
+        with self.assertRaises(SignedWorkbookStateError):
+            decode_signed_worship_import_preview(v1_normalized, user=self.staff)
+
+    def test_v2_signed_shapes_reject_missing_wrong_or_extra_identity(self):
+        self.event_for_row()
+        parsed_token = sign_parsed_workbook(self.parsed, user=self.staff)
+        parsed_base = signing.loads(parsed_token, salt=SIGNING_SALT)
+        parsed_cases = []
+        for mutation in (
+            lambda payload: payload.pop("target_profile"),
+            lambda payload: payload.update(integration_key="other_adapter"),
+            lambda payload: payload["target_profile"].update(profile_id=999999),
+            lambda payload: payload["target_profile"].update(profile_key="wrong"),
+            lambda payload: payload["target_profile"].update(
+                profile_event_type=ServiceEvent.EVENT_SPECIAL_MEETING
+            ),
+            lambda payload: payload.update(unexpected=True),
+        ):
+            payload = copy.deepcopy(parsed_base)
+            mutation(payload)
+            parsed_cases.append(
+                signing.dumps(payload, compress=True, salt=SIGNING_SALT)
+            )
+        for token in parsed_cases:
+            with self.subTest(token=token[:12]), self.assertRaises(
+                SignedWorkbookStateError
+            ):
+                decode_parsed_workbook(token, user=self.staff)
+
+        preview, _ = self.first_preview_row()
+        normalized_base = signing.loads(
+            preview.signed_payload,
+            salt=NORMALIZED_PREVIEW_SIGNING_SALT,
+        )
+        normalized_cases = []
+        for mutation in (
+            lambda payload: payload.pop("target_profile"),
+            lambda payload: payload.update(integration_key="other_adapter"),
+            lambda payload: payload["target_profile"].update(profile_id=999999),
+            lambda payload: payload["target_profile"].update(profile_key="wrong"),
+            lambda payload: payload["target_profile"].update(
+                profile_event_type=ServiceEvent.EVENT_SPECIAL_MEETING
+            ),
+            lambda payload: payload["rows"][0].update(service_profile_id=999999),
+            lambda payload: payload.update(unexpected=True),
+        ):
+            payload = copy.deepcopy(normalized_base)
+            mutation(payload)
+            normalized_cases.append(
+                signing.dumps(
+                    payload,
+                    compress=True,
+                    salt=NORMALIZED_PREVIEW_SIGNING_SALT,
+                )
+            )
+        for token in normalized_cases:
+            with self.subTest(token=token[:12]), self.assertRaises(
+                SignedWorkbookStateError
+            ):
+                decode_signed_worship_import_preview(token, user=self.staff)
 
     def test_signed_parsed_state_preserves_counts_and_date_kind_semantics(self):
         tokens = [*("A" for _ in range(12)), *("C1" for _ in range(12))]
@@ -725,6 +971,7 @@ class WorshipWorkbookViewTests(WorshipWorkbookDomainTestBase):
             local_value = datetime.combine(row.local_date, time(9, 30))
             event = ServiceEvent.objects.create(
                 title=f"Sunday {index}", title_en=f"Sunday {index}",
+                service_profile=cls.target_profile,
                 service_profile_key="bethany_0930_cm",
                 event_type=ServiceEvent.EVENT_SUNDAY_SERVICE,
                 start_datetime=timezone.make_aware(

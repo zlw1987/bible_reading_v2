@@ -24,6 +24,7 @@ from django.utils.dateparse import parse_datetime
 from events.models import ServiceEvent
 from events.scheduling_revision import claim_scheduling_revisions
 from events.service_profile_readiness import service_event_audience_readiness
+from events.service_profile_runtime import inspect_service_profile_identity
 
 from ..models import MinistryTeam
 from .worship_governance import (
@@ -32,6 +33,8 @@ from .worship_governance import (
 )
 from .worship_xlsx_preview import (
     CONTRACT_REVISION as PARSER_CONTRACT_REVISION,
+    INTEGRATION_KEY,
+    NORMALIZED_PREVIEW_CONTRACT_REVISION,
     SUPPORTED_EVENT_TYPE,
     SUPPORTED_LOCAL_TIME,
     SUPPORTED_PROFILE_KEY,
@@ -39,14 +42,17 @@ from .worship_xlsx_preview import (
     SUPPORTED_SHEET,
     TOKEN_ORDER,
     PreviewClassification,
+    TargetServiceProfileError,
+    TargetServiceProfileIdentity,
     TargetMatchState,
+    resolve_target_service_profile,
 )
 
 
 CONFIRMATION_PROPOSAL_TYPE = "annual_worship_workbook_confirmation"
-CONFIRMATION_CONTRACT_REVISION = "SVCA_BETHANY_0930_2026_CONFIRM_V1"
-CONFIRMATION_SIGNING_VERSION = 1
-CONFIRMATION_SIGNING_SALT = "ministry.worship-xlsx-confirmation.v1"
+CONFIRMATION_CONTRACT_REVISION = "SVCA_BETHANY_0930_2026_CONFIRM_V2"
+CONFIRMATION_SIGNING_VERSION = 2
+CONFIRMATION_SIGNING_SALT = "ministry.worship-xlsx-confirmation.v2"
 CONFIRMATION_MAX_AGE_SECONDS = 1800
 
 _SHA256_RE = re.compile(r"^[0-9A-Fa-f]{64}$")
@@ -158,6 +164,11 @@ def _strict_payload_shape(payload):
         "confirmation_contract_revision",
         "confirmation_signing_version",
         "parser_contract_revision",
+        "preview_contract_revision",
+        "integration_key",
+        "profile_id",
+        "profile_key",
+        "profile_event_type",
         "generated_at",
         "user_id",
         "operation_id",
@@ -178,6 +189,14 @@ def _strict_payload_shape(payload):
         or payload["confirmation_signing_version"]
         != CONFIRMATION_SIGNING_VERSION
         or payload["parser_contract_revision"] != PARSER_CONTRACT_REVISION
+        or payload["preview_contract_revision"]
+        != NORMALIZED_PREVIEW_CONTRACT_REVISION
+        or payload["integration_key"] != INTEGRATION_KEY
+        or not _is_positive_int(payload["profile_id"])
+        or not isinstance(payload["profile_key"], str)
+        or payload["profile_key"] != SUPPORTED_PROFILE_KEY
+        or not isinstance(payload["profile_event_type"], str)
+        or payload["profile_event_type"] != SUPPORTED_EVENT_TYPE
         or payload["supported_sheet"] != SUPPORTED_SHEET
         or not _is_positive_int(payload["user_id"])
         or not isinstance(payload["generated_at"], str)
@@ -209,6 +228,7 @@ def _strict_payload_shape(payload):
         "local_date",
         "token",
         "event_id",
+        "expected_service_profile_id",
         "expected_scheduling_revision",
         "expected_before_team_id",
         "proposed_team_id",
@@ -251,6 +271,7 @@ def _strict_payload_shape(payload):
             or local_date.weekday() != 6
             or not isinstance(token, str)
             or token not in TOKEN_ORDER
+            or row["expected_service_profile_id"] != payload["profile_id"]
             or not _is_nonnegative_int(row["expected_scheduling_revision"])
             or not _is_optional_positive_int(row["expected_before_team_id"])
             or not _is_positive_int(row["proposed_team_id"])
@@ -297,6 +318,24 @@ def build_worship_workbook_confirmation_proposal(*, preview, user):
         raise WorshipWorkbookConfirmationProposalError(
             "The reviewed workbook preview is not confirmable."
         )
+    target_profile = preview.target_profile
+    expected_target_profile = {
+        "profile_id": target_profile.profile_id,
+        "profile_key": target_profile.profile_key,
+        "profile_event_type": target_profile.profile_event_type,
+    }
+    if (
+        preview.normalized_payload.get("contract_revision")
+        != NORMALIZED_PREVIEW_CONTRACT_REVISION
+        or preview.normalized_payload.get("parser_contract_revision")
+        != PARSER_CONTRACT_REVISION
+        or preview.normalized_payload.get("integration_key") != INTEGRATION_KEY
+        or preview.normalized_payload.get("target_profile")
+        != expected_target_profile
+    ):
+        raise WorshipWorkbookConfirmationProposalError(
+            "The reviewed workbook preview Service Profile is invalid."
+        )
 
     normalized_rows = []
     for row in preview.rows:
@@ -325,6 +364,7 @@ def build_worship_workbook_confirmation_proposal(*, preview, user):
                 "local_date": row.source.local_date.isoformat(),
                 "token": row.source.token,
                 "event_id": row.event.pk,
+                "expected_service_profile_id": row.event.service_profile_id,
                 "expected_scheduling_revision": revision,
                 "expected_before_team_id": row.event.rotation_anchor_team_id,
                 "proposed_team_id": row.proposed_team.pk,
@@ -337,6 +377,11 @@ def build_worship_workbook_confirmation_proposal(*, preview, user):
         "confirmation_contract_revision": CONFIRMATION_CONTRACT_REVISION,
         "confirmation_signing_version": CONFIRMATION_SIGNING_VERSION,
         "parser_contract_revision": PARSER_CONTRACT_REVISION,
+        "preview_contract_revision": NORMALIZED_PREVIEW_CONTRACT_REVISION,
+        "integration_key": INTEGRATION_KEY,
+        "profile_id": target_profile.profile_id,
+        "profile_key": target_profile.profile_key,
+        "profile_event_type": target_profile.profile_event_type,
         "generated_at": timezone.now().isoformat(),
         "user_id": user.pk,
         "operation_id": operation_id,
@@ -389,6 +434,28 @@ def decode_signed_worship_workbook_confirmation(
         raise WorshipWorkbookConfirmationProposalError(
             "The annual-workbook proposal belongs to another user."
         )
+    try:
+        current_profile = resolve_target_service_profile()
+    except TargetServiceProfileError as exc:
+        raise WorshipWorkbookConfirmationProposalError(
+            "The annual-workbook Service Profile is no longer current. "
+            "Generate a new workbook preview."
+        ) from exc
+    current_identity = TargetServiceProfileIdentity(
+        profile_id=current_profile.pk,
+        profile_key=current_profile.key,
+        profile_event_type=current_profile.event_type,
+    )
+    signed_identity = TargetServiceProfileIdentity(
+        profile_id=payload["profile_id"],
+        profile_key=payload["profile_key"],
+        profile_event_type=payload["profile_event_type"],
+    )
+    if signed_identity != current_identity:
+        raise WorshipWorkbookConfirmationProposalError(
+            "The annual-workbook Service Profile changed. "
+            "Generate a new workbook preview."
+        )
     return payload
 
 
@@ -397,6 +464,10 @@ def _annual_import_change_message(*, payload, row):
         "source=annual_worship_workbook_import;"
         f"operation_id={payload['operation_id']};"
         f"workbook_sha256={payload['workbook_sha256']};"
+        f"integration_key={payload['integration_key']};"
+        f"profile_id={payload['profile_id']};"
+        f"profile_key={payload['profile_key']};"
+        f"profile_event_type={payload['profile_event_type']};"
         f"parser_contract_revision={payload['parser_contract_revision']};"
         "confirmation_contract_revision="
         f"{payload['confirmation_contract_revision']};"
@@ -430,10 +501,31 @@ def confirm_worship_workbook(*, user, payload):
 
         claim_results = claim_scheduling_revisions(expected_revisions)
 
+        try:
+            current_profile = resolve_target_service_profile()
+        except TargetServiceProfileError as exc:
+            raise WorshipWorkbookConfirmationError(
+                "The annual-workbook Service Profile changed after review."
+            ) from exc
+        current_profile_identity = TargetServiceProfileIdentity(
+            profile_id=current_profile.pk,
+            profile_key=current_profile.key,
+            profile_event_type=current_profile.event_type,
+        )
+        signed_profile_identity = TargetServiceProfileIdentity(
+            profile_id=payload["profile_id"],
+            profile_key=payload["profile_key"],
+            profile_event_type=payload["profile_event_type"],
+        )
+        if current_profile_identity != signed_profile_identity:
+            raise WorshipWorkbookConfirmationError(
+                "The annual-workbook Service Profile changed after review."
+            )
+
         reloaded_events = {
             event.pk: event
             for event in ServiceEvent.objects.filter(pk__in=event_ids)
-            .select_related("rotation_anchor_team")
+            .select_related("service_profile", "rotation_anchor_team")
             .prefetch_related("audience_scope_links__unit")
         }
         if set(reloaded_events) != set(event_ids):
@@ -455,12 +547,14 @@ def confirm_worship_workbook(*, user, payload):
         local_tz = timezone.get_current_timezone()
         for row in payload["rows"]:
             event = reloaded_events[row["event_id"]]
+            profile_identity = inspect_service_profile_identity(event)
             expected_revision = row["expected_scheduling_revision"]
             local_start = timezone.localtime(event.start_datetime, local_tz)
             if (
                 event.scheduling_revision != expected_revision + 1
-                or event.service_profile_key != SUPPORTED_PROFILE_KEY
-                or event.event_type != SUPPORTED_EVENT_TYPE
+                or not profile_identity.is_exact
+                or profile_identity.profile_id != current_profile.pk
+                or row["expected_service_profile_id"] != current_profile.pk
                 or local_start.date() != date.fromisoformat(row["local_date"])
                 or local_start.time().replace(tzinfo=None) != SUPPORTED_LOCAL_TIME
                 or event.status

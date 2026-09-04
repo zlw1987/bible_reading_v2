@@ -773,6 +773,47 @@ def _workbook_error_text(language, error):
     return f"{base} {error.detail}" if language == "en" else base
 
 
+def _target_service_profile_error_text(language, error):
+    from ministry.services.worship_xlsx_preview import (
+        TargetServiceProfileErrorCode,
+    )
+
+    labels = {
+        "en": {
+            TargetServiceProfileErrorCode.MISSING: (
+                "The configured Service Profile is missing. "
+                "Ask an administrator to review workbook setup, then upload again."
+            ),
+            TargetServiceProfileErrorCode.INACTIVE: (
+                "The configured Service Profile is inactive. "
+                "Ask an administrator to review workbook setup, then upload again."
+            ),
+            TargetServiceProfileErrorCode.EVENT_TYPE_MISMATCH: (
+                "The configured Service Profile has the wrong event type. "
+                "Ask an administrator to review workbook setup, then upload again."
+            ),
+            TargetServiceProfileErrorCode.IDENTITY_CHANGED: (
+                "The configured Service Profile changed. Upload the workbook again."
+            ),
+        },
+        "zh": {
+            TargetServiceProfileErrorCode.MISSING: (
+                "配置的聚会类型资料不存在。请管理员检查工作簿设置后重新上传。"
+            ),
+            TargetServiceProfileErrorCode.INACTIVE: (
+                "配置的聚会类型资料已停用。请管理员检查工作簿设置后重新上传。"
+            ),
+            TargetServiceProfileErrorCode.EVENT_TYPE_MISMATCH: (
+                "配置的聚会类型资料类别不符。请管理员检查工作簿设置后重新上传。"
+            ),
+            TargetServiceProfileErrorCode.IDENTITY_CHANGED: (
+                "配置的聚会类型资料已有变更。请重新上传工作簿。"
+            ),
+        },
+    }
+    return labels.get(language, labels["en"])[error.code]
+
+
 def _workbook_row_labels(language, row):
     from ministry.services.worship_xlsx_preview import (
         PreviewBlocker,
@@ -795,6 +836,15 @@ def _workbook_row_labels(language, row):
         "en": {
             PreviewBlocker.TARGET_MISSING: "No exact target event.",
             PreviewBlocker.TARGET_AMBIGUOUS: "Multiple exact target events.",
+            PreviewBlocker.TARGET_PROFILE_FK_MISSING: (
+                "A target-looking event is missing its canonical Service Profile."
+            ),
+            PreviewBlocker.TARGET_PROFILE_IDENTITY_DRIFT: (
+                "A target event's Service Profile identity is inconsistent."
+            ),
+            PreviewBlocker.TARGET_OWNED_BY_OTHER_PROFILE: (
+                "The exact-time event belongs to another Service Profile."
+            ),
             PreviewBlocker.TARGET_LIFECYCLE: "Exact target is draft or cancelled.",
             PreviewBlocker.TARGET_AUDIENCE: "Exact target audience is not ready.",
             PreviewBlocker.MAPPING_UNRESOLVED: (
@@ -813,6 +863,15 @@ def _workbook_row_labels(language, row):
         "zh": {
             PreviewBlocker.TARGET_MISSING: "没有完全匹配的目标聚会。",
             PreviewBlocker.TARGET_AMBIGUOUS: "存在多个完全匹配的目标聚会。",
+            PreviewBlocker.TARGET_PROFILE_FK_MISSING: (
+                "疑似目标聚会缺少正式的聚会类型资料。"
+            ),
+            PreviewBlocker.TARGET_PROFILE_IDENTITY_DRIFT: (
+                "目标聚会的聚会类型资料不一致。"
+            ),
+            PreviewBlocker.TARGET_OWNED_BY_OTHER_PROFILE: (
+                "该时间的聚会属于其他聚会类型资料。"
+            ),
             PreviewBlocker.TARGET_LIFECYCLE: "目标聚会是草稿或已取消。",
             PreviewBlocker.TARGET_AUDIENCE: "目标聚会的适用范围尚未就绪。",
             PreviewBlocker.MAPPING_UNRESOLVED: (
@@ -917,6 +976,7 @@ def worship_workbook_preview(request):
     from ministry.services.worship_xlsx_preview import (
         MappingValidationError,
         SignedWorkbookStateError,
+        TargetServiceProfileError,
         WorkbookContractError,
         build_worship_import_preview,
         decode_parsed_workbook,
@@ -952,6 +1012,8 @@ def worship_workbook_preview(request):
             parsed = parse_known_worship_workbook(
                 uploaded.read(), filename=uploaded.name
             )
+            signed_workbook = sign_parsed_workbook(parsed, user=request.user)
+            candidate_teams = mapping_candidate_teams(parsed)
         except WorkbookContractError as exc:
             upload_form.add_error("workbook", _workbook_error_text(language, exc))
             return render(
@@ -961,8 +1023,18 @@ def worship_workbook_preview(request):
                     language=language, upload_form=upload_form
                 ),
             )
-        signed_workbook = sign_parsed_workbook(parsed, user=request.user)
-        candidate_teams = mapping_candidate_teams(parsed)
+        except TargetServiceProfileError as exc:
+            upload_form.add_error(
+                None,
+                _target_service_profile_error_text(language, exc),
+            )
+            return render(
+                request,
+                "events/worship_workbook_preview.html",
+                _workbook_preview_context(
+                    language=language, upload_form=upload_form
+                ),
+            )
         mapping_form = WorshipWorkbookMappingForm(
             language=language,
             token_counts=parsed.token_counts,
@@ -997,7 +1069,19 @@ def worship_workbook_preview(request):
             _workbook_preview_context(language=language, upload_form=upload_form),
         )
 
-    candidate_teams = mapping_candidate_teams(parsed)
+    try:
+        candidate_teams = mapping_candidate_teams(parsed)
+    except TargetServiceProfileError as exc:
+        upload_form = WorshipWorkbookUploadForm(language=language)
+        upload_form.add_error(
+            None,
+            _target_service_profile_error_text(language, exc),
+        )
+        return render(
+            request,
+            "events/worship_workbook_preview.html",
+            _workbook_preview_context(language=language, upload_form=upload_form),
+        )
     mapping_form = WorshipWorkbookMappingForm(
         request.POST,
         language=language,
@@ -1027,6 +1111,11 @@ def worship_workbook_preview(request):
                 )
         except MappingValidationError as exc:
             mapping_form.add_error(None, str(exc))
+        except TargetServiceProfileError as exc:
+            mapping_form.add_error(
+                None,
+                _target_service_profile_error_text(language, exc),
+            )
     return render(
         request,
         "events/worship_workbook_preview.html",

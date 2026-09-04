@@ -56,13 +56,18 @@ events with zero identity drift; every target scheduling revision advanced
 `1 -> 2` exactly once, and a repeat dry-run advanced none to `3`. This is
 deployment-specific evidence only. The apply reported
 `runtime_consumer_switched: false`. 5B implements integration gating, 5C the
-canonical FK-authoritative seam, and 5D the readiness/reset/Admin switch.
+canonical FK-authoritative seam, 5D the readiness/reset/Admin switch, and 5E
+the Worship XLSX consumer/signing switch.
 Readiness and the retained bounded reset now use resolved ServiceProfile/FK
 identity, while ServiceEvent Admin selects the FK and renders the compatibility
-key read-only through one normal save/revision. Workbook matching/signing stays
-legacy-authoritative pending 5E, so overall consumer switching, defaults,
-materialization, MO-S.REQUIRED runtime, external identity mapping, and
-legacy-string retirement remain incomplete.
+key read-only through one normal save/revision. Workbook matching and post-CAS
+confirmation are now FK/Profile-authoritative; strict V2 parsed, normalized,
+and confirmation artifacts bind the integration plus exact profile PK/key/type,
+and reject V1. All known profile-aware runtime consumers are switched, but 5F
+formal closure proof remains pending and `runtime_consumer_switched` stays
+false. Defaults, materialization, MO-S.REQUIRED runtime, external identity
+mapping, and legacy-string retirement remain incomplete. 5E added no schema,
+migration, backfill, production command, or production data change.
 
 `MO-S.6D-PROFILE.1A` implements one optional validated
 `ServiceEvent.service_profile_key` as stable technical service-profile identity.

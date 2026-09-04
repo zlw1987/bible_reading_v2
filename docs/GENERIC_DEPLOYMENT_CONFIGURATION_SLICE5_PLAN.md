@@ -6,13 +6,17 @@ explicit integration registry, fail-closed gates, and lazy import isolation
 IMPLEMENTED / LOCAL VERIFIED; and `GENERIC-DEPLOYMENT-CONFIG.5C` canonical
 ServiceProfile runtime identity seam IMPLEMENTED / LOCAL VERIFIED; and
 `GENERIC-DEPLOYMENT-CONFIG.5D` readiness/reset/Admin consumer switch
-IMPLEMENTED / LOCAL VERIFIED. Workbook authority remains unswitched and the
-overall ServiceProfile consumer switch remains incomplete.**
+IMPLEMENTED / LOCAL VERIFIED; and `GENERIC-DEPLOYMENT-CONFIG.5E` Worship XLSX
+FK matching, current-truth confirmation, and V2 signed contracts IMPLEMENTED /
+LOCAL VERIFIED. All known profile-aware runtime consumers are switched, but
+formal closure proof remains pending 5F and the global status stays
+conservative.**
 
 Task IDs: `GENERIC-DEPLOYMENT-CONFIG.5A`,
 `GENERIC-DEPLOYMENT-CONFIG.5B`,
 `GENERIC-DEPLOYMENT-CONFIG.5C`,
-`GENERIC-DEPLOYMENT-CONFIG.5D`
+`GENERIC-DEPLOYMENT-CONFIG.5D`,
+`GENERIC-DEPLOYMENT-CONFIG.5E`
 
 Audit baseline: `master` at `C:\dev\bible_reading_v2`, synchronized with
 `origin/master` at `0` ahead / `0` behind and clean before this document was
@@ -42,7 +46,19 @@ drift states are blocker or review evidence only. The retained bounded Bethany
 TEST reset uses a V2 state-bound approval and exact FK/key replacement rows;
 no reset was run. ServiceEvent Admin now selects the FK, renders the
 compatibility key read-only, and prepares pair writes before one normal save.
-Workbook preview/confirmation stays legacy-authoritative pending 5E, so
+At the 5D milestone, workbook preview/confirmation stayed legacy-authoritative
+pending 5E, so `runtime_consumer_switched` remained false globally.
+
+5E was implemented on the synchronized 5D baseline with no model, schema,
+migration, backfill, normal-local data, or production operation. The adapter
+resolves `bethany_0930_cm` to one active Sunday-service profile, matches by FK,
+and requires the 5C seam's exact state. Parsed, normalized-preview, and
+confirmation contracts are strict V2 artifacts binding
+`svca_bethany_2026_worship_xlsx` and exact profile PK/key/type. Confirmation
+re-resolves and revalidates the profile after CAS and before anchor writes.
+Every V1 artifact fails closed. `service_profile_key` remains drift evidence
+and rollback compatibility. All known profile-aware runtime consumers are now
+switched, but 5F repository-wide closure/audit proof remains pending, so
 `runtime_consumer_switched` remains false globally.
 
 This document turns the canonical architecture in
@@ -93,12 +109,11 @@ may hard-code that PK or infer behavior from those deployment facts.
    approved dual-identity state, its strict resolver uses only the FK-linked
    profile, and its mutation helpers preserve the exact identity pair. The
    separate `events.service_profile_identity` module remains the read-only 4A
-   inventory. 5D adopts the seam for readiness, bounded reset, and Admin; the
-   two workbook services still interpret legacy identity independently pending
-   5E.
-2. Current profile-aware legacy-string authority remains only in workbook
-   target matching and workbook confirmation current-truth validation. The
-   bounded reset/setup path now binds and creates exact FK/key identity.
+   inventory. 5D adopts the seam for readiness, bounded reset, and Admin; 5E
+   adopts it for both workbook services.
+2. All currently known profile-aware runtime consumers use FK/Profile
+   authority. `service_profile_key` remains compatibility/drift evidence;
+   5F still must perform the formal repository-wide closure proof.
 3. `ServiceEvent.clean()` enforces FK/key equality and profile/event-type
    equality when the FK is non-null. `ServiceEvent.save()` always calls
    `full_clean()`. `ServiceProfile.save()` also calls `full_clean()` and makes a
@@ -130,10 +145,9 @@ may hard-code that PK or infer behavior from those deployment facts.
     eager importer dependency from `ministry.views`; its mutable-name identity
     remains unchanged and unresolved.
 11. The workbook's parsed, normalized-preview, and confirmation artifacts are
-    signed and versioned, but none explicitly binds canonical ServiceProfile
-    FK identity. The shared Worship event fingerprint does not include either
-    profile field. Confirmation rechecks the raw legacy string outside its
-    signed row payload.
+    strict V2 signed contracts binding integration plus exact ServiceProfile
+    identity. The adapter-specific normalized rows bind canonical FK state;
+    the generic shared Worship event fingerprint remains unchanged.
 12. The bounded reset approval is a hashed state contract, not a Django-signed
     token. 5D V2 binds the resolved profile plus each event's FK and
     compatibility key; V1 tokens fail closed.
@@ -194,7 +208,8 @@ rows are not added to the literal occurrence totals.
 
 This table preserves the 5A pre-switch inventory and recommended routing.
 Implemented 5D results in section 11.3 supersede the readiness/reset/Admin
-“current” cells; workbook rows remain current until 5E.
+“current” cells; implemented 5E results in section 11.4 supersede the workbook
+rows. The inventory remains historical input for 5F rather than closure proof.
 
 | Class | File / symbol | Current role | Current profile authority | Access / audience | Genericity | Signed or fingerprint impact | Recommended future action | Slice | Risk |
 |---|---|---|---|---|---|---|---|---|---|
@@ -617,7 +632,7 @@ abort before deletion if exact profile resolution fails.
 Not included: running reset/apply, recreating the 52 events, workbook switch,
 defaults/materialization, profile retirement.
 
-### 11.4 `GENERIC-DEPLOYMENT-CONFIG.5E` — Workbook FK matching, confirmation, and V2 signing
+### 11.4 `GENERIC-DEPLOYMENT-CONFIG.5E` — Workbook FK matching, confirmation, and V2 signing — IMPLEMENTED / LOCAL VERIFIED
 
 Prerequisites: 5B registry/isolation deployed/configured; 5C strict resolver;
 zero-drift production audit.
@@ -635,6 +650,30 @@ Scope:
 - preserve strict XLSX parsing, 52-row scope, A/C token mapping, governance,
   audience, CAS, audit, no-notification, and all-or-nothing semantics.
 
+Implemented result: `worship_xlsx_preview.py` resolves the configured target
+profile without legacy fallback before matching. Canonical targets require the
+resolved FK plus the 5C `EXACT` identity state; missing/inactive/wrong-type
+target profiles are workbook-level blockers, while legacy-only, FK/key/type
+drift, and other-profile ownership have explicit per-date blocker evidence.
+The parsed contract is `SVCA_BETHANY_0930_2026_V2`, signing version `2`, salt
+`ministry.worship-xlsx-preview.v2`. The normalized contract is
+`SVCA_BETHANY_0930_2026_PREVIEW_V2`, signing version `2`, salt
+`ministry.worship-xlsx-normalized-preview.v2`. Both bind the integration key,
+target profile PK/key/type, workbook facts, user, and their existing state;
+normalized canonical rows also bind the event FK and exact identity state.
+
+Confirmation uses `SVCA_BETHANY_0930_2026_CONFIRM_V2`, signing version `2`,
+and `ministry.worship-xlsx-confirmation.v2`. It binds integration, exact profile
+PK/key/type, parser/preview contract revisions, workbook hash, target events,
+expected profile FK/revisions, before/proposed teams, mapping, user, and
+operation. After claiming all expected scheduling revisions it resolves the
+configured profile once under current database truth, compares it with the
+signed identity, reloads each event with its profile, and requires the 5C seam
+to report exact ownership before any anchor save. Any discrepancy rolls back
+all claims, anchors, and audit rows. Changed anchors still save with the
+existing post-claim skip behavior; no-op behavior and all non-profile workbook
+semantics are unchanged. V1 salts/shapes are not accepted.
+
 Likely files: the named workbook adapter `preview.py`, `confirmation.py`, and
 forms/views wrappers; `events/test_worship_xlsx_preview.py` and
 `events/test_worship_xlsx_confirmation.py`; adapter templates only where
@@ -642,9 +681,10 @@ version/error context changes. Avoid changing the generic Worship Rotation
 Planner fingerprint contract unless new repository evidence proves coupling.
 
 Impact: no schema/migration/data backfill. Profile authority and signed shapes
-change. Production must have the integration enabled and exact current mapping.
-Previously issued V1 proposals fail closed and operators re-upload. Browser QA
-is required for the actually changed card/routes/preview/confirmation result.
+changed. Production must have the integration enabled and exact current mapping.
+Previously issued V1 proposals fail closed and operators must re-upload. Local
+automated route/render tests passed; no rendered browser or production QA is
+claimed by 5E.
 
 Rollback/fail-closed: legacy field remains exact for rollback; a V2 code
 rollback rejects V2 tokens under strict V1 decoding. Missing/inactive/drifted
@@ -710,32 +750,40 @@ surfaces and must not be claimed unless performed.
 
 ## 13. Deployment and cutover considerations
 
-1. Before 5E, rerun `audit_service_profile_identity` against the exact target
-   database and require zero drift and all required rows mapped.
-2. Configure the approved `CMS_ENABLED_INTEGRATIONS` workbook key before or in
-   the same release as 5B. Because absence means disabled, a missed setting will
-   intentionally hide/fail-close the current workbook workflow.
-3. Do not enable the Lighting key until retention and team identity are
+1. Before production 5E deployment, rerun `audit_service_profile_identity`
+   against the exact target database and require zero drift and all required
+   rows mapped.
+2. Run Readiness V2 for `bethany_0930_cm` and require the exact 52-row FK-owned
+   annual scope; also require the resolved profile to remain active with event
+   type `sunday_service`.
+3. Configure `CMS_ENABLED_INTEGRATIONS` to explicitly include
+   `svca_bethany_2026_worship_xlsx`. Because absence means disabled, a missed
+   setting intentionally hides/fail-closes the workbook workflow.
+4. Do not enable the Lighting key until retention and team identity are
    explicitly decided.
-4. Keep GoDaddy Python 3.11.15 and `openpyxl` 3.1.5 deployable. Import smoke is
+5. Keep GoDaddy Python 3.11.15 and `openpyxl` 3.1.5 deployable. Import smoke is
    required for the enabled adapter, not evidence of workbook correctness by
    itself.
-5. Invalidate V1 reset/workbook artifacts by strict version changes. Operators
-   rebuild fresh previews; do not add old-shape compatibility parsing.
-6. Never configure or sign a database PK as deployment configuration. The
+6. Treat every unsubmitted V1 parsed preview, normalized preview, and
+   confirmation proposal as invalid. Operators must re-upload the workbook;
+   do not preserve in-flight V1 state or add compatibility parsing.
+7. Never configure or sign a database PK as deployment configuration. The
    adapter resolves the stable key to the current local PK and binds both in
    the short-lived proposal.
-7. The consumer switch requires no automatic row rewrite because the reviewed
+8. The consumer switch requires no automatic row rewrite because the reviewed
    target rows are already mapped. Any future unmapped deployment must complete
    the 4A audit/review/apply first.
-8. Post-switch production evidence must prove the same 52 reviewed SVCA rows
+9. Post-switch production evidence must prove the same 52 reviewed SVCA rows
    resolve through FK/Profile, with exact dual consistency and no unrelated
    change. This is read-only audit evidence, not generic cardinality.
-9. Preserve the legacy field for rollback and drift evidence until a later
-   destructive contract-retirement approval.
-10. No production reset, mapper apply, migration, or other data command belongs
-    to 5A. Future implementation tasks must separately report code deployment,
-    settings configuration, read-only audits, and any data mutation.
+10. Preserve the legacy field for rollback and drift evidence until a later
+    destructive contract-retirement approval.
+11. A rollback to pre-5E code can still read the populated compatibility key,
+    but strict V1 code rejects V2 artifacts. This fail-closed rollback is
+    intentional; do not add cross-version decoding.
+12. 5E ran no production reset, mapper apply, migration, or other data command.
+    Deployment work must separately report code release, settings, read-only
+    audits, and any data mutation.
 
 ## 14. Explicit non-goals
 
@@ -758,10 +806,10 @@ surfaces and must not be claimed unless performed.
 
 ## 15. Blockers and open decisions
 
-No architecture contradiction blocked 5D. Current repository truth matches the
+No architecture contradiction blocked 5E. Current repository truth matches the
 frozen architecture: 3A is additive, 4A supplies exact dual mapping/audit, 5C
-supplies the shared seam, and 5D switches only the approved non-workbook
-consumers.
+supplies the shared seam, 5D switches the approved non-workbook consumers, and
+5E switches the final currently known Class-A workbook consumer.
 
 Two bounded owner decisions remain, neither blocking registry implementation:
 
@@ -770,10 +818,10 @@ Two bounded owner decisions remain, neither blocking registry implementation:
 2. **Bethany TEST reset retention:** 5D retains it as FK/dual-safe V2 tooling.
    Retirement still requires a separately approved cleanup.
 
-5B, 5C, and 5D are complete and locally verified. The 5E workbook/signing
-switch remains pending and was not started; overall
-`runtime_consumer_switched` therefore remains false. Before deploying 5B where the current SVCA
-workbook workflow must remain available, configure
-`CMS_ENABLED_INTEGRATIONS = ["svca_bethany_2026_worship_xlsx"]` before or
-atomically with the code release. Do not enable the Lighting key without the
-separate retention/identity decision.
+5B, 5C, 5D, and 5E are complete and locally verified. All known profile-aware
+runtime consumers have been switched, but 5F repository-wide closure/audit
+proof remains pending; `runtime_consumer_switched` therefore remains false.
+Before production deployment, satisfy the section 13 prerequisites, including
+explicitly enabling `svca_bethany_2026_worship_xlsx`, zero-drift identity and
+52-row Readiness V2 evidence, and operator re-upload after V2 deployment. Do
+not enable the Lighting key without the separate retention/identity decision.

@@ -20,8 +20,12 @@ from django.core import signing
 from django.utils import timezone
 from openpyxl import load_workbook
 
-from events.models import ServiceEvent
+from events.models import ServiceEvent, ServiceProfile
 from events.service_profile_readiness import service_event_audience_readiness
+from events.service_profile_runtime import (
+    ServiceProfileIdentityState,
+    inspect_service_profile_identity,
+)
 
 from ..models import MinistryTeam
 from .worship_governance import (
@@ -35,7 +39,8 @@ from .worship_rotation_planner import (
 )
 
 
-CONTRACT_REVISION = "SVCA_BETHANY_0930_2026_V1"
+INTEGRATION_KEY = "svca_bethany_2026_worship_xlsx"
+CONTRACT_REVISION = "SVCA_BETHANY_0930_2026_V2"
 EXPECTED_REAL_WORKBOOK_SHA256 = (
     "186735DC723979AA49D209C92D4155BE533D6AFE9253CDB5D8B809A77C8B07AA"
 )
@@ -70,11 +75,19 @@ MAX_UPLOAD_BYTES = 5 * 1024 * 1024
 MAX_ZIP_MEMBERS = 128
 MAX_ZIP_UNCOMPRESSED_BYTES = 20 * 1024 * 1024
 MAX_ZIP_MEMBER_UNCOMPRESSED_BYTES = 8 * 1024 * 1024
-SIGNING_VERSION = 1
-SIGNING_SALT = "ministry.worship-xlsx-preview.v1"
+SIGNING_VERSION = 2
+SIGNING_SALT = "ministry.worship-xlsx-preview.v2"
+NORMALIZED_PREVIEW_CONTRACT_REVISION = (
+    "SVCA_BETHANY_0930_2026_PREVIEW_V2"
+)
+NORMALIZED_PREVIEW_SIGNING_VERSION = 2
+NORMALIZED_PREVIEW_SIGNING_SALT = (
+    "ministry.worship-xlsx-normalized-preview.v2"
+)
 SIGNING_MAX_AGE_SECONDS = 1800
 
 _TOKEN_RE = re.compile(r"^(A|C1|C2|C3)(?=$|[\s\-(])")
+_SHA256_RE = re.compile(r"^[0-9A-Fa-f]{64}$")
 _ENCRYPTED_OLE_SIGNATURE = bytes.fromhex("D0CF11E0A1B11AE1")
 
 
@@ -101,6 +114,22 @@ class SignedWorkbookStateError(ValueError):
     pass
 
 
+class TargetServiceProfileErrorCode(StrEnum):
+    MISSING = "target_service_profile_missing"
+    INACTIVE = "target_service_profile_inactive"
+    EVENT_TYPE_MISMATCH = "target_service_profile_event_type_mismatch"
+    IDENTITY_CHANGED = "target_service_profile_identity_changed"
+
+
+class TargetServiceProfileError(RuntimeError):
+    """The adapter's configured profile cannot safely own this operation."""
+
+    def __init__(self, code, *, profile_identity=None):
+        self.code = code
+        self.profile_identity = profile_identity
+        super().__init__(f"Target Service Profile is unavailable: {code.value}.")
+
+
 class MappingValidationError(ValueError):
     pass
 
@@ -109,6 +138,9 @@ class TargetMatchState(StrEnum):
     EXACT_TARGET_MATCHED = "exact_target_matched"
     NO_TARGET = "no_target"
     MULTIPLE_EXACT_TARGETS = "multiple_exact_targets"
+    TARGET_EVENT_PROFILE_FK_MISSING = "target_event_profile_fk_missing"
+    TARGET_EVENT_PROFILE_IDENTITY_DRIFT = "target_event_profile_identity_drift"
+    TARGET_EVENT_OWNED_BY_OTHER_PROFILE = "target_event_owned_by_other_profile"
     LIFECYCLE_CONFLICT = "lifecycle_conflict"
     AUDIENCE_INVALID_CONFLICT = "audience_invalid_conflict"
 
@@ -122,12 +154,22 @@ class PreviewClassification(StrEnum):
 class PreviewBlocker(StrEnum):
     TARGET_MISSING = "target_missing"
     TARGET_AMBIGUOUS = "target_ambiguous"
+    TARGET_PROFILE_FK_MISSING = "target_profile_fk_missing"
+    TARGET_PROFILE_IDENTITY_DRIFT = "target_profile_identity_drift"
+    TARGET_OWNED_BY_OTHER_PROFILE = "target_owned_by_other_profile"
     TARGET_LIFECYCLE = "target_lifecycle"
     TARGET_AUDIENCE = "target_audience"
     MAPPING_UNRESOLVED = "mapping_unresolved"
     TEAM_INELIGIBLE = "team_ineligible"
     OWNERSHIP_CONFLICT = "ownership_conflict"
     CURRENT_WORSHIP_ASSIGNMENT = "current_worship_assignment"
+
+
+@dataclass(frozen=True)
+class TargetServiceProfileIdentity:
+    profile_id: int
+    profile_key: str
+    profile_event_type: str
 
 
 @dataclass(frozen=True)
@@ -146,6 +188,7 @@ class ParsedWorshipWorkbook:
     rows: tuple[ParsedWorkbookRow, ...]
     token_counts: dict[str, int]
     unsupported_rows: tuple[dict, ...]
+    target_profile: TargetServiceProfileIdentity | None = None
 
 
 @dataclass(frozen=True)
@@ -163,6 +206,8 @@ class TargetMatch:
     exact_target_ids: tuple[int, ...]
     audience_readiness: dict | None
     parallel_evidence_count: int
+    target_profile: TargetServiceProfileIdentity
+    profile_evidence: tuple[dict, ...]
 
 
 @dataclass(frozen=True)
@@ -185,6 +230,7 @@ class WorshipImportPreview:
     parsed: ParsedWorshipWorkbook
     mappings: dict[str, MinistryTeam]
     rows: tuple[WorshipImportPreviewRow, ...]
+    target_profile: TargetServiceProfileIdentity
     normalized_payload: dict
     signed_payload: str
 
@@ -232,6 +278,74 @@ class WorshipImportPreview:
 
 def _safe_filename(filename):
     return str(filename or "workbook.xlsx").replace("\\", "/").rsplit("/", 1)[-1]
+
+
+def _target_profile_identity(profile):
+    return TargetServiceProfileIdentity(
+        profile_id=profile.pk,
+        profile_key=profile.key,
+        profile_event_type=profile.event_type,
+    )
+
+
+def _target_profile_payload(identity):
+    return {
+        "profile_id": identity.profile_id,
+        "profile_key": identity.profile_key,
+        "profile_event_type": identity.profile_event_type,
+    }
+
+
+def _validate_target_profile_payload(value):
+    if (
+        not isinstance(value, dict)
+        or set(value) != {"profile_id", "profile_key", "profile_event_type"}
+        or type(value["profile_id"]) is not int
+        or value["profile_id"] <= 0
+        or value["profile_key"] != SUPPORTED_PROFILE_KEY
+        or value["profile_event_type"] != SUPPORTED_EVENT_TYPE
+    ):
+        raise SignedWorkbookStateError(
+            "Signed preview Service Profile identity is malformed."
+        )
+    return TargetServiceProfileIdentity(
+        profile_id=value["profile_id"],
+        profile_key=value["profile_key"],
+        profile_event_type=value["profile_event_type"],
+    )
+
+
+def resolve_target_service_profile():
+    """Resolve the adapter's configured stable key once, with no fallback."""
+
+    try:
+        profile = ServiceProfile.objects.get(key=SUPPORTED_PROFILE_KEY)
+    except ServiceProfile.DoesNotExist as exc:
+        raise TargetServiceProfileError(
+            TargetServiceProfileErrorCode.MISSING
+        ) from exc
+    identity = _target_profile_identity(profile)
+    if not profile.is_active:
+        raise TargetServiceProfileError(
+            TargetServiceProfileErrorCode.INACTIVE,
+            profile_identity=identity,
+        )
+    if profile.event_type != SUPPORTED_EVENT_TYPE:
+        raise TargetServiceProfileError(
+            TargetServiceProfileErrorCode.EVENT_TYPE_MISMATCH,
+            profile_identity=identity,
+        )
+    return profile
+
+
+def _require_current_target_profile_identity(expected=None):
+    current = _target_profile_identity(resolve_target_service_profile())
+    if expected is not None and current != expected:
+        raise TargetServiceProfileError(
+            TargetServiceProfileErrorCode.IDENTITY_CHANGED,
+            profile_identity=current,
+        )
+    return current
 
 
 def _expected_date_for_row(row_number):
@@ -488,11 +602,13 @@ def parse_known_worship_workbook(content, *, filename="workbook.xlsx"):
         cached.close()
 
 
-def _parsed_payload(parsed, *, user):
+def _parsed_payload(parsed, *, user, target_profile):
     return {
         "contract_revision": CONTRACT_REVISION,
         "signing_version": SIGNING_VERSION,
         "state_type": "parsed_workbook",
+        "integration_key": INTEGRATION_KEY,
+        "target_profile": _target_profile_payload(target_profile),
         "generated_at": timezone.now().isoformat(),
         "user_id": user.pk,
         "filename": parsed.filename,
@@ -513,24 +629,41 @@ def _parsed_payload(parsed, *, user):
 
 
 def sign_parsed_workbook(parsed, *, user):
+    target_profile = _require_current_target_profile_identity()
     return signing.dumps(
-        _parsed_payload(parsed, user=user), compress=True, salt=SIGNING_SALT
+        _parsed_payload(parsed, user=user, target_profile=target_profile),
+        compress=True,
+        salt=SIGNING_SALT,
     )
 
 
-def _decode_payload(token, *, user, state_type, max_age):
+def _decode_payload(
+    token,
+    *,
+    user,
+    state_type,
+    contract_revision,
+    signing_version,
+    salt,
+    max_age,
+):
     try:
-        payload = signing.loads(token, salt=SIGNING_SALT, max_age=max_age)
+        payload = signing.loads(token, salt=salt, max_age=max_age)
     except signing.BadSignature as exc:
-        raise SignedWorkbookStateError("Signed preview state is invalid or expired.") from exc
+        raise SignedWorkbookStateError(
+            "Signed preview state is invalid or expired. Generate a new workbook preview."
+        ) from exc
     if (
         not isinstance(payload, dict)
-        or payload.get("contract_revision") != CONTRACT_REVISION
-        or payload.get("signing_version") != SIGNING_VERSION
+        or payload.get("contract_revision") != contract_revision
+        or payload.get("signing_version") != signing_version
         or payload.get("state_type") != state_type
+        or payload.get("integration_key") != INTEGRATION_KEY
         or payload.get("user_id") != getattr(user, "pk", None)
     ):
-        raise SignedWorkbookStateError("Signed preview state does not match this user.")
+        raise SignedWorkbookStateError(
+            "Signed preview state is not current. Generate a new workbook preview."
+        )
     return payload
 
 
@@ -538,8 +671,50 @@ def decode_parsed_workbook(
     token, *, user, max_age=SIGNING_MAX_AGE_SECONDS
 ):
     payload = _decode_payload(
-        token, user=user, state_type="parsed_workbook", max_age=max_age
+        token,
+        user=user,
+        state_type="parsed_workbook",
+        contract_revision=CONTRACT_REVISION,
+        signing_version=SIGNING_VERSION,
+        salt=SIGNING_SALT,
+        max_age=max_age,
     )
+    required_top_level = {
+        "contract_revision",
+        "signing_version",
+        "state_type",
+        "integration_key",
+        "target_profile",
+        "generated_at",
+        "user_id",
+        "filename",
+        "sha256",
+        "supported_sheet",
+        "rows",
+        "token_counts",
+    }
+    if (
+        set(payload) != required_top_level
+        or not isinstance(payload["generated_at"], str)
+        or not isinstance(payload["filename"], str)
+        or _safe_filename(payload["filename"]) != payload["filename"]
+        or not isinstance(payload["sha256"], str)
+        or _SHA256_RE.fullmatch(payload["sha256"]) is None
+        or payload["supported_sheet"] != SUPPORTED_SHEET
+    ):
+        raise SignedWorkbookStateError("Signed workbook state is malformed.")
+    signed_target_profile = _validate_target_profile_payload(
+        payload["target_profile"]
+    )
+    try:
+        current_target_profile = _require_current_target_profile_identity(
+            signed_target_profile
+        )
+    except TargetServiceProfileError as exc:
+        raise SignedWorkbookStateError(
+            "Signed workbook Service Profile is no longer current. "
+            "Generate a new workbook preview."
+        ) from exc
     rows_payload = payload.get("rows")
     if not isinstance(rows_payload, list) or len(rows_payload) != 52:
         raise SignedWorkbookStateError("Signed workbook rows are malformed.")
@@ -608,6 +783,7 @@ def decode_parsed_workbook(
             {"row": 57, "kind": "spillover", "date": "2027-01-03"},
             {"row": 58, "kind": "spillover", "date": "2027-01-10"},
         ),
+        target_profile=current_target_profile,
     )
 
 
@@ -619,13 +795,32 @@ def _local_year_bounds():
     )
 
 
+def _event_profile_evidence(event, identity):
+    return {
+        "event_id": event.pk,
+        "profile_id": identity.profile_id,
+        "profile_key": identity.profile_key,
+        "profile_event_type": identity.profile_event_type,
+        "compatibility_key": identity.compatibility_key,
+        "event_type": identity.event_type,
+        "identity_state": identity.state.value,
+    }
+
+
 def match_exact_service_event_targets(parsed):
     """Classify exact existing profile targets without creating or changing rows."""
 
+    target_profile = _require_current_target_profile_identity(
+        parsed.target_profile
+    )
     start, end = _local_year_bounds()
     events = list(
         ServiceEvent.objects.filter(start_datetime__gte=start, start_datetime__lt=end)
-        .select_related("rotation_anchor_team", "host_language_unit")
+        .select_related(
+            "service_profile",
+            "rotation_anchor_team",
+            "host_language_unit",
+        )
         .prefetch_related(
             "audience_scope_links__unit",
             "required_team_links__ministry_team",
@@ -640,24 +835,68 @@ def match_exact_service_event_targets(parsed):
     for row in parsed.rows:
         same_date = events_by_date[row.local_date]
         exact = []
+        missing_fk = []
+        identity_drift = []
+        other_profile = []
+        profile_evidence = []
         for event in same_date:
             local_start = timezone.localtime(event.start_datetime)
-            if (
-                event.service_profile_key == SUPPORTED_PROFILE_KEY
+            if local_start.time().replace(tzinfo=None) != SUPPORTED_LOCAL_TIME:
+                continue
+            identity = inspect_service_profile_identity(event)
+            evidence = _event_profile_evidence(event, identity)
+            profile_evidence.append(evidence)
+            if identity.profile_id == target_profile.profile_id:
+                if identity.is_exact and event.event_type == SUPPORTED_EVENT_TYPE:
+                    exact.append(event)
+                else:
+                    identity_drift.append(event)
+            elif (
+                identity.state == ServiceProfileIdentityState.LEGACY_ONLY
+                and identity.compatibility_key == target_profile.profile_key
                 and event.event_type == SUPPORTED_EVENT_TYPE
-                and local_start.time().replace(tzinfo=None) == SUPPORTED_LOCAL_TIME
             ):
-                exact.append(event)
+                missing_fk.append(event)
+            elif (
+                identity.state
+                in {
+                    ServiceProfileIdentityState.FK_KEY_MISMATCH,
+                    ServiceProfileIdentityState.FK_BLANK_KEY,
+                    ServiceProfileIdentityState.EVENT_TYPE_MISMATCH,
+                }
+                and identity.compatibility_key == target_profile.profile_key
+            ):
+                identity_drift.append(event)
+            elif identity.is_exact and event.event_type == SUPPORTED_EVENT_TYPE:
+                other_profile.append(event)
+
+        profile_evidence = tuple(profile_evidence)
         parallel_count = len(same_date) - len(exact)
-        if not exact:
+        if identity_drift:
             matches.append(
                 TargetMatch(
                     row=row,
-                    state=TargetMatchState.NO_TARGET,
+                    state=TargetMatchState.TARGET_EVENT_PROFILE_IDENTITY_DRIFT,
                     event=None,
-                    exact_target_ids=(),
+                    exact_target_ids=tuple(item.pk for item in identity_drift),
                     audience_readiness=None,
                     parallel_evidence_count=parallel_count,
+                    target_profile=target_profile,
+                    profile_evidence=profile_evidence,
+                )
+            )
+            continue
+        if missing_fk:
+            matches.append(
+                TargetMatch(
+                    row=row,
+                    state=TargetMatchState.TARGET_EVENT_PROFILE_FK_MISSING,
+                    event=None,
+                    exact_target_ids=tuple(item.pk for item in missing_fk),
+                    audience_readiness=None,
+                    parallel_evidence_count=parallel_count,
+                    target_profile=target_profile,
+                    profile_evidence=profile_evidence,
                 )
             )
             continue
@@ -670,6 +909,36 @@ def match_exact_service_event_targets(parsed):
                     exact_target_ids=tuple(item.pk for item in exact),
                     audience_readiness=None,
                     parallel_evidence_count=parallel_count,
+                    target_profile=target_profile,
+                    profile_evidence=profile_evidence,
+                )
+            )
+            continue
+        if not exact and other_profile:
+            matches.append(
+                TargetMatch(
+                    row=row,
+                    state=TargetMatchState.TARGET_EVENT_OWNED_BY_OTHER_PROFILE,
+                    event=None,
+                    exact_target_ids=tuple(item.pk for item in other_profile),
+                    audience_readiness=None,
+                    parallel_evidence_count=parallel_count,
+                    target_profile=target_profile,
+                    profile_evidence=profile_evidence,
+                )
+            )
+            continue
+        if not exact:
+            matches.append(
+                TargetMatch(
+                    row=row,
+                    state=TargetMatchState.NO_TARGET,
+                    event=None,
+                    exact_target_ids=(),
+                    audience_readiness=None,
+                    parallel_evidence_count=parallel_count,
+                    target_profile=target_profile,
+                    profile_evidence=profile_evidence,
                 )
             )
             continue
@@ -692,6 +961,8 @@ def match_exact_service_event_targets(parsed):
                 exact_target_ids=(event.pk,),
                 audience_readiness=audience,
                 parallel_evidence_count=parallel_count,
+                target_profile=target_profile,
+                profile_evidence=profile_evidence,
             )
         )
     return tuple(matches)
@@ -723,6 +994,15 @@ def _target_blocker(target_state):
     return {
         TargetMatchState.NO_TARGET: PreviewBlocker.TARGET_MISSING,
         TargetMatchState.MULTIPLE_EXACT_TARGETS: PreviewBlocker.TARGET_AMBIGUOUS,
+        TargetMatchState.TARGET_EVENT_PROFILE_FK_MISSING: (
+            PreviewBlocker.TARGET_PROFILE_FK_MISSING
+        ),
+        TargetMatchState.TARGET_EVENT_PROFILE_IDENTITY_DRIFT: (
+            PreviewBlocker.TARGET_PROFILE_IDENTITY_DRIFT
+        ),
+        TargetMatchState.TARGET_EVENT_OWNED_BY_OTHER_PROFILE: (
+            PreviewBlocker.TARGET_OWNED_BY_OTHER_PROFILE
+        ),
         TargetMatchState.LIFECYCLE_CONFLICT: PreviewBlocker.TARGET_LIFECYCLE,
         TargetMatchState.AUDIENCE_INVALID_CONFLICT: PreviewBlocker.TARGET_AUDIENCE,
     }.get(target_state)
@@ -745,6 +1025,7 @@ def build_worship_import_preview(*, parsed, mapping, user):
 
     mappings = _validated_mapping(parsed, mapping)
     matches = match_exact_service_event_targets(parsed)
+    target_profile = matches[0].target_profile
     rows = []
     normalized_rows = []
     conflict_states = {
@@ -821,6 +1102,23 @@ def build_worship_import_preview(*, parsed, mapping, user):
                 "token": match.row.token,
                 "target_state": match.state.value,
                 "event_id": getattr(event, "pk", None),
+                "service_profile_id": (
+                    event.service_profile_id if event is not None else None
+                ),
+                "service_profile_key": (
+                    target_profile.profile_key if event is not None else None
+                ),
+                "service_profile_event_type": (
+                    target_profile.profile_event_type
+                    if event is not None
+                    else None
+                ),
+                "profile_identity_state": (
+                    ServiceProfileIdentityState.EXACT.value
+                    if event is not None
+                    else None
+                ),
+                "profile_evidence": list(match.profile_evidence),
                 "current_team_id": getattr(current_team, "pk", None),
                 "proposed_team_id": getattr(proposed_team, "pk", None),
                 "classification": classification.value,
@@ -834,9 +1132,12 @@ def build_worship_import_preview(*, parsed, mapping, user):
         )
 
     payload = {
-        "contract_revision": CONTRACT_REVISION,
-        "signing_version": SIGNING_VERSION,
+        "contract_revision": NORMALIZED_PREVIEW_CONTRACT_REVISION,
+        "signing_version": NORMALIZED_PREVIEW_SIGNING_VERSION,
         "state_type": "normalized_preview",
+        "parser_contract_revision": CONTRACT_REVISION,
+        "integration_key": INTEGRATION_KEY,
+        "target_profile": _target_profile_payload(target_profile),
         "generated_at": timezone.now().isoformat(),
         "user_id": user.pk,
         "filename": parsed.filename,
@@ -848,11 +1149,16 @@ def build_worship_import_preview(*, parsed, mapping, user):
         },
         "rows": normalized_rows,
     }
-    signed_payload = signing.dumps(payload, compress=True, salt=SIGNING_SALT)
+    signed_payload = signing.dumps(
+        payload,
+        compress=True,
+        salt=NORMALIZED_PREVIEW_SIGNING_SALT,
+    )
     return WorshipImportPreview(
         parsed=parsed,
         mappings=mappings,
         rows=tuple(rows),
+        target_profile=target_profile,
         normalized_payload=payload,
         signed_payload=signed_payload,
     )
@@ -862,8 +1168,52 @@ def decode_signed_worship_import_preview(
     token, *, user, max_age=SIGNING_MAX_AGE_SECONDS
 ):
     payload = _decode_payload(
-        token, user=user, state_type="normalized_preview", max_age=max_age
+        token,
+        user=user,
+        state_type="normalized_preview",
+        contract_revision=NORMALIZED_PREVIEW_CONTRACT_REVISION,
+        signing_version=NORMALIZED_PREVIEW_SIGNING_VERSION,
+        salt=NORMALIZED_PREVIEW_SIGNING_SALT,
+        max_age=max_age,
     )
+    required_top_level = {
+        "contract_revision",
+        "signing_version",
+        "state_type",
+        "parser_contract_revision",
+        "integration_key",
+        "target_profile",
+        "generated_at",
+        "user_id",
+        "filename",
+        "sha256",
+        "supported_sheet",
+        "mapping_team_ids",
+        "rows",
+    }
+    if (
+        set(payload) != required_top_level
+        or payload["parser_contract_revision"] != CONTRACT_REVISION
+        or not isinstance(payload["generated_at"], str)
+        or not isinstance(payload["filename"], str)
+        or _safe_filename(payload["filename"]) != payload["filename"]
+        or not isinstance(payload["sha256"], str)
+        or _SHA256_RE.fullmatch(payload["sha256"]) is None
+        or payload["supported_sheet"] != SUPPORTED_SHEET
+    ):
+        raise SignedWorkbookStateError("Signed normalized preview is malformed.")
+    signed_target_profile = _validate_target_profile_payload(
+        payload["target_profile"]
+    )
+    try:
+        current_target_profile = _require_current_target_profile_identity(
+            signed_target_profile
+        )
+    except TargetServiceProfileError as exc:
+        raise SignedWorkbookStateError(
+            "Signed normalized preview Service Profile is no longer current. "
+            "Generate a new workbook preview."
+        ) from exc
     rows = payload.get("rows")
     mappings = payload.get("mapping_team_ids")
     if (
@@ -880,6 +1230,11 @@ def decode_signed_worship_import_preview(
         "token",
         "target_state",
         "event_id",
+        "service_profile_id",
+        "service_profile_key",
+        "service_profile_event_type",
+        "profile_identity_state",
+        "profile_evidence",
         "current_team_id",
         "proposed_team_id",
         "classification",
@@ -892,6 +1247,22 @@ def decode_signed_worship_import_preview(
         raise SignedWorkbookStateError("Signed normalized preview is malformed.")
     if any(not isinstance(row["token"], str) for row in rows):
         raise SignedWorkbookStateError("Signed normalized preview is malformed.")
+    for row in rows:
+        if not isinstance(row["profile_evidence"], list):
+            raise SignedWorkbookStateError("Signed normalized preview is malformed.")
+        if row["target_state"] == TargetMatchState.EXACT_TARGET_MATCHED.value:
+            if (
+                row["service_profile_id"] != current_target_profile.profile_id
+                or row["service_profile_key"]
+                != current_target_profile.profile_key
+                or row["service_profile_event_type"]
+                != current_target_profile.profile_event_type
+                or row["profile_identity_state"]
+                != ServiceProfileIdentityState.EXACT.value
+            ):
+                raise SignedWorkbookStateError(
+                    "Signed normalized preview Service Profile state is malformed."
+                )
     normalized_counts = Counter(row["token"] for row in rows)
     if (
         set(normalized_counts) - set(TOKEN_ORDER)

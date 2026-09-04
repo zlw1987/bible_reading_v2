@@ -23,6 +23,7 @@ from .models import (
     ServiceEventAudienceScope,
     ServiceEventPlannerAssignment,
     ServiceEventRequiredTeam,
+    ServiceProfile,
 )
 
 
@@ -108,8 +109,13 @@ class ServiceEventProfileKeyTests(TestCase):
         self.assertNotIn("service_profile_key", ServiceEventForm().fields)
         self.assertNotIn("service_profile_key", RecurringServiceEventForm().fields)
 
-    def test_admin_form_exposes_help_and_persists_profile_key(self):
+    def test_admin_form_selects_fk_and_persists_readonly_compatibility_pair(self):
         event = ServiceEvent.objects.create(**self.event_values())
+        profile = ServiceProfile.objects.create(
+            key="bethany_0930_cm",
+            name="Bethany 09:30 Chinese",
+            event_type=ServiceEvent.EVENT_SUNDAY_SERVICE,
+        )
         root = ChurchStructureUnit.objects.create(
             unit_type=ChurchStructureUnit.UNIT_ROOT,
             code="CHURCH",
@@ -132,21 +138,22 @@ class ServiceEventProfileKeyTests(TestCase):
             obj=event,
         )
 
-        self.assertIn("service_profile_key", form_class.base_fields)
+        self.assertNotIn("service_profile_key", form_class.base_fields)
+        self.assertIn("service_profile", form_class.base_fields)
         self.assertIn(
-            "does not control audience",
-            form_class.base_fields["service_profile_key"].help_text,
+            "compatibility key below is read-only",
+            form_class.base_fields["service_profile"].help_text,
         )
         self.client.force_login(superuser)
         response = self.client.post(
             reverse("admin:events_serviceevent_change", args=[event.pk]),
             {
-                "title": event.title,
+                "title": "Profile plus title update",
                 "title_en": event.title_en,
                 "description": event.description,
                 "description_en": event.description_en,
                 "event_type": event.event_type,
-                "service_profile_key": "bethany_0930_cm",
+                "service_profile": str(profile.pk),
                 "start_datetime_0": timezone.localtime(
                     event.start_datetime
                 ).strftime("%Y-%m-%d"),
@@ -178,6 +185,8 @@ class ServiceEventProfileKeyTests(TestCase):
         self.assertEqual(response.status_code, 302)
         event.refresh_from_db()
         self.assertEqual(event.service_profile_key, "bethany_0930_cm")
+        self.assertEqual(event.service_profile_id, profile.pk)
+        self.assertEqual(event.title, "Profile plus title update")
         self.assertEqual(event.scheduling_revision, 1)
         self.assertTrue(
             ServiceEventAudienceScope.objects.filter(pk=scope.pk).exists()

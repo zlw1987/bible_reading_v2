@@ -55,12 +55,14 @@ deployment now has one reviewed profile and 52 exact dual-consistent mapped
 events with zero identity drift; every target scheduling revision advanced
 `1 -> 2` exactly once, and a repeat dry-run advanced none to `3`. This is
 deployment-specific evidence only. The apply reported
-`runtime_consumer_switched: false`: the legacy `service_profile_key` still
-exists and remains authoritative for current readiness/setup/workbook/Admin/
-signing and other operational identity consumers. Defaults, materialization,
-integration gating, MO-S.REQUIRED runtime, the Slice 5 integration-boundary and
-consumer switch, external identity mapping, and legacy-string retirement remain
-unimplemented.
+`runtime_consumer_switched: false`. 5B implements integration gating, 5C the
+canonical FK-authoritative seam, and 5D the readiness/reset/Admin switch.
+Readiness and the retained bounded reset now use resolved ServiceProfile/FK
+identity, while ServiceEvent Admin selects the FK and renders the compatibility
+key read-only through one normal save/revision. Workbook matching/signing stays
+legacy-authoritative pending 5E, so overall consumer switching, defaults,
+materialization, MO-S.REQUIRED runtime, external identity mapping, and
+legacy-string retirement remain incomplete.
 
 `MO-S.6D-PROFILE.1A` implements one optional validated
 `ServiceEvent.service_profile_key` as stable technical service-profile identity.
@@ -76,15 +78,18 @@ operational review matrix. Production read-only smoke passed on GoDaddy Python
 `MO-S.6D-PROFILE.1A` is
 committed in current HEAD.
 `MO-S.6D-PROFILE-SETUP.0A` provides a separate committed
-read-only deterministic audit for that evidence, including migrations
-`events/0009`-`0011`, the 52 expected 2026 local Sundays, canonical tagged rows,
+read-only deterministic audit for that evidence. 5D upgrades it to
+`SERVICE_PROFILE_READINESS_V2`, including migrations `events/0009`-`0012`, the
+resolved active type-compatible ServiceProfile, the 52 expected 2026 local
+Sundays, canonical FK-owned rows,
 untagged human-review candidates, exact-time events owned by other profiles,
 different-time parallel services, requested-event-type consistency, and
 audience readiness. `MO-S.6D-PROFILE-SETUP.1A` now implements a separately
 gated, dry-run-by-default command that resets only the explicitly disposable
 ServiceEvent scheduling TEST dataset and atomically creates the 52 canonical
-2026 Bethany 09:30 `bethany_0930_cm` events with explicit CM audience and no
-Worship Team. `MO-S.6D-PROFILE-SETUP.1A` is **PRODUCTION APPLY COMPLETE /
+2026 Bethany 09:30 `bethany_0930_cm` events with exact FK/key identity,
+explicit CM audience, and no Worship Team. 5D versions its state-bound reset
+approval as V2 and did not execute it. `MO-S.6D-PROFILE-SETUP.1A` is **PRODUCTION APPLY COMPLETE /
 VERIFIED**. The product-owner-reviewed reset deleted 44 ServiceEvents and their
 reviewed dependent scheduling rows, then created exactly 52 canonical events
 and 52 exact CM audience rows. The final production audit reported schema ready,

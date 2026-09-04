@@ -113,7 +113,9 @@ class Command(BaseCommand):
             local_start = timezone.localtime(event["start_datetime"])
             self.stdout.write(
                 f"  id={event['pk']}; local_start={local_start.isoformat()}; "
-                f"status={event['status']}; profile={event['service_profile_key']!r}; "
+                f"status={event['status']}; service_profile_id="
+                f"{event['service_profile_id']}; compatibility_key="
+                f"{event['service_profile_key']!r}; "
                 f"title={event['title']!r}"
             )
         self.stdout.write("Deletion / dependent-change scope:")
@@ -155,7 +157,8 @@ class Command(BaseCommand):
             f"completed={replacement['completed']}; published={replacement['published']}"
         )
         self.stdout.write(
-            f"  identity: {PROFILE_KEY}; {PROFILE_EVENT_TYPE}; "
+            f"  identity: profile_id={preview['profile'].pk}; "
+            f"profile_key={PROFILE_KEY}; {PROFILE_EVENT_TYPE}; "
             f"{PROFILE_LOCAL_TIME.isoformat(timespec='minutes')} "
             f"{preview['replacement']['rows'][0]['start_datetime'].tzinfo}"
         )

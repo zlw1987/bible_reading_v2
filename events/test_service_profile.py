@@ -372,6 +372,35 @@ class ServiceProfileAdminAndFormTests(TestCase):
         self.request = RequestFactory().get("/admin/events/serviceprofile/")
         self.request.user = self.superuser
 
+    def admin_event_form(self, event=None, *, profile="", event_type=None, title=None):
+        model_admin = ServiceEventAdmin(ServiceEvent, admin.site)
+        form_class = model_admin.get_form(self.request, obj=event)
+        instance = event or ServiceEvent()
+        start = timezone.localtime(
+            event.start_datetime
+            if event
+            else timezone.now() + timezone.timedelta(days=7)
+        )
+        data = {
+            "title": title or (event.title if event else "Admin profile event"),
+            "title_en": event.title_en if event else "",
+            "description": event.description if event else "",
+            "description_en": event.description_en if event else "",
+            "event_type": event_type
+            or (event.event_type if event else ServiceEvent.EVENT_SUNDAY_SERVICE),
+            "service_profile": str(profile.pk) if isinstance(profile, ServiceProfile) else profile,
+            "start_datetime_0": start.strftime("%Y-%m-%d"),
+            "start_datetime_1": start.strftime("%H:%M:%S"),
+            "end_datetime_0": "",
+            "end_datetime_1": "",
+            "location": event.location if event else "",
+            "meeting_link": event.meeting_link if event else "",
+            "host_language_unit": "",
+            "status": event.status if event else ServiceEvent.STATUS_PUBLISHED,
+            "created_by": "",
+        }
+        return form_class(data=data, instance=instance), model_admin
+
     def test_ordinary_and_recurring_forms_expose_no_profile_identity(self):
         ordinary_fields = ServiceEventForm().fields
         recurring_fields = RecurringServiceEventForm().fields
@@ -445,7 +474,7 @@ class ServiceProfileAdminAndFormTests(TestCase):
         self.assertEqual(saved.key, "weekday.study")
         self.assertEqual(saved.event_type, ServiceEvent.EVENT_BIBLE_STUDY)
 
-    def test_service_event_admin_keeps_fk_readonly_and_legacy_key_editable(self):
+    def test_service_event_admin_edits_fk_and_keeps_compatibility_key_readonly(self):
         profile = ServiceProfile.objects.create(**profile_values())
         event = ServiceEvent.objects.create(
             **event_values(
@@ -456,46 +485,158 @@ class ServiceProfileAdminAndFormTests(TestCase):
         model_admin = ServiceEventAdmin(ServiceEvent, admin.site)
         form_class = model_admin.get_form(self.request, obj=event)
 
-        self.assertIn("service_profile", model_admin.get_readonly_fields(self.request, event))
-        self.assertNotIn("service_profile", form_class.base_fields)
-        self.assertIn("service_profile_key", form_class.base_fields)
+        self.assertNotIn("service_profile", model_admin.get_readonly_fields(self.request, event))
+        self.assertIn("service_profile", form_class.base_fields)
+        self.assertIn("service_profile_key", model_admin.get_readonly_fields(self.request, event))
+        self.assertNotIn("service_profile_key", form_class.base_fields)
 
-    def test_service_event_admin_rejects_legacy_key_drift(self):
+    def test_service_event_admin_profile_choices_are_active_plus_current_exact_inactive(self):
         profile = ServiceProfile.objects.create(**profile_values())
+        inactive_current = ServiceProfile.objects.create(
+            **profile_values(key="inactive.current", name="Inactive current")
+        )
+        inactive_other = ServiceProfile.objects.create(
+            **profile_values(key="inactive.other", name="Inactive other", is_active=False)
+        )
         event = ServiceEvent.objects.create(
             **event_values(
-                service_profile_key=profile.key,
-                service_profile=profile,
+                service_profile_key=inactive_current.key,
+                service_profile=inactive_current,
             )
         )
-        form_class = ServiceEventAdmin(ServiceEvent, admin.site).get_form(
-            self.request,
-            obj=event,
+        inactive_current.is_active = False
+        inactive_current.save()
+
+        existing_form_class = ServiceEventAdmin(ServiceEvent, admin.site).get_form(
+            self.request, obj=event
         )
-        local_start = timezone.localtime(event.start_datetime)
-        form = form_class(
-            data={
-                "title": event.title,
-                "title_en": event.title_en,
-                "description": event.description,
-                "description_en": event.description_en,
-                "event_type": event.event_type,
-                "service_profile_key": "weekday.study",
-                "start_datetime_0": local_start.strftime("%Y-%m-%d"),
-                "start_datetime_1": local_start.strftime("%H:%M:%S"),
-                "end_datetime_0": "",
-                "end_datetime_1": "",
-                "location": event.location,
-                "meeting_link": event.meeting_link,
-                "host_language_unit": "",
-                "status": event.status,
-                "created_by": "",
-            },
-            instance=event,
+        existing_choices = set(
+            existing_form_class(instance=event).fields["service_profile"].queryset
+        )
+        new_form_class = ServiceEventAdmin(ServiceEvent, admin.site).get_form(self.request)
+        new_choices = set(new_form_class().fields["service_profile"].queryset)
+
+        self.assertIn(profile, existing_choices)
+        self.assertIn(inactive_current, existing_choices)
+        self.assertNotIn(inactive_other, existing_choices)
+        self.assertIn(profile, new_choices)
+        self.assertNotIn(inactive_current, new_choices)
+        self.assertNotIn(inactive_other, new_choices)
+
+        rejected, _admin = self.admin_event_form(event, profile=inactive_other)
+        self.assertFalse(rejected.is_valid())
+        self.assertIn("service_profile", rejected.errors)
+
+    def test_admin_select_clear_and_legacy_transition_write_exact_pairs(self):
+        profile = ServiceProfile.objects.create(**profile_values())
+        event = ServiceEvent.objects.create(**event_values())
+        form, _admin = self.admin_event_form(event, profile=profile)
+        self.assertTrue(form.is_valid(), form.errors)
+        saved = form.save()
+        saved.refresh_from_db()
+        self.assertEqual(saved.service_profile_id, profile.pk)
+        self.assertEqual(saved.service_profile_key, profile.key)
+        self.assertEqual(saved.scheduling_revision, 1)
+
+        form, _admin = self.admin_event_form(saved, profile="")
+        self.assertTrue(form.is_valid(), form.errors)
+        cleared = form.save()
+        cleared.refresh_from_db()
+        self.assertIsNone(cleared.service_profile_id)
+        self.assertEqual(cleared.service_profile_key, "")
+        self.assertEqual(cleared.scheduling_revision, 2)
+
+        legacy = ServiceEvent.objects.create(
+            **event_values(service_profile_key=profile.key)
+        )
+        unbound = ServiceEventAdmin(ServiceEvent, admin.site).get_form(
+            self.request, obj=legacy
+        )(instance=legacy)
+        self.assertIsNone(unbound.initial["service_profile"])
+        self.client.force_login(self.superuser)
+        response = self.client.get(
+            reverse("admin:events_serviceevent_change", args=[legacy.pk])
+        )
+        self.assertEqual(response.status_code, 200)
+        legacy.refresh_from_db()
+        self.assertIsNone(legacy.service_profile_id)
+        self.assertEqual(legacy.service_profile_key, profile.key)
+
+        unchanged, _admin = self.admin_event_form(
+            legacy,
+            profile="",
+            title="Legacy evidence preserved",
+        )
+        self.assertTrue(unchanged.is_valid(), unchanged.errors)
+        preserved = unchanged.save()
+        preserved.refresh_from_db()
+        self.assertIsNone(preserved.service_profile_id)
+        self.assertEqual(preserved.service_profile_key, profile.key)
+
+        form, _admin = self.admin_event_form(preserved, profile=profile)
+        self.assertTrue(form.is_valid(), form.errors)
+        transitioned = form.save()
+        transitioned.refresh_from_db()
+        self.assertEqual(transitioned.service_profile_id, profile.pk)
+        self.assertEqual(transitioned.service_profile_key, profile.key)
+        self.assertEqual(transitioned.scheduling_revision, 2)
+
+    def test_admin_conflict_drift_and_type_mismatch_fail_closed(self):
+        profile = ServiceProfile.objects.create(**profile_values())
+        other = ServiceProfile.objects.create(
+            **profile_values(key="sunday.other", name="Other Sunday")
+        )
+        legacy = ServiceEvent.objects.create(
+            **event_values(service_profile_key=profile.key)
+        )
+        conflict, _admin = self.admin_event_form(legacy, profile=other)
+        self.assertFalse(conflict.is_valid())
+        self.assertIn("service_profile", conflict.errors)
+
+        exact = ServiceEvent.objects.create(
+            **event_values(service_profile_key=profile.key, service_profile=profile)
+        )
+        ServiceEvent.objects.filter(pk=exact.pk).update(service_profile_key="drifted")
+        exact = ServiceEvent.objects.select_related("service_profile").get(pk=exact.pk)
+        drifted, _admin = self.admin_event_form(exact, profile=profile)
+        self.assertFalse(drifted.is_valid())
+        self.assertIn("identity drift", str(drifted.errors))
+
+        clean_event = ServiceEvent.objects.create(**event_values(title="Type mismatch"))
+        mismatch, _admin = self.admin_event_form(
+            clean_event,
+            profile=profile,
+            event_type=ServiceEvent.EVENT_BIBLE_STUDY,
+        )
+        self.assertFalse(mismatch.is_valid())
+        self.assertIn("service_profile", mismatch.errors)
+
+    def test_admin_profile_and_unrelated_change_persist_with_one_revision(self):
+        profile = ServiceProfile.objects.create(**profile_values())
+        event = ServiceEvent.objects.create(**event_values())
+        form, _admin = self.admin_event_form(
+            event,
+            profile=profile,
+            title="Updated with profile",
         )
 
-        self.assertFalse(form.is_valid())
-        self.assertIn("service_profile_key", form.errors)
+        self.assertTrue(form.is_valid(), form.errors)
+        saved = form.save()
+        saved.refresh_from_db()
+        self.assertEqual(saved.title, "Updated with profile")
+        self.assertEqual(saved.service_profile_id, profile.pk)
+        self.assertEqual(saved.service_profile_key, profile.key)
+        self.assertEqual(saved.scheduling_revision, 1)
+
+    def test_admin_created_exact_event_starts_at_revision_zero(self):
+        profile = ServiceProfile.objects.create(**profile_values())
+        form, _admin = self.admin_event_form(profile=profile)
+
+        self.assertTrue(form.is_valid(), form.errors)
+        event = form.save()
+        self.assertEqual(event.service_profile_id, profile.pk)
+        self.assertEqual(event.service_profile_key, profile.key)
+        self.assertEqual(event.scheduling_revision, 0)
 
     def test_member_detail_does_not_expose_profile_technical_identity(self):
         profile = ServiceProfile.objects.create(

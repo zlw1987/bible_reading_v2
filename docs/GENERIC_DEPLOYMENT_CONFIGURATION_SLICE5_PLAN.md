@@ -4,12 +4,15 @@ Status: **`GENERIC-DEPLOYMENT-CONFIG.5A` repository-wide read-only audit and
 docs-only implementation planning complete; `GENERIC-DEPLOYMENT-CONFIG.5B`
 explicit integration registry, fail-closed gates, and lazy import isolation
 IMPLEMENTED / LOCAL VERIFIED; and `GENERIC-DEPLOYMENT-CONFIG.5C` canonical
-ServiceProfile runtime identity seam IMPLEMENTED / LOCAL VERIFIED.
-ServiceProfile consumer switching remains not implemented.**
+ServiceProfile runtime identity seam IMPLEMENTED / LOCAL VERIFIED; and
+`GENERIC-DEPLOYMENT-CONFIG.5D` readiness/reset/Admin consumer switch
+IMPLEMENTED / LOCAL VERIFIED. Workbook authority remains unswitched and the
+overall ServiceProfile consumer switch remains incomplete.**
 
 Task IDs: `GENERIC-DEPLOYMENT-CONFIG.5A`,
 `GENERIC-DEPLOYMENT-CONFIG.5B`,
-`GENERIC-DEPLOYMENT-CONFIG.5C`
+`GENERIC-DEPLOYMENT-CONFIG.5C`,
+`GENERIC-DEPLOYMENT-CONFIG.5D`
 
 Audit baseline: `master` at `C:\dev\bible_reading_v2`, synchronized with
 `origin/master` at `0` ahead / `0` behind and clean before this document was
@@ -27,8 +30,19 @@ version changed, and no ServiceProfile runtime consumer switched.
 5C was implemented on the synchronized 5B baseline with no schema, migration,
 data, UI, route, integration, or signed-contract change. It adds the typed
 events-owned FK-authoritative runtime inspection/strict-resolution seam and an
-explicit exact pair-write/clear contract. No current readiness, setup/reset,
-Admin, or workbook consumer imports or uses the seam, so
+explicit exact pair-write/clear contract. At the 5C milestone no readiness,
+setup/reset, Admin, or workbook consumer imported or used the seam, so
+`runtime_consumer_switched` remained false globally.
+
+5D was implemented on the synchronized 5C baseline with no model, migration,
+normal-local data, production operation, or workbook change. Readiness now
+resolves the stable key to an active type-compatible profile and selects FK-
+owned canonical rows under a V2 evidence contract; legacy-only/profileless/
+drift states are blocker or review evidence only. The retained bounded Bethany
+TEST reset uses a V2 state-bound approval and exact FK/key replacement rows;
+no reset was run. ServiceEvent Admin now selects the FK, renders the
+compatibility key read-only, and prepares pair writes before one normal save.
+Workbook preview/confirmation stays legacy-authoritative pending 5E, so
 `runtime_consumer_switched` remains false globally.
 
 This document turns the canonical architecture in
@@ -79,13 +93,12 @@ may hard-code that PK or infer behavior from those deployment facts.
    approved dual-identity state, its strict resolver uses only the FK-linked
    profile, and its mutation helpers preserve the exact identity pair. The
    separate `events.service_profile_identity` module remains the read-only 4A
-   inventory. No current consumer has adopted the 5C seam yet, so readiness
-   and the two workbook services still interpret the legacy identity
-   independently pending 5D/5E.
-2. Current profile-aware authority remains the string in exactly three active
-   decision areas: readiness, workbook target matching, and workbook
-   confirmation current-truth validation. The bounded reset/setup path also
-   serializes, tests, and creates string-only identity.
+   inventory. 5D adopts the seam for readiness, bounded reset, and Admin; the
+   two workbook services still interpret legacy identity independently pending
+   5E.
+2. Current profile-aware legacy-string authority remains only in workbook
+   target matching and workbook confirmation current-truth validation. The
+   bounded reset/setup path now binds and creates exact FK/key identity.
 3. `ServiceEvent.clean()` enforces FK/key equality and profile/event-type
    equality when the FK is non-null. `ServiceEvent.save()` always calls
    `full_clean()`. `ServiceProfile.save()` also calls `full_clean()` and makes a
@@ -94,8 +107,9 @@ may hard-code that PK or infer behavior from those deployment facts.
    outside model/service boundaries bypass model validation. The database has
    no cross-table constraint capable of enforcing FK key/type equality. The 4A
    identity audit therefore remains required during the dual phase.
-5. The ServiceEvent Django Admin exposes the legacy key as editable and makes
-   the FK read-only. Ordinary and recurring ServiceEvent forms expose neither.
+5. The ServiceEvent Django Admin exposes the FK selector and renders the legacy
+   key as read-only compatibility evidence. Ordinary and recurring
+   ServiceEvent forms expose neither.
 6. Existing-event `ServiceEvent.save()` calls advance `scheduling_revision`
    before validation unless `_skip_scheduling_revision=True` is explicitly
    used. Transaction rollback restores the bump after validation failure.
@@ -121,8 +135,8 @@ may hard-code that PK or infer behavior from those deployment facts.
     profile field. Confirmation rechecks the raw legacy string outside its
     signed row payload.
 12. The bounded reset approval is a hashed state contract, not a Django-signed
-    token. Its V1 payload and reset-surface fingerprint bind the legacy string
-    but not `service_profile_id`.
+    token. 5D V2 binds the resolved profile plus each event's FK and
+    compatibility key; V1 tokens fail closed.
 13. Trial setup readiness contains no ServiceProfile or workbook-integration
     provider. This is not a hidden consumer and need not change in Slice 5.
 
@@ -143,10 +157,10 @@ Enforcement is layered rather than database-complete:
 |---|---|---|
 | `ServiceEvent.clean()` / `save()` | Checks non-null FK against legacy key and event type; rejects a newly assigned inactive profile | Every existing save advances once unless explicitly skipped; failed saves roll back atomically |
 | `ServiceProfile.clean()` / `save()` | Normalizes/validates key; referenced key and event type are immutable | Profile label/description/active edits do not advance linked events |
-| ServiceEvent Admin | Model validation runs, but FK is read-only and legacy key is editable | Valid existing-event saves use normal revision behavior |
+| ServiceEvent Admin | FK is the explicit selector; legacy key is read-only evidence; shared non-saving preparation rejects drift/inactive-new/type conflict | One normal existing-event save advances exactly once; new rows remain revision 0 |
 | Ordinary/recurring event forms | Neither identity field is exposed | No profile identity write |
 | 4A mapping service | Requires exact legacy targets and no existing FK, claims all revisions, creates profile, then writes FK | Intentional `_skip_scheduling_revision=True` after the batch claim |
-| Bounded reset/setup | Creates legacy-key-only events at revision 0 | New rows begin at revision 0; this path must not remain a supported post-switch profile setup writer unchanged |
+| Bounded reset/setup | Resolves the exact active profile and creates exact FK/key events | New rows begin at revision 0; V2 preview/approval binds the profile and complete reset surface |
 | Workbook confirmation | Does not change profile identity; after claiming all revisions it changes only Worship anchors | Intentional `_skip_scheduling_revision=True` after the batch claim |
 | Direct ORM/raw writes | No model equality/type validation | `QuerySet.update()` does not perform the normal revision bump unless the caller explicitly does so |
 
@@ -177,6 +191,10 @@ Admin's implicit model field and the identity-audit command. Those indirect
 rows are not added to the literal occurrence totals.
 
 ### 4.2 Active-code inventory (A–D)
+
+This table preserves the 5A pre-switch inventory and recommended routing.
+Implemented 5D results in section 11.3 supersede the readiness/reset/Admin
+“current” cells; workbook rows remain current until 5E.
 
 | Class | File / symbol | Current role | Current profile authority | Access / audience | Genericity | Signed or fingerprint impact | Recommended future action | Slice | Risk |
 |---|---|---|---|---|---|---|---|---|---|
@@ -539,7 +557,7 @@ Production prerequisite is still zero drift. Rollback is code-only.
 Not included: workbook/readiness/Admin adoption, automatic backfill, model
 fallback, legacy-field removal.
 
-### 11.3 `GENERIC-DEPLOYMENT-CONFIG.5D` — Readiness, bounded setup, and Admin consumer switch
+### 11.3 `GENERIC-DEPLOYMENT-CONFIG.5D` — Readiness, bounded setup, and Admin consumer switch — IMPLEMENTED / LOCAL VERIFIED
 
 Scope:
 
@@ -553,6 +571,31 @@ Scope:
   exact pair-write/clear, and one revision bump;
 - preserve ordinary forms and member presentation.
 
+Implemented result: readiness uses `SERVICE_PROFILE_READINESS_V2`, requires
+physical/recorded schema through `events/0012`, resolves the requested
+`ServiceProfile.key`, and selects canonical events by the resolved FK. Its JSON
+and text evidence include profile PK/key/type/active state plus each event's
+FK, canonical key, compatibility key, and classified 5C identity state.
+Legacy-only matching rows block readiness, profileless exact-time rows remain
+human-review evidence, and exact rows owned by another strict profile are never
+candidates.
+
+The retained Bethany 2026 TEST reset now resolves the exact active correct-type
+profile during preview and again inside apply before deletion. Its complete
+surface fingerprint binds both event identity fields and its
+`MO-S.6D-PROFILE-SETUP.1A-FU1-v2` approval binds the resolved profile's stable
+operational state. V1 tokens have no compatibility path. Replacement events use
+the 5C pair-write seam and remain creation revision 0; postconditions require
+the exact reviewed FK/key/type pair. No reset apply was run.
+
+ServiceEvent Admin now exposes active profiles plus the current inactive exact
+profile, makes `service_profile_key` read-only compatibility evidence, and
+rejects incompatible, inactive-new, or persisted drift states. The Admin form
+uses the shared non-saving 5C preparation primitive, then Django Admin performs
+one normal `ServiceEvent.save()`: existing changes advance one revision and new
+events remain revision 0. Ordinary and recurring ServiceEvent forms remain
+unchanged.
+
 Likely files: `events/service_profile_readiness.py`,
 `events/management/commands/audit_service_profile_readiness.py`,
 `events/service_profile_setup.py`,
@@ -561,10 +604,11 @@ Likely files: `events/service_profile_readiness.py`,
 focused test modules.
 
 Impact: no schema/migration and no automatic data mutation. Admin/readiness
-behavior changes. Reset V1 tokens fail closed; no reset apply is part of the
-implementation task. Production uses the existing mapped profile/FKs and needs
-only read-only pre/post audit. Rendered Admin QA is required because the Admin
-form changes.
+behavior changes. Reset V1 tokens fail closed; no reset apply was run. The
+workbook files, parsed/normalized/confirmation versions, matching, and
+current-truth validation remain unchanged for 5E. Therefore
+`runtime_consumer_switched` remains false globally. No production or rendered
+browser QA is claimed.
 
 Rollback/fail-closed: legacy field remains populated, so code rollback remains
 possible. New code fails closed on missing/mismatched FK. The setup command must
@@ -714,21 +758,21 @@ surfaces and must not be claimed unless performed.
 
 ## 15. Blockers and open decisions
 
-No architecture contradiction blocks 5B. Current repository truth matches the
-frozen architecture: 3A is additive, 4A supplies exact dual mapping/audit, and
-runtime consumers have not switched.
+No architecture contradiction blocked 5D. Current repository truth matches the
+frozen architecture: 3A is additive, 4A supplies exact dual mapping/audit, 5C
+supplies the shared seam, and 5D switches only the approved non-workbook
+consumers.
 
 Two bounded owner decisions remain, neither blocking registry implementation:
 
 1. **Lighting retention:** confirm operational value before team-key work or
    retirement. Until then it stays registered but disabled and unreachable.
-2. **Bethany TEST reset retention:** if operators still need the destructive
-   reset, 5D must make it FK/dual-safe and version its approval. If not, retire
-   it only through a separately approved cleanup rather than casual rewriting.
+2. **Bethany TEST reset retention:** 5D retains it as FK/dual-safe V2 tooling.
+   Retirement still requires a separately approved cleanup.
 
-5B and 5C are complete and locally verified. The 5D readiness/setup/Admin
-consumer switch and 5E workbook/signing switch remain separately approved
-tasks and were not started. Before deploying 5B where the current SVCA
+5B, 5C, and 5D are complete and locally verified. The 5E workbook/signing
+switch remains pending and was not started; overall
+`runtime_consumer_switched` therefore remains false. Before deploying 5B where the current SVCA
 workbook workflow must remain available, configure
 `CMS_ENABLED_INTEGRATIONS = ["svca_bethany_2026_worship_xlsx"]` before or
 atomically with the code release. Do not enable the Lighting key without the

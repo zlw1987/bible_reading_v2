@@ -5,8 +5,9 @@ import re
 from datetime import time
 
 from django.core.management.base import BaseCommand, CommandError
+from django.core.exceptions import ValidationError
 
-from events.models import ServiceEvent
+from events.models import ServiceEvent, ServiceProfile, validate_service_profile_key
 from events.service_profile_readiness import build_audit, render_text_report
 
 
@@ -21,7 +22,7 @@ class Command(BaseCommand):
         parser.add_argument(
             "--profile-key",
             default="bethany_0930_cm",
-            help="Persisted ServiceEvent profile key (default: bethany_0930_cm).",
+            help="Persisted ServiceProfile key (default: bethany_0930_cm).",
         )
         parser.add_argument(
             "--year",
@@ -49,14 +50,16 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         profile_key = options["profile_key"]
-        if not profile_key or not re.fullmatch(r"[a-z0-9_.-]+", profile_key):
+        try:
+            canonical_profile_key = validate_service_profile_key(profile_key)
+        except ValidationError as exc:
             raise CommandError(
                 "--profile-key must use lowercase ASCII letters, digits, "
                 "underscores, hyphens, or periods."
-            )
-        profile_key_max_length = ServiceEvent._meta.get_field(
-            "service_profile_key"
-        ).max_length
+            ) from exc
+        if canonical_profile_key != profile_key:
+            raise CommandError("--profile-key must already be canonical.")
+        profile_key_max_length = ServiceProfile._meta.get_field("key").max_length
         if len(profile_key) > profile_key_max_length:
             raise CommandError(
                 f"--profile-key must be at most {profile_key_max_length} characters."

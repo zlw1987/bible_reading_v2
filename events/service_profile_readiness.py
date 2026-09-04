@@ -12,15 +12,24 @@ from datetime import date, datetime, time, timedelta
 
 from django.db import connection
 from django.db.migrations.recorder import MigrationRecorder
+from django.core.exceptions import ValidationError
 from django.utils import timezone
 
-from .models import ServiceEvent
+from .models import ServiceEvent, ServiceProfile, validate_service_profile_key
+from .service_profile_runtime import (
+    ServiceProfileIdentityState,
+    inspect_service_profile_identity,
+)
+
+
+SERVICE_PROFILE_READINESS_CONTRACT_VERSION = "SERVICE_PROFILE_READINESS_V2"
 
 
 REQUIRED_EVENT_MIGRATIONS = (
     ("0009_serviceeventplannerassignment", "events_serviceeventplannerassignment"),
     ("0010_serviceevent_scheduling_revision", "scheduling_revision"),
     ("0011_serviceevent_service_profile_key", "service_profile_key"),
+    ("0012_serviceprofile_serviceevent_service_profile", "service_profile_id"),
 )
 
 
@@ -63,6 +72,11 @@ def get_schema_readiness():
         for migration_name, schema_target in REQUIRED_EVENT_MIGRATIONS:
             if migration_name == "0009_serviceeventplannerassignment":
                 schema_present = schema_target in tables
+            elif migration_name == "0012_serviceprofile_serviceevent_service_profile":
+                schema_present = (
+                    ServiceProfile._meta.db_table in tables
+                    and schema_target in event_columns
+                )
             else:
                 schema_present = schema_target in event_columns
             result["checks"].append(
@@ -70,6 +84,19 @@ def get_schema_readiness():
                     "migration": f"events.{migration_name}",
                     "applied": ("events", migration_name) in applied,
                     "schema_present": schema_present,
+                    **(
+                        {
+                            "service_profile_table_present": (
+                                ServiceProfile._meta.db_table in tables
+                            ),
+                            "service_profile_id_column_present": (
+                                "service_profile_id" in event_columns
+                            ),
+                        }
+                        if migration_name
+                        == "0012_serviceprofile_serviceevent_service_profile"
+                        else {}
+                    ),
                 }
             )
         result["ready"] = all(
@@ -161,7 +188,12 @@ def _event_evidence(
 ):
     local_start = _local_datetime(event.start_datetime)
     audience = service_event_audience_readiness(event)
+    profile_identity = inspect_service_profile_identity(event)
     identity_issues = []
+    if tagged and not profile_identity.is_exact:
+        identity_issues.append(
+            f"service_profile_identity_{profile_identity.state.value}"
+        )
     if event.event_type != expected_event_type:
         identity_issues.append("wrong_event_type")
     if local_start.date() not in expected_dates:
@@ -193,13 +225,17 @@ def _event_evidence(
         "location": event.location,
         "host_language_unit": _unit_evidence(host) if host else None,
         "audience": audience,
-        "service_profile_key": event.service_profile_key,
+        "service_profile_id": profile_identity.profile_id,
+        "canonical_profile_key": profile_identity.profile_key,
+        "compatibility_key": profile_identity.compatibility_key,
+        "service_profile_key": profile_identity.compatibility_key,
+        "identity_state": profile_identity.state.value,
         "selected_worship_team": (
             {"id": selected_team.pk, "name": selected_team.name}
             if selected_team
             else None
         ),
-        "identity_exact": not identity_issues,
+        "identity_exact": profile_identity.is_exact and not identity_issues,
         "identity_issues": identity_issues,
         "readiness_issues": readiness_issues,
         "row_ready": not readiness_issues,
@@ -211,11 +247,17 @@ def _event_evidence(
         ),
     }
     if tagged:
-        evidence["classification"] = (
-            "EXACT READY MATCH"
-            if evidence["row_ready"]
-            else "PROFILE-TAGGED ROW NOT READY"
-        )
+        if not profile_identity.is_exact:
+            evidence["classification"] = (
+                "CANONICAL FK ROW DRIFT / "
+                + profile_identity.state.value.upper().replace("_", "-")
+            )
+        else:
+            evidence["classification"] = (
+                "EXACT READY MATCH"
+                if evidence["row_ready"]
+                else "CANONICAL PROFILE ROW NOT READY"
+            )
     else:
         evidence["classification"] = (
             "UNTAGGED CANDIDATE / HUMAN REVIEW REQUIRED"
@@ -228,6 +270,7 @@ def _other_profile_exact_time_evidence(event):
 
     local_start = _local_datetime(event.start_datetime)
     host = event.host_language_unit
+    identity = inspect_service_profile_identity(event)
     return {
         "id": event.pk,
         "local_date": local_start.date().isoformat(),
@@ -238,11 +281,39 @@ def _other_profile_exact_time_evidence(event):
         "location": event.location,
         "host_language_unit": _unit_evidence(host) if host else None,
         "audience": service_event_audience_readiness(event),
-        "service_profile_key": event.service_profile_key,
+        "service_profile_id": identity.profile_id,
+        "canonical_profile_key": identity.profile_key,
+        "compatibility_key": identity.compatibility_key,
+        "service_profile_key": identity.compatibility_key,
+        "identity_state": identity.state.value,
         "classification": (
             "EXACT-TIME EVENT OWNED BY ANOTHER PROFILE — NOT A CANDIDATE"
         ),
     }
+
+
+def _transition_evidence(
+    event,
+    *,
+    expected_dates,
+    expected_time,
+    expected_event_type,
+):
+    evidence = _event_evidence(
+        event,
+        expected_dates=expected_dates,
+        expected_time=expected_time,
+        expected_event_type=expected_event_type,
+        tagged=False,
+    )
+    state = evidence["identity_state"]
+    if state == ServiceProfileIdentityState.LEGACY_ONLY.value:
+        evidence["classification"] = "LEGACY-ONLY / MISSING CANONICAL FK"
+    else:
+        evidence["classification"] = (
+            "SERVICE PROFILE IDENTITY DRIFT / " + state.upper().replace("_", "-")
+        )
+    return evidence
 
 
 def _empty_summary():
@@ -264,6 +335,9 @@ def _empty_summary():
         "single_untagged_candidate_sundays": None,
         "multiple_untagged_candidate_sundays": None,
         "other_profile_exact_time_events": None,
+        "legacy_only_matching_key_rows": None,
+        "drifted_canonical_rows": None,
+        "transition_blocker_rows": None,
     }
 
 
@@ -274,19 +348,28 @@ def build_audit(*, profile_key, year, target_time, event_type):
     expected_dates = set(expected_sundays)
     schema = get_schema_readiness()
     audit = {
-        "audit": "MO-S.6D-PROFILE-SETUP.0A",
+        "audit": SERVICE_PROFILE_READINESS_CONTRACT_VERSION,
+        "contract_version": SERVICE_PROFILE_READINESS_CONTRACT_VERSION,
         "mode": "read-only",
         "profile": {
+            "profile_id": None,
             "profile_key": profile_key,
+            "profile_event_type": None,
+            "profile_is_active": None,
             "year": year,
             "local_time": target_time.isoformat(timespec="minutes"),
             "event_type": event_type,
             "timezone": str(timezone.get_current_timezone()),
         },
+        "profile_resolution": {
+            "resolved": False,
+            "issues": [],
+        },
         "expected_sundays": [value.isoformat() for value in expected_sundays],
         "expected_sunday_count": len(expected_sundays),
         "schema": schema,
         "canonical_tagged_rows": [],
+        "legacy_only_rows": [],
         "sundays": [],
         "summary": _empty_summary(),
         "recommendation": "NOT READY FOR SLICE 8 REAL-DATA MATCHING",
@@ -294,14 +377,64 @@ def build_audit(*, profile_key, year, target_time, event_type):
     if not schema["ready"]:
         return audit
 
+    try:
+        canonical_requested_key = validate_service_profile_key(profile_key)
+    except ValidationError:
+        audit["profile_resolution"]["issues"].append(
+            "requested_profile_key_invalid"
+        )
+        return audit
+    if canonical_requested_key != profile_key:
+        audit["profile_resolution"]["issues"].append(
+            "requested_profile_key_not_canonical"
+        )
+        return audit
+
+    profile = ServiceProfile.objects.filter(key=profile_key).first()
+    if profile is None:
+        audit["profile_resolution"]["issues"].append(
+            "requested_service_profile_missing"
+        )
+        return audit
+
+    audit["profile"].update(
+        {
+            "profile_id": profile.pk,
+            "profile_key": profile.key,
+            "profile_event_type": profile.event_type,
+            "profile_is_active": profile.is_active,
+        }
+    )
+    if profile.event_type != event_type:
+        audit["profile_resolution"]["issues"].append(
+            "requested_service_profile_event_type_mismatch"
+        )
+    if not profile.is_active:
+        audit["profile_resolution"]["issues"].append(
+            "requested_service_profile_inactive"
+        )
+    if audit["profile_resolution"]["issues"]:
+        return audit
+    audit["profile_resolution"]["resolved"] = True
+
     start, end = _local_year_bounds(year)
     related = (
+        "service_profile",
         "host_language_unit",
         "rotation_anchor_team",
     )
     prefetch = "audience_scope_links__unit"
     tagged_events = list(
-        ServiceEvent.objects.filter(service_profile_key=profile_key)
+        ServiceEvent.objects.filter(service_profile=profile)
+        .select_related(*related)
+        .prefetch_related(prefetch)
+        .order_by("start_datetime", "id")
+    )
+    legacy_only_events = list(
+        ServiceEvent.objects.filter(
+            service_profile__isnull=True,
+            service_profile_key=profile.key,
+        )
         .select_related(*related)
         .prefetch_related(prefetch)
         .order_by("start_datetime", "id")
@@ -328,6 +461,16 @@ def build_audit(*, profile_key, year, target_time, event_type):
         for event in tagged_events
     ]
     audit["canonical_tagged_rows"] = tagged_facts
+    legacy_only_facts = [
+        _transition_evidence(
+            event,
+            expected_dates=expected_dates,
+            expected_time=target_time,
+            expected_event_type=event_type,
+        )
+        for event in legacy_only_events
+    ]
+    audit["legacy_only_rows"] = legacy_only_facts
     tagged_by_date = defaultdict(list)
     exact_by_date = defaultdict(list)
     for fact in tagged_facts:
@@ -347,15 +490,51 @@ def build_audit(*, profile_key, year, target_time, event_type):
         tagged_for_date = tagged_by_date[date_key]
         exact_for_date = exact_by_date[date_key]
         day_services = services_by_date[date_key]
+        exact_time_events = [
+            event
+            for event in day_services
+            if _local_datetime(event.start_datetime).time().replace(tzinfo=None)
+            == target_time
+        ]
+        exact_time_identities = [
+            (event, inspect_service_profile_identity(event))
+            for event in exact_time_events
+        ]
         other_profile_exact_time_events = [
             _other_profile_exact_time_evidence(event)
-            for event in day_services
-            if event.service_profile_key
-            and event.service_profile_key != profile_key
-            and _local_datetime(event.start_datetime)
-            .time()
-            .replace(tzinfo=None)
-            == target_time
+            for event, identity in exact_time_identities
+            if identity.is_exact and identity.profile_id != profile.pk
+        ]
+        legacy_only_matches = [
+            _transition_evidence(
+                event,
+                expected_dates=expected_dates,
+                expected_time=target_time,
+                expected_event_type=event_type,
+            )
+            for event, identity in exact_time_identities
+            if identity.state == ServiceProfileIdentityState.LEGACY_ONLY
+            and identity.compatibility_key == profile.key
+        ]
+        drifted_exact_time_events = [
+            _transition_evidence(
+                event,
+                expected_dates=expected_dates,
+                expected_time=target_time,
+                expected_event_type=event_type,
+            )
+            for event, identity in exact_time_identities
+            if identity.state
+            in {
+                ServiceProfileIdentityState.LEGACY_ONLY,
+                ServiceProfileIdentityState.FK_KEY_MISMATCH,
+                ServiceProfileIdentityState.FK_BLANK_KEY,
+                ServiceProfileIdentityState.EVENT_TYPE_MISMATCH,
+            }
+            and not (
+                identity.state == ServiceProfileIdentityState.LEGACY_ONLY
+                and identity.compatibility_key == profile.key
+            )
         ]
         candidates = []
         if not exact_for_date:
@@ -367,12 +546,8 @@ def build_audit(*, profile_key, year, target_time, event_type):
                     expected_event_type=event_type,
                     tagged=False,
                 )
-                for event in day_services
-                if not event.service_profile_key
-                and _local_datetime(event.start_datetime)
-                .time()
-                .replace(tzinfo=None)
-                == target_time
+                for event, identity in exact_time_identities
+                if identity.state == ServiceProfileIdentityState.PROFILELESS
             ]
         other_services = []
         for event in day_services:
@@ -390,6 +565,10 @@ def build_audit(*, profile_key, year, target_time, event_type):
 
         if len(exact_for_date) > 1 or len(tagged_for_date) > 1:
             classification = "DUPLICATE CANONICAL PROFILE ROWS"
+        elif legacy_only_matches:
+            classification = "LEGACY-ONLY / MISSING CANONICAL FK"
+        elif drifted_exact_time_events:
+            classification = "SERVICE PROFILE IDENTITY DRIFT — NOT READY"
         elif exact_for_date:
             classification = (
                 "CANONICAL PROFILE READY"
@@ -417,8 +596,12 @@ def build_audit(*, profile_key, year, target_time, event_type):
                 "other_profile_exact_time_count": len(
                     other_profile_exact_time_events
                 ),
+                "legacy_only_matching_key_count": len(legacy_only_matches),
+                "drifted_exact_time_count": len(drifted_exact_time_events),
                 "other_requested_type_different_time_count": len(other_services),
                 "candidates": candidates,
+                "legacy_only_matching_key_events": legacy_only_matches,
+                "drifted_exact_time_events": drifted_exact_time_events,
                 "other_profile_exact_time_events": other_profile_exact_time_events,
                 "other_requested_type_different_time_events": other_services,
             }
@@ -483,6 +666,16 @@ def build_audit(*, profile_key, year, target_time, event_type):
         "other_profile_exact_time_events": sum(
             row["other_profile_exact_time_count"] for row in sunday_rows
         ),
+        "legacy_only_matching_key_rows": len(legacy_only_facts),
+        "drifted_canonical_rows": sum(
+            fact["identity_state"] != ServiceProfileIdentityState.EXACT.value
+            for fact in tagged_facts
+        ),
+        "transition_blocker_rows": sum(
+            row["legacy_only_matching_key_count"]
+            + row["drifted_exact_time_count"]
+            for row in sunday_rows
+        ),
     }
     audit["summary"] = summary
     if (
@@ -490,6 +683,9 @@ def build_audit(*, profile_key, year, target_time, event_type):
         and summary["canonical_tagged_rows"] == len(expected_sundays)
         and summary["duplicate_canonical_sundays"] == 0
         and summary["wrong_time_type_or_date_profile_tagged_rows"] == 0
+        and summary["legacy_only_matching_key_rows"] == 0
+        and summary["drifted_canonical_rows"] == 0
+        and summary["transition_blocker_rows"] == 0
     ):
         audit["recommendation"] = "PROFILE SETUP READY"
     return audit
@@ -499,10 +695,10 @@ def render_text_report(audit):
     """Render staff/operator text; never includes roster or user data."""
 
     lines = [
-        "Service profile readiness audit (MO-S.6D-PROFILE-SETUP.0A, read-only)",
+        "Service profile readiness audit (SERVICE_PROFILE_READINESS_V2, read-only)",
         "=" * 78,
         "mode: read-only (no --apply exists; no data was changed)",
-        f"profile: {audit['profile']['profile_key']}",
+        f"requested profile key: {audit['profile']['profile_key']}",
         f"contract: {audit['profile']['year']} Sundays, "
         f"{audit['profile']['local_time']} {audit['profile']['timezone']}, "
         f"event_type={audit['profile']['event_type']}",
@@ -520,6 +716,21 @@ def render_text_report(audit):
     lines.append(f"  schema: {'READY' if audit['schema']['ready'] else 'NOT READY'}")
     lines.append("")
 
+    profile = audit["profile"]
+    resolution = audit["profile_resolution"]
+    lines.extend(
+        [
+            "Target ServiceProfile:",
+            f"  resolved: {'YES' if resolution['resolved'] else 'NO'}",
+            f"  profile_id: {profile['profile_id']}",
+            f"  profile_key: {profile['profile_key']}",
+            f"  profile_event_type: {profile['profile_event_type']}",
+            f"  profile_is_active: {profile['profile_is_active']}",
+            "  issues: " + (",".join(resolution["issues"]) or "none"),
+            "",
+        ]
+    )
+
     if not audit["summary"]["data_audit_performed"]:
         lines.extend(
             [
@@ -531,7 +742,7 @@ def render_text_report(audit):
         )
         return "\n".join(lines)
 
-    lines.append("Canonical profile-tagged rows:")
+    lines.append("Canonical FK-selected profile rows:")
     if not audit["canonical_tagged_rows"]:
         lines.append("  (none)")
     for fact in audit["canonical_tagged_rows"]:
@@ -539,6 +750,10 @@ def render_text_report(audit):
         lines.append(
             f"  event_id={fact['id']} local={fact['local_date']} "
             f"{fact['local_time']} type={fact['event_type']} status={fact['status']} "
+            f"service_profile_id={fact['service_profile_id']} "
+            f"canonical_key={fact['canonical_profile_key']!r} "
+            f"compatibility_key={fact['compatibility_key']!r} "
+            f"identity_state={fact['identity_state']} "
             f"audience_rows={fact['audience']['row_count']} "
             f"audience_ready={'YES' if fact['audience']['ready'] else 'NO'} "
             f"classification={fact['classification']} issues={issues}"
@@ -549,12 +764,26 @@ def render_text_report(audit):
                 f"active={'YES' if unit['is_active'] else 'NO'} path={unit['path']!r}"
             )
 
+    lines.append("")
+    lines.append("Legacy-only matching-key transition blockers:")
+    if not audit["legacy_only_rows"]:
+        lines.append("  (none)")
+    for fact in audit["legacy_only_rows"]:
+        lines.append(
+            f"  event_id={fact['id']} local={fact['local_date']} "
+            f"{fact['local_time']} service_profile_id=None "
+            f"compatibility_key={fact['compatibility_key']!r} "
+            "classification=LEGACY-ONLY / MISSING CANONICAL FK"
+        )
+
     lines.extend(["", "Expected Sunday matrix:"])
     for row in audit["sundays"]:
         lines.append(
             f"  {row['date']}: tagged={row['canonical_tagged_profile_matches']} "
             f"untagged_exact_time={row['untagged_exact_time_candidates']} "
             f"other_profile_exact_time={row['other_profile_exact_time_count']} "
+            f"legacy_only={row['legacy_only_matching_key_count']} "
+            f"identity_drift={row['drifted_exact_time_count']} "
             f"other_requested_type_times="
             f"{row['other_requested_type_different_time_count']} "
             f"— {row['classification']}"
@@ -591,6 +820,20 @@ def render_text_report(audit):
                     f"active={'YES' if unit['is_active'] else 'NO'} "
                     f"path={unit['path']!r}"
                 )
+        for blocker in row["legacy_only_matching_key_events"]:
+            lines.append(
+                "    LEGACY-ONLY / MISSING CANONICAL FK: "
+                f"event_id={blocker['id']} compatibility_key="
+                f"{blocker['compatibility_key']!r}"
+            )
+        for blocker in row["drifted_exact_time_events"]:
+            lines.append(
+                "    SERVICE PROFILE IDENTITY DRIFT: "
+                f"event_id={blocker['id']} state={blocker['identity_state']} "
+                f"service_profile_id={blocker['service_profile_id']} "
+                f"canonical_key={blocker['canonical_profile_key']!r} "
+                f"compatibility_key={blocker['compatibility_key']!r}"
+            )
         for other_profile_event in row["other_profile_exact_time_events"]:
             host = other_profile_event["host_language_unit"]
             lines.append(
@@ -667,6 +910,10 @@ def render_text_report(audit):
             f"{summary['multiple_untagged_candidate_sundays']}",
             f"  Other-profile exact-time events: "
             f"{summary['other_profile_exact_time_events']}",
+            f"  Legacy-only matching-key blockers: "
+            f"{summary['legacy_only_matching_key_rows']}",
+            f"  Drifted canonical rows: {summary['drifted_canonical_rows']}",
+            f"  Transition blocker rows: {summary['transition_blocker_rows']}",
             f"  Recommendation: {audit['recommendation']}",
             "",
             "READ-ONLY: no event, profile key, scheduling revision, audience, "

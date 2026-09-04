@@ -28,11 +28,16 @@ from .models import (
     ServiceEventAudienceScope,
     ServiceEventPlannerAssignment,
     ServiceEventRequiredTeam,
+    ServiceProfile,
 )
 from .service_profile_readiness import (
     build_audit,
     build_expected_sundays,
     get_schema_readiness,
+)
+from .service_profile_runtime import (
+    inspect_service_profile_identity,
+    set_service_event_profile,
 )
 
 
@@ -54,7 +59,7 @@ DELETE_COUNT_MODEL_LABELS = {
 
 ROOT_CODE = "CHURCH"
 AUDIENCE_CODE = "CM"
-RESET_APPROVAL_CONTRACT_VERSION = "MO-S.6D-PROFILE-SETUP.1A-FU1-v1"
+RESET_APPROVAL_CONTRACT_VERSION = "MO-S.6D-PROFILE-SETUP.1A-FU1-v2"
 RESET_APPROVAL_TOKEN_LENGTH = 16
 
 
@@ -68,6 +73,28 @@ class ProfileSetupPrerequisiteError(ProfileSetupError):
 
 class ProfileSetupPostconditionError(ProfileSetupError):
     """The rebuilt dataset failed its in-transaction acceptance checks."""
+
+
+def resolve_reviewed_service_profile():
+    """Resolve the exact active, correct-type Bethany test-data profile."""
+
+    profile = ServiceProfile.objects.filter(key=PROFILE_KEY).first()
+    if profile is None:
+        raise ProfileSetupPrerequisiteError(
+            f"Required ServiceProfile key {PROFILE_KEY!r} does not exist. "
+            "No ServiceEvent was deleted."
+        )
+    if not profile.is_active:
+        raise ProfileSetupPrerequisiteError(
+            f"Required ServiceProfile key {PROFILE_KEY!r} is inactive. "
+            "No ServiceEvent was deleted."
+        )
+    if profile.event_type != PROFILE_EVENT_TYPE:
+        raise ProfileSetupPrerequisiteError(
+            f"Required ServiceProfile key {PROFILE_KEY!r} has the wrong event "
+            "type. No ServiceEvent was deleted."
+        )
+    return profile
 
 
 def _stable_value(value):
@@ -187,6 +214,7 @@ def build_existing_dataset_snapshot():
             "pk",
             "start_datetime",
             "status",
+            "service_profile_id",
             "service_profile_key",
             "title",
         )
@@ -202,6 +230,7 @@ def build_existing_dataset_snapshot():
             ServiceEvent.objects.all(),
             "pk",
             "event_type",
+            "service_profile_id",
             "service_profile_key",
             "start_datetime",
             "end_datetime",
@@ -323,6 +352,12 @@ def build_reset_approval(preview):
     payload = {
         "contract_version": RESET_APPROVAL_CONTRACT_VERSION,
         "reset_surface_sha256": preview["before"]["fingerprint"],
+        "target_profile": {
+            "profile_id": preview["profile"].pk,
+            "profile_key": preview["profile"].key,
+            "profile_event_type": preview["profile"].event_type,
+            "profile_is_active": preview["profile"].is_active,
+        },
         "audience_path": [
             {
                 "pk": unit.pk,
@@ -358,12 +393,14 @@ def build_reset_preview(*, today=None):
     schema = get_schema_readiness()
     if not schema["ready"]:
         raise ProfileSetupPrerequisiteError(
-            "Required events migrations/schema through events/0011 are not ready. "
+            "Required events migrations/schema through events/0012 are not ready. "
             "No ServiceEvent ORM reset query was attempted."
         )
+    profile = resolve_reviewed_service_profile()
     audience = resolve_bethany_cm_audience()
     preview = {
         "schema": schema,
+        "profile": profile,
         "audience": audience,
         "before": build_existing_dataset_snapshot(),
         "replacement": build_replacement_preview(today=today),
@@ -372,10 +409,10 @@ def build_reset_preview(*, today=None):
     return preview
 
 
-def _dataset_is_canonical(*, audience, today):
+def _dataset_is_canonical(*, profile, audience, today):
     expected_sundays = build_expected_sundays(PROFILE_YEAR)
     events = list(
-        ServiceEvent.objects.select_related("host_language_unit")
+        ServiceEvent.objects.select_related("service_profile", "host_language_unit")
         .prefetch_related("audience_scope_links")
         .order_by("start_datetime", "pk")
     )
@@ -389,6 +426,7 @@ def _dataset_is_canonical(*, audience, today):
         return False
 
     for event, sunday in zip(events, expected_sundays):
+        profile_identity = inspect_service_profile_identity(event)
         local_start = timezone.localtime(
             event.start_datetime,
             timezone.get_current_timezone(),
@@ -401,7 +439,10 @@ def _dataset_is_canonical(*, audience, today):
             or event.description
             or event.description_en
             or event.event_type != PROFILE_EVENT_TYPE
-            or event.service_profile_key != PROFILE_KEY
+            or not profile_identity.is_exact
+            or profile_identity.profile_id != profile.pk
+            or profile_identity.profile_key != profile.key
+            or profile_identity.compatibility_key != profile.key
             or event.end_datetime is not None
             or event.location
             or event.meeting_link
@@ -421,22 +462,22 @@ def _dataset_is_canonical(*, audience, today):
     return True
 
 
-def _create_canonical_event(*, sunday, audience, today):
-    event = ServiceEvent.objects.create(
+def _create_canonical_event(*, sunday, profile, audience, today):
+    event = ServiceEvent(
         title=PROFILE_TITLE,
         title_en=PROFILE_TITLE_EN,
         event_type=PROFILE_EVENT_TYPE,
-        service_profile_key=PROFILE_KEY,
         start_datetime=_canonical_start(sunday),
         host_language_unit=audience,
         status=_expected_status(sunday, today=today),
     )
+    set_service_event_profile(event, profile)
     ServiceEventAudienceScope.objects.create(service_event=event, unit=audience)
     return event
 
 
-def verify_postconditions(*, audience, today):
-    if not _dataset_is_canonical(audience=audience, today=today):
+def verify_postconditions(*, profile, audience, today):
+    if not _dataset_is_canonical(profile=profile, audience=audience, today=today):
         raise ProfileSetupPostconditionError(
             "Canonical ServiceEvent postconditions failed; the reset transaction "
             "will be rolled back."
@@ -474,8 +515,11 @@ def apply_reset(*, expected_reset_token, today=None):
                 "was changed."
             )
         audience = preview["audience"]
-        if _dataset_is_canonical(audience=audience, today=today):
-            audit = verify_postconditions(audience=audience, today=today)
+        profile = preview["profile"]
+        if _dataset_is_canonical(profile=profile, audience=audience, today=today):
+            audit = verify_postconditions(
+                profile=profile, audience=audience, today=today
+            )
             zero_deleted = {
                 key: 0 for key in preview["before"]["counts"]
             }
@@ -500,10 +544,15 @@ def apply_reset(*, expected_reset_token, today=None):
                 )
         created = 0
         for sunday in build_expected_sundays(PROFILE_YEAR):
-            _create_canonical_event(sunday=sunday, audience=audience, today=today)
+            _create_canonical_event(
+                sunday=sunday,
+                profile=profile,
+                audience=audience,
+                today=today,
+            )
             created += 1
 
-        audit = verify_postconditions(audience=audience, today=today)
+        audit = verify_postconditions(profile=profile, audience=audience, today=today)
         return {
             "no_op": False,
             "data_mutated": True,

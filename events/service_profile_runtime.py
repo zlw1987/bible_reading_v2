@@ -169,10 +169,14 @@ def _save_identity_pair(event):
         )
 
 
-def set_service_event_profile(event, profile):
-    """Assign an explicit active profile and persist the exact identity pair.
+def prepare_service_event_profile(event, profile, *, target_event_type=None):
+    """Validate and prepare an exact identity pair without saving ``event``.
 
-    Returns ``True`` when the event is saved and ``False`` for an exact
+    ``target_event_type`` lets a form validate the submitted event type before
+    Django constructs the remaining model fields.  Existing callers omit it
+    and validate against the event's current type.
+
+    Returns ``True`` when the in-memory pair changed and ``False`` for an exact
     persisted same-profile no-op. A compatible legacy-only event may be
     assigned only when the caller supplies the actual profile and its key
     exactly matches the stored compatibility key.
@@ -187,18 +191,18 @@ def set_service_event_profile(event, profile):
             ServiceProfileMutationFailure.INVALID_PROFILE,
         )
 
+    effective_event_type = target_event_type or event.event_type
+    if profile.event_type != effective_event_type:
+        raise ServiceProfileMutationError(
+            identity,
+            ServiceProfileMutationFailure.EVENT_TYPE_MISMATCH,
+        )
     if (
         not event._state.adding
         and identity.is_exact
         and identity.profile_id == profile.pk
     ):
         return False
-
-    if profile.event_type != event.event_type:
-        raise ServiceProfileMutationError(
-            identity,
-            ServiceProfileMutationFailure.EVENT_TYPE_MISMATCH,
-        )
     if not profile.is_active:
         raise ServiceProfileMutationError(
             identity,
@@ -215,12 +219,11 @@ def set_service_event_profile(event, profile):
 
     event.service_profile = profile
     event.service_profile_key = profile.key
-    _save_identity_pair(event)
     return True
 
 
-def clear_service_event_profile(event):
-    """Clear an exact identity pair; refuse to erase transition/drift evidence."""
+def prepare_clear_service_event_profile(event):
+    """Prepare a clear without saving; preserve transition/drift evidence."""
 
     identity = inspect_service_profile_identity(event)
     _reject_invalid_mutation_start(identity)
@@ -235,5 +238,22 @@ def clear_service_event_profile(event):
 
     event.service_profile = None
     event.service_profile_key = ""
-    _save_identity_pair(event)
     return True
+
+
+def set_service_event_profile(event, profile):
+    """Assign an explicit active profile and persist the exact identity pair."""
+
+    changed = prepare_service_event_profile(event, profile)
+    if changed:
+        _save_identity_pair(event)
+    return changed
+
+
+def clear_service_event_profile(event):
+    """Clear an exact identity pair; refuse to erase transition/drift evidence."""
+
+    changed = prepare_clear_service_event_profile(event)
+    if changed:
+        _save_identity_pair(event)
+    return changed

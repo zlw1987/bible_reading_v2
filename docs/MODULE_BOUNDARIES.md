@@ -47,8 +47,10 @@ explicit opt-in deployment adapters. It does not introduce multi-tenancy or a
 plugin framework. `GENERIC-DEPLOYMENT-CONFIG.5B` now implements the static
 default-off integration registry, gates the named Worship XLSX and Lighting
 web/command surfaces, and isolates adapter imports from generic events/ministry
-imports. Default/materialization and ServiceProfile consumer-switch proposals
-remain runtime unimplemented pending separately approved slices.
+ imports. Profile defaults/materialization remain runtime unimplemented. 5D has
+ switched readiness, the retained bounded reset, and ServiceEvent Admin to
+ FK/Profile authority; workbook matching/signing and overall consumer-switch
+ closure remain pending 5E/5F.
 `GENERIC-DEPLOYMENT-CONFIG.1A` now implements the additive nullable
 `MinistryTeam.team_key` identity foundation, bounded staff/Admin setup, and a
 read-only inventory, and `GENERIC-DEPLOYMENT-CONFIG.2A` implements the generic
@@ -73,11 +75,11 @@ no normal-local or production mapping; the product owner later completed and
 independently audited the reviewed SVCA production apply. Production now has
 one reviewed profile, 52 exact dual-consistent mapped events, zero identity
 drift, and exact `1 -> 2` once-only scheduling-revision advances. This is
-deployment-specific evidence only. `runtime_consumer_switched` is false, so
-current readiness/setup/workbook/Admin/signing and other operational identity
-consumers still use `service_profile_key`; 5B changes only integration
-enablement/import boundaries, and the ServiceProfile consumer switch remains
-pending. The current SVCA deployment must explicitly enable
+deployment-specific evidence only. 5D switches readiness, the retained bounded
+reset, and ServiceEvent Admin to FK/Profile authority while keeping the
+compatibility key as read-only drift evidence. Workbook matching/signing stays
+legacy-authoritative pending 5E, so `runtime_consumer_switched` remains false
+globally and overall consumer-switch closure remains pending. The current SVCA deployment must explicitly enable
 `svca_bethany_2026_worship_xlsx` before or with 5B deployment if the annual
 workbook workflow must remain available. The Lighting key stays disabled until
 its separate retention/identity decision.

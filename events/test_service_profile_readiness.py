@@ -27,6 +27,7 @@ from .models import (
     ServiceEventAudienceScope,
     ServiceEventPlannerAssignment,
     ServiceEventRequiredTeam,
+    ServiceProfile,
 )
 from .service_profile_readiness import (
     build_audit,
@@ -48,6 +49,11 @@ class ServiceProfileReadinessAuditTests(TestCase):
             name="Whole Church",
             name_en="Whole Church",
         )
+        self.profile = ServiceProfile.objects.create(
+            key=self.PROFILE_KEY,
+            name="Bethany 09:30 Chinese",
+            event_type=ServiceEvent.EVENT_SUNDAY_SERVICE,
+        )
 
     def local_datetime(self, year, month, day, hour=9, minute=30):
         return timezone.make_aware(
@@ -62,9 +68,23 @@ class ServiceProfileReadinessAuditTests(TestCase):
             "start_datetime": self.local_datetime(2026, 1, 4),
             "status": ServiceEvent.STATUS_PUBLISHED,
             "service_profile_key": self.PROFILE_KEY,
+            "service_profile": self.profile,
         }
+        if (
+            "service_profile_key" in overrides
+            and "service_profile" not in overrides
+            and overrides["service_profile_key"] != self.PROFILE_KEY
+        ):
+            values["service_profile"] = None
         values.update(overrides)
         return ServiceEvent.objects.create(**values)
+
+    def make_other_profile(self, key, *, event_type=None):
+        return ServiceProfile.objects.create(
+            key=key,
+            name=key,
+            event_type=event_type or ServiceEvent.EVENT_SUNDAY_SERVICE,
+        )
 
     def add_audience(self, event, unit=None):
         return ServiceEventAudienceScope.objects.create(
@@ -88,7 +108,7 @@ class ServiceProfileReadinessAuditTests(TestCase):
         call_command("audit_service_profile_readiness", *args, stdout=out)
         return out.getvalue()
 
-    def test_schema_ready_database_reports_0009_0010_0011(self):
+    def test_schema_ready_database_reports_through_0012(self):
         schema = get_schema_readiness()
 
         self.assertTrue(schema["ready"])
@@ -98,6 +118,7 @@ class ServiceProfileReadinessAuditTests(TestCase):
                 "events.0009_serviceeventplannerassignment",
                 "events.0010_serviceevent_scheduling_revision",
                 "events.0011_serviceevent_service_profile_key",
+                "events.0012_serviceprofile_serviceevent_service_profile",
             ],
         )
         self.assertTrue(all(check["applied"] for check in schema["checks"]))
@@ -129,6 +150,84 @@ class ServiceProfileReadinessAuditTests(TestCase):
         )
         self.assertEqual(
             audit["recommendation"], "NOT READY FOR SLICE 8 REAL-DATA MATCHING"
+        )
+
+    def test_v2_canonical_evidence_uses_fk_profile_and_compatibility_state(self):
+        event = self.make_event()
+        self.add_audience(event)
+
+        audit = self.audit()
+        fact = audit["canonical_tagged_rows"][0]
+
+        self.assertEqual(audit["contract_version"], "SERVICE_PROFILE_READINESS_V2")
+        self.assertEqual(audit["profile"]["profile_id"], self.profile.pk)
+        self.assertEqual(audit["profile"]["profile_event_type"], self.profile.event_type)
+        self.assertTrue(audit["profile"]["profile_is_active"])
+        self.assertEqual(fact["service_profile_id"], self.profile.pk)
+        self.assertEqual(fact["canonical_profile_key"], self.profile.key)
+        self.assertEqual(fact["compatibility_key"], self.profile.key)
+        self.assertEqual(fact["identity_state"], "exact")
+
+    def test_legacy_only_matching_key_is_transition_blocker_not_canonical(self):
+        event = self.make_event(service_profile=None)
+        self.add_audience(event)
+
+        audit = self.audit()
+        row = self.day(audit)
+
+        self.assertEqual(audit["canonical_tagged_rows"], [])
+        self.assertEqual(audit["summary"]["canonical_identity_rows"], 0)
+        self.assertEqual(audit["summary"]["legacy_only_matching_key_rows"], 1)
+        self.assertEqual(row["classification"], "LEGACY-ONLY / MISSING CANONICAL FK")
+        self.assertEqual(
+            row["legacy_only_matching_key_events"][0]["classification"],
+            "LEGACY-ONLY / MISSING CANONICAL FK",
+        )
+        self.assertNotEqual(audit["recommendation"], "PROFILE SETUP READY")
+
+    def test_fk_blank_key_and_fk_key_mismatch_fail_closed(self):
+        cases = (("", "fk_blank_key"), ("other.profile", "fk_key_mismatch"))
+        for compatibility_key, state in cases:
+            with self.subTest(state=state):
+                event = self.make_event(title=state)
+                self.add_audience(event)
+                ServiceEvent.objects.filter(pk=event.pk).update(
+                    service_profile_key=compatibility_key
+                )
+
+                audit = self.audit()
+                fact = audit["canonical_tagged_rows"][0]
+                self.assertEqual(fact["identity_state"], state)
+                self.assertFalse(fact["row_ready"])
+                self.assertEqual(audit["summary"]["ready_exact_matches"], 0)
+
+                ServiceEvent.objects.all().delete()
+
+    def test_missing_inactive_and_type_conflicting_requested_profile_are_not_ready(self):
+        self.profile.delete()
+        missing = self.audit()
+        self.assertIn(
+            "requested_service_profile_missing",
+            missing["profile_resolution"]["issues"],
+        )
+        self.assertFalse(missing["summary"]["data_audit_performed"])
+
+        self.profile = self.make_other_profile(self.PROFILE_KEY)
+        self.profile.is_active = False
+        self.profile.save()
+        inactive = self.audit()
+        self.assertIn(
+            "requested_service_profile_inactive",
+            inactive["profile_resolution"]["issues"],
+        )
+
+        self.profile.is_active = True
+        self.profile.event_type = ServiceEvent.EVENT_BIBLE_STUDY
+        self.profile.save()
+        conflict = self.audit()
+        self.assertIn(
+            "requested_service_profile_event_type_mismatch",
+            conflict["profile_resolution"]["issues"],
         )
 
     def test_all_52_exact_audience_ready_rows_are_profile_setup_ready(self):
@@ -189,6 +288,10 @@ class ServiceProfileReadinessAuditTests(TestCase):
         self.assertEqual([item["id"] for item in row["candidates"]], [first.pk, second.pk])
 
     def test_explicit_nondefault_event_type_controls_cli_candidate_discovery(self):
+        special_profile = self.make_other_profile(
+            "bethany_0930_special",
+            event_type=ServiceEvent.EVENT_SPECIAL_MEETING,
+        )
         sunday_service = self.make_event(
             service_profile_key="",
             title="Sunday candidate",
@@ -205,6 +308,8 @@ class ServiceProfileReadinessAuditTests(TestCase):
             self.run_command(
                 "--event-type",
                 ServiceEvent.EVENT_SPECIAL_MEETING,
+                "--profile-key",
+                special_profile.key,
                 "--json",
             )
         )
@@ -235,8 +340,10 @@ class ServiceProfileReadinessAuditTests(TestCase):
         self.assertNotIn(special_meeting.pk, [item["id"] for item in row["candidates"]])
 
     def test_other_profile_exact_time_event_is_visible_but_never_a_candidate(self):
+        other_profile_record = self.make_other_profile("bethany_0930_em")
         other_profile = self.make_event(
             service_profile_key="bethany_0930_em",
+            service_profile=other_profile_record,
             title="Parallel English Service",
             location="Bethany Hall",
         )
@@ -267,8 +374,10 @@ class ServiceProfileReadinessAuditTests(TestCase):
 
     def test_candidate_and_other_profile_exact_time_counts_remain_separate(self):
         candidate = self.make_event(service_profile_key="", title="Candidate")
+        other_profile_record = self.make_other_profile("bethany_0930_em")
         other_profile = self.make_event(
             service_profile_key="bethany_0930_em",
+            service_profile=other_profile_record,
             title="Other profile",
         )
         self.add_audience(candidate)
@@ -285,12 +394,16 @@ class ServiceProfileReadinessAuditTests(TestCase):
         )
 
     def test_multiple_other_profile_exact_time_events_are_deterministic(self):
+        first_profile = self.make_other_profile("bethany_0930_em")
+        second_profile = self.make_other_profile("trivalley_0930_cm")
         first = self.make_event(
             service_profile_key="bethany_0930_em",
+            service_profile=first_profile,
             title="English Ministry",
         )
         second = self.make_event(
             service_profile_key="trivalley_0930_cm",
+            service_profile=second_profile,
             title="Tri-Valley",
         )
         self.add_audience(first)
@@ -330,7 +443,11 @@ class ServiceProfileReadinessAuditTests(TestCase):
         self.assertEqual(row["classification"], "NO 09:30 CANDIDATE")
 
     def test_wrong_event_type_tagged_profile_is_invalid(self):
-        event = self.make_event(event_type=ServiceEvent.EVENT_SPECIAL_MEETING)
+        event = self.make_event()
+        ServiceEvent.objects.filter(pk=event.pk).update(
+            event_type=ServiceEvent.EVENT_SPECIAL_MEETING
+        )
+        event.refresh_from_db()
         self.add_audience(event)
 
         fact = self.audit()["canonical_tagged_rows"][0]
@@ -483,6 +600,11 @@ class ServiceProfileReadinessAuditTests(TestCase):
                     "applied": False,
                     "schema_present": False,
                 },
+                {
+                    "migration": "events.0012_serviceprofile_serviceevent_service_profile",
+                    "applied": False,
+                    "schema_present": False,
+                },
             ],
             "error": "",
         }
@@ -497,6 +619,29 @@ class ServiceProfileReadinessAuditTests(TestCase):
         self.assertIn("ServiceEvent data audit: NOT EVALUATED", output)
         self.assertNotIn("no such column", output)
 
+    def test_schema_without_0012_is_not_ready_and_queries_no_profile_or_event(self):
+        schema = get_schema_readiness()
+        schema["ready"] = False
+        schema["checks"][-1] = {
+            **schema["checks"][-1],
+            "applied": False,
+            "schema_present": False,
+            "service_profile_table_present": False,
+            "service_profile_id_column_present": False,
+        }
+        with patch(
+            "events.service_profile_readiness.get_schema_readiness",
+            return_value=schema,
+        ), patch("events.service_profile_readiness.ServiceProfile.objects") as profiles, patch(
+            "events.service_profile_readiness.ServiceEvent.objects"
+        ) as events:
+            audit = self.audit()
+
+        self.assertFalse(audit["schema"]["ready"])
+        self.assertFalse(audit["summary"]["data_audit_performed"])
+        profiles.filter.assert_not_called()
+        events.filter.assert_not_called()
+
     def test_command_has_no_apply_option(self):
         from events.management.commands.audit_service_profile_readiness import Command
 
@@ -508,7 +653,7 @@ class ServiceProfileReadinessAuditTests(TestCase):
         self.assertIn("json", dests)
 
     def test_profile_key_longer_than_model_max_length_is_rejected(self):
-        max_length = ServiceEvent._meta.get_field("service_profile_key").max_length
+        max_length = ServiceProfile._meta.get_field("key").max_length
 
         with self.assertRaisesMessage(
             CommandError,
@@ -518,8 +663,10 @@ class ServiceProfileReadinessAuditTests(TestCase):
 
     def test_json_other_profile_evidence_excludes_private_event_data(self):
         private_user = User.objects.create_user(username="PRIVATE_OTHER_PROFILE_USER")
+        other_profile_record = self.make_other_profile("bethany_0930_em")
         other_profile = self.make_event(
             service_profile_key="bethany_0930_em",
+            service_profile=other_profile_record,
             title="Parallel Service",
             created_by=private_user,
             description="PRIVATE_OTHER_PROFILE_DESCRIPTION",
@@ -609,6 +756,7 @@ class ServiceProfileReadinessAuditTests(TestCase):
             ServiceEventAudienceScope,
             ServiceEventRequiredTeam,
             ServiceEventPlannerAssignment,
+            ServiceProfile,
             MinistryTeam,
             TeamAssignment,
             TeamAssignmentMember,

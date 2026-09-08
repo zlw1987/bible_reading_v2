@@ -152,6 +152,22 @@ true globally.
 Strongest current status: **`GENERIC-DEPLOYMENT-CONFIG.5F — PRODUCTION CLOSEOUT
 COMPLETE / VERIFIED`**.
 
+`GENERIC-DEPLOYMENT-CONFIG.6A` — **IMPLEMENTED / LOCAL VERIFIED** — adds the
+ministry-owned `ServiceProfileMinistryRequirement` configuration foundation,
+its Admin surface, typed read-only audit, and a bounded invalid-active blocker
+in the ministry setup-readiness provider. Active rows require an active
+Service Profile and an active assignable static Ministry Team; a Worship
+rotation pool and any assignable team resolving to one through the canonical
+active-primary Ministry Structure path are forbidden. Inactive rows retain
+history and must pass current validation before reactivation. Any requirement
+reference, active or inactive, makes the profile key/event type immutable
+through supported writes. Migration `ministry/0007` is schema-only and creates
+no rows. No default has been materialized into a ServiceEvent:
+`ServiceEventRequiredTeam` operational truth, scheduling revisions, event
+creation, Worship runtime/XLSX contracts, and `runtime_consumer_switched=true`
+are unchanged. Slice 7 materialization and MO-S.REQUIRED runtime remain
+pending; the Lighting Pilot remains retired.
+
 ### Historical production mapping: reviewed SVCA mapping only
 
 The following is deployment-specific production evidence, not generic CMS
@@ -423,7 +439,8 @@ creation may expose active-only profile choices with clear copy.
 
 ### 4.4 `ministry.ServiceProfileMinistryRequirement`
 
-The exact relationship name/owner is
+The exact relationship name/owner, implemented by
+`GENERIC-DEPLOYMENT-CONFIG.6A`, is
 **`ministry.ServiceProfileMinistryRequirement`**. The relationship belongs to
 ministry because it applies Ministry Team configuration and the module registry
 already declares `ministry -> events`.
@@ -619,7 +636,7 @@ no migration and no automatic data operation; separately reviewed SVCA
 production apply and independent post-audit complete for one exact mapping
 
 ministry/0006 + events/0012
-    -> future create ministry.ServiceProfileMinistryRequirement
+    -> ministry/0007 = implemented ServiceProfileMinistryRequirement
 ```
 
 The events profile migration does not depend on the new ministry relationship.
@@ -740,7 +757,7 @@ Each slice requires separate approval.
 | 3. Service Profile/FK expand | **IMPLEMENTED / LOCAL VERIFIED (`GENERIC-DEPLOYMENT-CONFIG.3A`)**: exact frozen profile model, nullable protected FK, validation/immutability/revision/Admin foundations, additive migration, and disposable migration proof; legacy string remains authoritative and no rows/FKs were created or backfilled by 3A. LOW-MEDIUM. | Profile rows required review before creation; Slice 4 was the separately reviewed mapping/backfill gate. |
 | 4. Profile mapping/backfill | **IMPLEMENTED / LOCAL VERIFIED / PRODUCTION APPLY COMPLETE / POST-AUDIT VERIFIED (`GENERIC-DEPLOYMENT-CONFIG.4A`) for the reviewed SVCA mapping**: generic read-only key/type/FK inventory plus one-key-at-a-time reviewed profile creation and complete exact-target FK backfill; `SERVICE_PROFILE_MAPPING_PLAN_V1` binds full metadata and current event state, existing scheduling CAS supplies SQLite serialization and exactly-once revision advance, and independent post-audit proves dual consistency. Production has one reviewed profile, 52 exact dual-consistent mapped events, zero drift, and revisions advanced `1 -> 2` exactly once. At the 4A milestone, `runtime_consumer_switched` remained false. MEDIUM operationally. | Stop on conflict/unmapped/noncanonical/ambiguity/existing profile/non-null FK/stale/busy state; owner reviews every target apply. Repeat initial mapping correctly fails closed after configuration. |
 | 5. Integration boundary + consumer switch | **5A READ-ONLY AUDIT / DOCS-ONLY IMPLEMENTATION PLAN COMPLETE; 5B REGISTRY/GATES/IMPORT ISOLATION IMPLEMENTED / LOCAL VERIFIED; 5C CANONICAL RUNTIME IDENTITY SEAM IMPLEMENTED / LOCAL VERIFIED; 5D READINESS/RESET/ADMIN SWITCH IMPLEMENTED / LOCAL VERIFIED; 5E WORKBOOK FK MATCHING/CONFIRMATION/V2 SIGNING IMPLEMENTED / LOCAL VERIFIED; 5F PRODUCTION CLOSEOUT COMPLETE / VERIFIED**: [`GENERIC_DEPLOYMENT_CONFIGURATION_SLICE5_PLAN.md`](GENERIC_DEPLOYMENT_CONFIGURATION_SLICE5_PLAN.md) contains the classified inventory and verified production evidence. 5E makes workbook matching and post-CAS confirmation FK/Profile-authoritative and rejects V1 artifacts; 5F proves Class A legacy authority is zero in repository/runtime design and the deployed closeout verifies `runtime_consumer_switched` as true. MEDIUM-HIGH. | Verified: only the workbook key is enabled; identity audit and Readiness V2 are zero-drift/ready; a fresh V2 workbook preview is 52 exact no-ops with no confirmation; English/Chinese rendered surfaces were checked. |
-| 6. Profile ministry defaults | Add relation, validation/readiness, Admin/setup; no event materialization. LOW-MEDIUM. | Stop on invalid/inactive/non-assignable/Worship mapping; owner reviews configuration. |
+| 6. Profile ministry defaults | **IMPLEMENTED / LOCAL VERIFIED (`GENERIC-DEPLOYMENT-CONFIG.6A`)**: ministry-owned relation, active/static-team validation through canonical Worship primary-path resolution, inactive history, profile identity immutability extension, Admin, typed read-only audit, and bounded setup-readiness blocker; no event materialization. LOW-MEDIUM. | Active configuration with an inactive profile/team, non-assignable team, or Worship-path team fails closed; inactive history is retained; zero defaults is ready; owner reviews later deployment configuration. |
 | 7. Materialization/drift | Central new-event initialization and existing-event preview/CAS/apply/audit; additions only. MEDIUM-HIGH. | Exact dry-run, stale/busy/rollback/idempotency tests; owner reviews every production apply. |
 | 8. MO-S.REQUIRED runtime | Effective resolver and bounded coverage/gap/Event-detail consumers; notifications/persisted audits explicit-only. MEDIUM. | Validate Team Schedule, Board, Today/leader attention, Staff Overview, event detail; review 52-event projection. |
 | 9. Production configuration/QA | Enable approved integrations, verify identity/default data, preview/materialize approved scope, focused QA. MEDIUM-HIGH operationally. | Backup/rollback and reviewed dry-run before apply; owner required. |

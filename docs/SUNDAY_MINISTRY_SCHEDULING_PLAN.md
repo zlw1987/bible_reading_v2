@@ -2273,6 +2273,30 @@ re-upload of the same workbook produced 52 no-op rows, 0 proposed changes,
 Evaluate separately only after operational evidence: availability, swaps or
 replacement workflow, reminders, and optional one-way Google Sheets import.
 
+### GENERIC-DEPLOYMENT-CONFIG.6A — ServiceProfile Ministry Defaults Foundation
+
+Status: **IMPLEMENTED / LOCAL VERIFIED**.
+
+The ministry-owned `ServiceProfileMinistryRequirement` model now records
+reviewed static Ministry Team defaults for a Service Profile. Active rows
+require an active profile and active assignable team and reuse
+`resolve_worship_rotation_pool_for_team()` to forbid both configured Worship
+rotation pools and canonical primary-path Worship children. Inactive rows
+retain history; current validity is enforced again on reactivation. Any active
+or inactive requirement reference extends supported-write immutability for the
+profile key and event type. Django Admin plus the read-only
+`audit_service_profile_ministry_requirements` command provide setup/review,
+and the Ministry setup-readiness provider blocks only invalid active rows.
+Zero configured defaults is ready and not a warning.
+
+This is configuration/template data only. No default data was created, and no
+`ServiceEventRequiredTeam`, ServiceEvent scheduling revision, TeamAssignment,
+notification, selected Worship Team, or Worship XLSX contract changed.
+Existing explicit `ServiceEventRequiredTeam` rows remain operational truth.
+Slice 7 materialization and the MO-S.REQUIRED runtime below remain pending;
+`runtime_consumer_switched` remains true and the Lighting Pilot remains
+retired.
+
 ### MO-S.REQUIRED.0A — Effective Required-Team Semantics / Event Worship Entry Audit
 
 Status: **EFFECTIVE REQUIRED-TEAM SEMANTICS / EVENT WORSHIP ENTRY AUDIT

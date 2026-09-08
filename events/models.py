@@ -399,9 +399,9 @@ class ServiceProfile(models.Model):
         except ValidationError as error:
             errors["key"] = error
 
-        if (
-            self.pk
-            and ServiceEvent.objects.filter(service_profile_id=self.pk).exists()
+        if self.pk and (
+            ServiceEvent.objects.filter(service_profile_id=self.pk).exists()
+            or self.ministry_requirements.exists()
         ):
             stored = (
                 type(self).objects.filter(pk=self.pk)

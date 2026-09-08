@@ -19,12 +19,16 @@ from django.db.models import Prefetch
 
 from core.setup_readiness import ReadinessSection, register_readiness_provider
 from events.models import ServiceEvent
+from ministry.service_profile_ministry_requirements import (
+    RequirementValidationState,
+    inspect_service_profile_ministry_requirements,
+)
 from ministry.structure_readiness import run_audit as run_ministry_audit
 
 from .models import TeamAssignment, TeamAssignmentMember
 
 
-def _build_ministry_structure_section(ministry_audit):
+def _build_ministry_structure_section(ministry_audit, profile_requirements):
     section = ReadinessSection(
         "ministry_structure", "2. Ministry Teams / Ministry Structure readiness"
     )
@@ -34,6 +38,30 @@ def _build_ministry_structure_section(ministry_audit):
     section.add_info("active_teams", stats["active_teams"])
     section.add_info("assignable_teams", stats["assignable_teams"])
     section.add_info("container_teams", stats["non_assignable_teams"])
+    section.add_info(
+        "service_profile_ministry_requirements",
+        len(profile_requirements.rows),
+    )
+    section.add_info(
+        "inactive_service_profile_ministry_requirements",
+        profile_requirements.inactive_requirements,
+    )
+    section.blocker(
+        "invalid_active_service_profile_ministry_requirements",
+        profile_requirements.invalid_active_requirements,
+    )
+    for row in profile_requirements.rows:
+        if row.validation_state != RequirementValidationState.INVALID_ACTIVE:
+            continue
+        reasons = ",".join(reason.value for reason in row.validation_reasons)
+        section.detail(
+            "invalid_active_service_profile_ministry_requirements",
+            f"requirement_id={row.requirement_id} "
+            f"profile_id={row.service_profile_id} "
+            f"profile_key={row.service_profile_key!r} "
+            f"team_id={row.ministry_team_id} "
+            f"team_key={row.ministry_team_key!r} reasons={reasons}",
+        )
 
     for key in ("teams_multiple_active_primary_links", "parent_link_cycle_teams"):
         section.blocker(key, stats[key])
@@ -163,8 +191,9 @@ def build(context):
     preserving the previous single-call behavior.
     """
     ministry_audit = run_ministry_audit()
+    profile_requirements = inspect_service_profile_ministry_requirements()
     return [
-        _build_ministry_structure_section(ministry_audit),
+        _build_ministry_structure_section(ministry_audit, profile_requirements),
         _build_serving_section(ministry_audit, context.now),
     ]
 

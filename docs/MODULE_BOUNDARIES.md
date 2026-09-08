@@ -50,7 +50,11 @@ events/ministry imports. `LIGHTING-PILOT-RETIRE.1A` is **IMPLEMENTED / LOCAL
 VERIFIED**: the obsolete Lighting Pilot CSV key and its route/view, template,
 command, service, tests, and pilot-only permission helper are removed. The
 product owner selected retirement rather than `MinistryTeam.team_key`
-modernization. Profile defaults/materialization remain runtime unimplemented. 5D has
+modernization. `GENERIC-DEPLOYMENT-CONFIG.6A` is **IMPLEMENTED / LOCAL
+VERIFIED** for the ministry-owned Service Profile static-team default
+configuration, Admin, read-only audit, and invalid-active readiness blocker.
+It creates no defaults and performs no event materialization; Slice 7
+materialization remains pending. 5D has
  switched readiness, the retained bounded reset, and ServiceEvent Admin to
  FK/Profile authority. `GENERIC-DEPLOYMENT-CONFIG.5E` is IMPLEMENTED / LOCAL
  VERIFIED: Worship XLSX matching/confirmation is FK/Profile-authoritative,

@@ -66,7 +66,16 @@ and confirmation artifacts bind the integration plus exact profile PK/key/type,
 and reject V1. All known profile-aware runtime consumers are switched, and 5F
 now proves local repository/runtime closure with Class A legacy authority at
 zero. Production deployment/config/data and fresh-workbook rendered closeout
-are now verified, so `runtime_consumer_switched` is formally true. Defaults,
+are now verified, so `runtime_consumer_switched` is formally true.
+`GENERIC-DEPLOYMENT-CONFIG.6A` is **IMPLEMENTED / LOCAL VERIFIED**: the
+ministry-owned `ServiceProfileMinistryRequirement` foundation now stores
+reviewed static-team defaults with active-profile/active-assignable-team
+validation, canonical Worship-pool/child exclusion, inactive history, Admin,
+typed read-only audit, and an invalid-active setup-readiness blocker. Profile
+key/event type immutability now includes active or inactive requirement
+references. Zero defaults is valid. No default rows were created and no
+`ServiceEventRequiredTeam`, ServiceEvent, scheduling revision, assignment,
+notification, or Worship state was materialized or changed. Slice 7
 materialization, MO-S.REQUIRED runtime, external identity mapping, and
 legacy-string retirement remain incomplete. 5E added no schema,
 migration, backfill, production command, or production data change.

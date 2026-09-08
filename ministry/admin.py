@@ -1,6 +1,9 @@
+from django import forms
 from django.contrib import admin
 from django.db import transaction
+from django.db.models import Q
 
+from events.models import ServiceProfile
 from events.scheduling_revision import advance_scheduling_revisions
 
 from .forms import NormalizedMinistryTeamKeyFormField
@@ -11,9 +14,13 @@ from .models import (
     MinistryTeamRoleProfile,
     MinistryTeamRoleRequirement,
     MinistryTeamRoleType,
+    ServiceProfileMinistryRequirement,
     TeamAssignment,
     TeamAssignmentMember,
     TeamMembership,
+)
+from .services.worship_governance import (
+    resolve_worship_rotation_pool_for_team,
 )
 
 
@@ -108,6 +115,119 @@ class MinistryTeamAdmin(admin.ModelAdmin):
             if event_ids:
                 advance_scheduling_revisions(event_ids, using=using)
             queryset.delete()
+
+
+class ServiceProfileRequirementProfileChoiceField(forms.ModelChoiceField):
+    def label_from_instance(self, profile):
+        name = profile.name_en or profile.name
+        return f"{name} [{profile.key}] ({profile.event_type})"
+
+
+class ServiceProfileRequirementTeamChoiceField(forms.ModelChoiceField):
+    def label_from_instance(self, team):
+        name = team.name_en or team.name
+        key = team.team_key or "UNCONFIGURED"
+        return f"{name} [{key}]"
+
+
+class ServiceProfileMinistryRequirementAdminForm(forms.ModelForm):
+    service_profile = ServiceProfileRequirementProfileChoiceField(
+        queryset=ServiceProfile.objects.none()
+    )
+    ministry_team = ServiceProfileRequirementTeamChoiceField(
+        queryset=MinistryTeam.objects.none()
+    )
+
+    class Meta:
+        model = ServiceProfileMinistryRequirement
+        fields = "__all__"
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        current_profile_id = (
+            self.instance.service_profile_id if self.instance.pk else None
+        )
+        current_team_id = (
+            self.instance.ministry_team_id if self.instance.pk else None
+        )
+
+        profiles = ServiceProfile.objects.filter(is_active=True)
+        if current_profile_id is not None:
+            profiles = ServiceProfile.objects.filter(
+                Q(is_active=True) | Q(pk=current_profile_id)
+            )
+        self.fields["service_profile"].queryset = profiles.order_by(
+            "event_type", "key", "pk"
+        )
+
+        eligible_team_ids = []
+        candidates = MinistryTeam.objects.filter(
+            is_active=True,
+            is_assignable=True,
+            is_worship_rotation_pool=False,
+        ).order_by("pk")
+        for team in candidates:
+            if resolve_worship_rotation_pool_for_team(team).pool is None:
+                eligible_team_ids.append(team.pk)
+        if current_team_id is not None:
+            eligible_team_ids.append(current_team_id)
+        self.fields["ministry_team"].queryset = MinistryTeam.objects.filter(
+            pk__in=eligible_team_ids
+        ).order_by("name", "name_en", "pk")
+
+
+@admin.register(ServiceProfileMinistryRequirement)
+class ServiceProfileMinistryRequirementAdmin(admin.ModelAdmin):
+    form = ServiceProfileMinistryRequirementAdminForm
+    list_display = (
+        "service_profile_name",
+        "service_profile_key",
+        "service_profile_event_type",
+        "ministry_team_name",
+        "ministry_team_key",
+        "is_active",
+        "sort_order",
+    )
+    list_filter = ("is_active", "service_profile", "ministry_team")
+    search_fields = (
+        "service_profile__key",
+        "service_profile__name",
+        "service_profile__name_en",
+        "ministry_team__team_key",
+        "ministry_team__name",
+        "ministry_team__name_en",
+    )
+    ordering = (
+        "service_profile__key",
+        "sort_order",
+        "ministry_team__name",
+        "pk",
+    )
+    readonly_fields = ("created_at", "updated_at")
+    list_select_related = ("service_profile", "ministry_team")
+
+    @admin.display(description="Service Profile")
+    def service_profile_name(self, obj):
+        return obj.service_profile.name_en or obj.service_profile.name
+
+    @admin.display(description="Profile key", ordering="service_profile__key")
+    def service_profile_key(self, obj):
+        return obj.service_profile.key
+
+    @admin.display(
+        description="Event type",
+        ordering="service_profile__event_type",
+    )
+    def service_profile_event_type(self, obj):
+        return obj.service_profile.event_type
+
+    @admin.display(description="Ministry Team")
+    def ministry_team_name(self, obj):
+        return obj.ministry_team.name_en or obj.ministry_team.name
+
+    @admin.display(description="Team key", ordering="ministry_team__team_key")
+    def ministry_team_key(self, obj):
+        return obj.ministry_team.team_key or "UNCONFIGURED"
 
 
 @admin.register(TeamMembership)

@@ -55,8 +55,13 @@ below require separate explicit approval.
 [`GENERIC_DEPLOYMENT_CONFIGURATION_ARCHITECTURE.md`](GENERIC_DEPLOYMENT_CONFIGURATION_ARCHITECTURE.md)
 freezes the adjacent generic boundary. Service-profile defaults may name only explicit static assignable teams; the
 governed selected Worship Team remains dynamic event state and is never
-persisted as a static default. Profile defaults/materialization remain runtime
-unimplemented. Named workbook adapters must be explicitly enabled per
+persisted as a static default. `GENERIC-DEPLOYMENT-CONFIG.6A` is
+**IMPLEMENTED / LOCAL VERIFIED** for the defaults foundation: active
+configuration reuses the canonical primary-path resolver to reject both a
+Worship rotation pool and any assignable child resolving under one. Inactive
+history is retained. No default was materialized, no selected Worship Team or
+`ServiceEventRequiredTeam` row changed, and Slice 7 materialization remains
+pending. Named workbook adapters must be explicitly enabled per
 deployment; the integration gate and ServiceProfile consumer switch are
 implemented locally through GENERIC-DEPLOYMENT-CONFIG.5F, with production
 read-only closeout complete and verified.

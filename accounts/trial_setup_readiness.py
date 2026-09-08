@@ -116,6 +116,15 @@ COUNTER_LABELS = {
     "upcoming_required_team_gaps": (
         "upcoming required-team coverage gaps (no assignment / no members)"
     ),
+    "service_profile_ministry_requirements": (
+        "configured Service Profile ministry requirements"
+    ),
+    "inactive_service_profile_ministry_requirements": (
+        "inactive Service Profile ministry requirement history"
+    ),
+    "invalid_active_service_profile_ministry_requirements": (
+        "invalid active Service Profile ministry requirements"
+    ),
     # 4. Bible Study meeting-serving
     "upcoming_bible_study_meetings": "upcoming published Bible Study meetings",
     "bible_study_meeting_roles_display_name_only": (

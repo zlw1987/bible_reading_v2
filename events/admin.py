@@ -349,7 +349,9 @@ class ServiceProfileAdmin(admin.ModelAdmin):
 
     def get_readonly_fields(self, request, obj=None):
         readonly = list(super().get_readonly_fields(request, obj))
-        if obj is not None and obj.service_events.exists():
+        if obj is not None and (
+            obj.service_events.exists() or obj.ministry_requirements.exists()
+        ):
             readonly.extend(("key", "event_type"))
         return tuple(readonly)
 

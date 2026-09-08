@@ -1,7 +1,7 @@
 import re
 
 from django.conf import settings
-from django.core.exceptions import ValidationError
+from django.core.exceptions import ObjectDoesNotExist, ValidationError
 from django.db import DEFAULT_DB_ALIAS, models, transaction
 from django.utils import timezone
 
@@ -357,6 +357,110 @@ class MinistryTeam(models.Model):
             for role_type in required_role_types
             if role_type.id not in covered_role_type_ids
         ]
+
+
+class ServiceProfileMinistryRequirement(models.Model):
+    """One reviewed static Ministry Team default for a Service Profile.
+
+    This is configuration/template data only. It does not materialize an event
+    requirement, assignment, member, notification, or Worship selection.
+    """
+
+    service_profile = models.ForeignKey(
+        "events.ServiceProfile",
+        on_delete=models.CASCADE,
+        related_name="ministry_requirements",
+    )
+    ministry_team = models.ForeignKey(
+        MinistryTeam,
+        on_delete=models.PROTECT,
+        related_name="service_profile_requirement_links",
+    )
+    is_active = models.BooleanField(default=True)
+    sort_order = models.PositiveIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["service_profile", "ministry_team"],
+                name="unique_service_profile_ministry_requirement",
+            )
+        ]
+
+    def __str__(self):
+        return f"{self.service_profile} requires {self.ministry_team}"
+
+    def clean(self):
+        super().clean()
+        if not self.is_active:
+            return
+
+        profile = None
+        if self.service_profile_id:
+            try:
+                profile = self.service_profile
+            except ObjectDoesNotExist:
+                pass
+
+        team = None
+        if self.ministry_team_id:
+            try:
+                team = self.ministry_team
+            except ObjectDoesNotExist:
+                pass
+
+        if profile is None or team is None:
+            return
+
+        # Local import keeps model loading acyclic while reusing the same typed
+        # domain classification as the read-only audit/readiness surface.
+        from .service_profile_ministry_requirements import (
+            RequirementValidationReason,
+            active_requirement_validation_reasons,
+        )
+
+        reasons = active_requirement_validation_reasons(profile, team)
+        errors = {}
+        if RequirementValidationReason.PROFILE_INACTIVE in reasons:
+            errors["service_profile"] = ValidationError(
+                "An active requirement must use an active Service Profile.",
+                code=RequirementValidationReason.PROFILE_INACTIVE.value,
+            )
+
+        team_messages = {
+            RequirementValidationReason.TEAM_INACTIVE: (
+                "An active requirement must use an active Ministry Team."
+            ),
+            RequirementValidationReason.TEAM_NON_ASSIGNABLE: (
+                "An active requirement must use an assignable Ministry Team."
+            ),
+            RequirementValidationReason.TEAM_WORSHIP_ROTATION_POOL: (
+                "A Worship rotation pool cannot be a static profile default."
+            ),
+            RequirementValidationReason.TEAM_UNDER_WORSHIP_ROTATION_POOL: (
+                "A team on a canonical Worship rotation-pool path cannot be a "
+                "static profile default."
+            ),
+        }
+        team_errors = [
+            ValidationError(team_messages[reason], code=reason.value)
+            for reason in reasons
+            if reason in team_messages
+        ]
+        if team_errors:
+            errors["ministry_team"] = team_errors
+
+        if errors:
+            raise ValidationError(errors)
+
+    def save(self, *args, **kwargs):
+        # Supported model/Admin writes enforce current active configuration.
+        # QuerySet.update/raw SQL remain outside this guarantee and are covered
+        # by the read-only inspector.
+        self.full_clean()
+        return super().save(*args, **kwargs)
 
 
 class TeamMembership(models.Model):

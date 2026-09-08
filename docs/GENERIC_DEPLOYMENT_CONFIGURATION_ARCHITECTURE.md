@@ -46,10 +46,12 @@ technical Admin support. Existing events remain FK `NULL` and
 inferred, no FK was backfilled, and no readiness/setup/workbook consumer was
 switched in 3A. Integration gating is implemented by 5B. The non-workbook
 readiness, bounded reset, and Admin consumers are switched by 5D; workbook
-matching/signing is FK/Profile-authoritative after 5E. Profile defaults,
-materialization, MO-S.REQUIRED runtime, and external identity mapping remain
-unimplemented and separately gated; the production consumer-switch closeout is
-complete and verified.
+matching/signing is FK/Profile-authoritative after 5E. Profile-ministry default
+schema, validation, Admin, audit, and reviewed configuration tooling are
+implemented through 6A/6B; no production default configuration has been
+applied. Slice 7 materialization, MO-S.REQUIRED runtime, and external identity
+mapping remain unimplemented and separately gated; the production
+consumer-switch closeout is complete and verified.
 
 4A adds the generic read-only `audit_service_profile_identity` inventory and
 the dry-run-first `configure_service_profile_mapping` command. The inventory
@@ -167,6 +169,22 @@ no rows. No default has been materialized into a ServiceEvent:
 creation, Worship runtime/XLSX contracts, and `runtime_consumer_switched=true`
 are unchanged. Slice 7 materialization and MO-S.REQUIRED runtime remain
 pending; the Lighting Pilot remains retired.
+
+`GENERIC-DEPLOYMENT-CONFIG.6B` — **IMPLEMENTED / LOCAL VERIFIED** — adds the
+generic dry-run-first `configure_service_profile_ministry_requirements`
+reviewed configuration path. One invocation binds one exact
+`ServiceProfile.key` and the complete desired active static-default set as
+exact `MinistryTeam` PK + `team_key` pairs. A V1 SHA-256 approval contract
+binds current profile identity/state, the complete current requirement surface,
+the desired identities, and current 6A team-validity facts. Apply re-resolves
+and revalidates inside one transaction, fails closed on stale state, creates
+missing rows, reactivates retained history, and deactivates omitted active rows
+without deletion or `sort_order` changes. Exact no-op previews expose no apply
+token. The 6B implementation task ran no production command and applied no
+production configuration. It creates no `ServiceEventRequiredTeam`, changes no
+ServiceEvent or scheduling revision, creates no assignment or notification,
+and changes no Worship selection or XLSX contract. Slice 7 materialization and
+MO-S.REQUIRED remain pending.
 
 ### Historical production mapping: reviewed SVCA mapping only
 
@@ -757,7 +775,7 @@ Each slice requires separate approval.
 | 3. Service Profile/FK expand | **IMPLEMENTED / LOCAL VERIFIED (`GENERIC-DEPLOYMENT-CONFIG.3A`)**: exact frozen profile model, nullable protected FK, validation/immutability/revision/Admin foundations, additive migration, and disposable migration proof; legacy string remains authoritative and no rows/FKs were created or backfilled by 3A. LOW-MEDIUM. | Profile rows required review before creation; Slice 4 was the separately reviewed mapping/backfill gate. |
 | 4. Profile mapping/backfill | **IMPLEMENTED / LOCAL VERIFIED / PRODUCTION APPLY COMPLETE / POST-AUDIT VERIFIED (`GENERIC-DEPLOYMENT-CONFIG.4A`) for the reviewed SVCA mapping**: generic read-only key/type/FK inventory plus one-key-at-a-time reviewed profile creation and complete exact-target FK backfill; `SERVICE_PROFILE_MAPPING_PLAN_V1` binds full metadata and current event state, existing scheduling CAS supplies SQLite serialization and exactly-once revision advance, and independent post-audit proves dual consistency. Production has one reviewed profile, 52 exact dual-consistent mapped events, zero drift, and revisions advanced `1 -> 2` exactly once. At the 4A milestone, `runtime_consumer_switched` remained false. MEDIUM operationally. | Stop on conflict/unmapped/noncanonical/ambiguity/existing profile/non-null FK/stale/busy state; owner reviews every target apply. Repeat initial mapping correctly fails closed after configuration. |
 | 5. Integration boundary + consumer switch | **5A READ-ONLY AUDIT / DOCS-ONLY IMPLEMENTATION PLAN COMPLETE; 5B REGISTRY/GATES/IMPORT ISOLATION IMPLEMENTED / LOCAL VERIFIED; 5C CANONICAL RUNTIME IDENTITY SEAM IMPLEMENTED / LOCAL VERIFIED; 5D READINESS/RESET/ADMIN SWITCH IMPLEMENTED / LOCAL VERIFIED; 5E WORKBOOK FK MATCHING/CONFIRMATION/V2 SIGNING IMPLEMENTED / LOCAL VERIFIED; 5F PRODUCTION CLOSEOUT COMPLETE / VERIFIED**: [`GENERIC_DEPLOYMENT_CONFIGURATION_SLICE5_PLAN.md`](GENERIC_DEPLOYMENT_CONFIGURATION_SLICE5_PLAN.md) contains the classified inventory and verified production evidence. 5E makes workbook matching and post-CAS confirmation FK/Profile-authoritative and rejects V1 artifacts; 5F proves Class A legacy authority is zero in repository/runtime design and the deployed closeout verifies `runtime_consumer_switched` as true. MEDIUM-HIGH. | Verified: only the workbook key is enabled; identity audit and Readiness V2 are zero-drift/ready; a fresh V2 workbook preview is 52 exact no-ops with no confirmation; English/Chinese rendered surfaces were checked. |
-| 6. Profile ministry defaults | **IMPLEMENTED / LOCAL VERIFIED (`GENERIC-DEPLOYMENT-CONFIG.6A`)**: ministry-owned relation, active/static-team validation through canonical Worship primary-path resolution, inactive history, profile identity immutability extension, Admin, typed read-only audit, and bounded setup-readiness blocker; no event materialization. LOW-MEDIUM. | Active configuration with an inactive profile/team, non-assignable team, or Worship-path team fails closed; inactive history is retained; zero defaults is ready; owner reviews later deployment configuration. |
+| 6. Profile ministry defaults | **FOUNDATION + REVIEWED CONFIGURATION TOOLING IMPLEMENTED / LOCAL VERIFIED (`GENERIC-DEPLOYMENT-CONFIG.6A/6B`)**: ministry-owned relation, active/static-team validation through canonical Worship primary-path resolution, inactive history, profile identity immutability extension, Admin, typed read-only audit, bounded setup-readiness blocker, and exact profile-key + team-PK/key complete-desired-set dry-run/apply tooling; no event materialization. LOW-MEDIUM. | Active configuration with an inactive profile/team, non-assignable team, or Worship-path team fails closed; state-bound V1 review fails stale; inactive history is retained; zero defaults is ready; owner reviews every deployment apply. |
 | 7. Materialization/drift | Central new-event initialization and existing-event preview/CAS/apply/audit; additions only. MEDIUM-HIGH. | Exact dry-run, stale/busy/rollback/idempotency tests; owner reviews every production apply. |
 | 8. MO-S.REQUIRED runtime | Effective resolver and bounded coverage/gap/Event-detail consumers; notifications/persisted audits explicit-only. MEDIUM. | Validate Team Schedule, Board, Today/leader attention, Staff Overview, event detail; review 52-event projection. |
 | 9. Production configuration/QA | Enable approved integrations, verify identity/default data, preview/materialize approved scope, focused QA. MEDIUM-HIGH operationally. | Backup/rollback and reviewed dry-run before apply; owner required. |

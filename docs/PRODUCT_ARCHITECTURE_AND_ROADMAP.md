@@ -79,6 +79,17 @@ notification, or Worship state was materialized or changed. Slice 7
 materialization, MO-S.REQUIRED runtime, external identity mapping, and
 legacy-string retirement remain incomplete. 5E added no schema,
 migration, backfill, production command, or production data change.
+`GENERIC-DEPLOYMENT-CONFIG.6B` is **IMPLEMENTED / LOCAL VERIFIED** as the
+generic dry-run-first `configure_service_profile_ministry_requirements`
+command. It reviews one exact profile key plus a complete desired active set of
+exact Ministry Team PK/key pairs, retains inactive requirement history, and
+uses a state-bound V1 approval fingerprint before atomic create/reactivate/
+deactivate lifecycle writes. Stale profile, team, or complete requirement
+surface state fails closed; no-op previews offer no apply token. The 6B task
+ran no production command and applied no production configuration. It did not
+materialize a RequiredTeam row, touch a ServiceEvent or scheduling revision,
+change Worship runtime/XLSX behavior, or begin Slice 7, Slice 8, or
+MO-S.REQUIRED.
 
 Historically, `MO-S.6D-PROFILE.1A` introduced the optional validated
 `ServiceEvent.service_profile_key` identity foundation. After 5F it is

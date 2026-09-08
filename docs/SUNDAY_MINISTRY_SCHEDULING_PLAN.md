@@ -28,8 +28,11 @@ The generic replacement architecture is frozen in
 Bethany, 09:30, the `A`/`C1`/`C2`/`C3` workbook tokens, and named Worship teams
 are deployment or adapter facts, not generic CMS taxonomy. The proposed
 first-class Service Profile/FK, Ministry Team key, and integration gate are now
-implemented through the locally closed 5F consumer switch. Profile ministry
-defaults and materialization remain runtime unimplemented.
+implemented through the locally closed 5F consumer switch.
+`GENERIC-DEPLOYMENT-CONFIG.6A/6B` implement the
+`ServiceProfileMinistryRequirement` foundation and reviewed configuration
+tooling; no production default configuration has been applied. Slice 7 event
+materialization remains pending.
 
 `MO-S.6D-PROFILE.1A` historically introduced the optional stable
 `ServiceEvent.service_profile_key` identity foundation. After generic
@@ -2296,6 +2299,49 @@ Existing explicit `ServiceEventRequiredTeam` rows remain operational truth.
 Slice 7 materialization and the MO-S.REQUIRED runtime below remain pending;
 `runtime_consumer_switched` remains true and the Lighting Pilot remains
 retired.
+
+### GENERIC-DEPLOYMENT-CONFIG.6B — Reviewed Profile Ministry Configuration
+
+Status: **IMPLEMENTED / LOCAL VERIFIED**.
+
+The generic `configure_service_profile_ministry_requirements` command is now
+the preferred reproducible production-configuration path while the 6A Django
+Admin remains an explicit technical setup/edit surface. The command is dry-run
+by default and requires one exact `ServiceProfile.key` plus the complete desired
+active static-default set as repeated exact `MinistryTeam` PK + `team_key`
+pairs (or an explicitly reviewed empty set). It never matches names, display
+paths, team kinds, Worship tokens, or partial identities.
+
+Dry-run classifies already-active, create-new, reactivate-existing,
+deactivate-existing, invalid-target, and stale/conflicting state. Omitted active
+rows for only the selected profile are proposed inactive; rows are never
+deleted, inactive history is reactivated in place, existing `sort_order` is
+preserved, and new rows use the deterministic model default. The versioned
+`SERVICE_PROFILE_MINISTRY_REQUIREMENT_CONFIG_V1` SHA-256 approval contract
+binds exact current profile PK/key/type/active state, every current requirement
+row and its exact team identity/lifecycle/order/timestamp evidence, every
+requested PK/key pair, and current active/assignable/Worship-pool/canonical-
+child validity. Apply re-resolves and revalidates current truth inside one
+transaction and uses conditional lifecycle updates; stale state and any write
+failure roll back the entire reviewed change. A fresh preview after apply is an
+exact no-op and offers no confirmation token; an old state-changing token
+cannot replay.
+
+The current product-owner-reviewed SVCA evidence identifies profile
+`bethany_0930_cm` and static defaults PK/key pairs `1`/
+`main.cm.digital.lighting`, `2`/`main.cm.digital.projection`, `3`/
+`main.cm.digital.sound`, and `4`/`main.cm.digital.video`. PK/key pairs `5`
+through `11` in the reviewed inventory are explicitly not defaults. These are
+deployment facts only: no identity is hard-coded in generic runtime, migration,
+or command defaults, and the 6B implementation task ran no production command
+and applied none of these rows.
+
+Configuration remains separate from materialization. Dry-run and apply create
+zero `ServiceEventRequiredTeam` rows, change zero ServiceEvents or scheduling
+revisions, and create/change zero TeamAssignments, notifications, or Worship
+selections. Worship XLSX behavior is unchanged. Slice 7 materialization and
+MO-S.REQUIRED remain pending; no Slice 8 work begins here, and the Lighting
+Pilot remains retired.
 
 ### MO-S.REQUIRED.0A — Effective Required-Team Semantics / Event Worship Entry Audit
 

@@ -53,8 +53,11 @@ product owner selected retirement rather than `MinistryTeam.team_key`
 modernization. `GENERIC-DEPLOYMENT-CONFIG.6A` is **IMPLEMENTED / LOCAL
 VERIFIED** for the ministry-owned Service Profile static-team default
 configuration, Admin, read-only audit, and invalid-active readiness blocker.
-It creates no defaults and performs no event materialization; Slice 7
-materialization remains pending. 5D has
+`GENERIC-DEPLOYMENT-CONFIG.6B` is **PRODUCTION CONFIGURATION APPLY COMPLETE /
+VERIFIED**: the reviewed SVCA profile `bethany_0930_cm` has four active valid
+static defaults, independently post-audited and idempotently verified. This
+configuration did not materialize event requirements; Slice 7 materialization
+remains pending. 5D has
  switched readiness, the retained bounded reset, and ServiceEvent Admin to
  FK/Profile authority. `GENERIC-DEPLOYMENT-CONFIG.5E` is IMPLEMENTED / LOCAL
  VERIFIED: Worship XLSX matching/confirmation is FK/Profile-authoritative,

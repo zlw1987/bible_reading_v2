@@ -73,23 +73,34 @@ reviewed static-team defaults with active-profile/active-assignable-team
 validation, canonical Worship-pool/child exclusion, inactive history, Admin,
 typed read-only audit, and an invalid-active setup-readiness blocker. Profile
 key/event type immutability now includes active or inactive requirement
-references. Zero defaults is valid. No default rows were created and no
+references. Zero defaults is valid. At the 6A implementation milestone, no
+default rows were created and no
 `ServiceEventRequiredTeam`, ServiceEvent, scheduling revision, assignment,
 notification, or Worship state was materialized or changed. Slice 7
 materialization, MO-S.REQUIRED runtime, external identity mapping, and
 legacy-string retirement remain incomplete. 5E added no schema,
 migration, backfill, production command, or production data change.
-`GENERIC-DEPLOYMENT-CONFIG.6B` is **IMPLEMENTED / LOCAL VERIFIED** as the
+`GENERIC-DEPLOYMENT-CONFIG.6B` is **IMPLEMENTED / LOCAL VERIFIED; PRODUCTION
+CONFIGURATION APPLY COMPLETE / VERIFIED** as the
 generic dry-run-first `configure_service_profile_ministry_requirements`
 command. It reviews one exact profile key plus a complete desired active set of
 exact Ministry Team PK/key pairs, retains inactive requirement history, and
 uses a state-bound V1 approval fingerprint before atomic create/reactivate/
 deactivate lifecycle writes. Stale profile, team, or complete requirement
-surface state fails closed; no-op previews offer no apply token. The 6B task
-ran no production command and applied no production configuration. It did not
+surface state fails closed; no-op previews offer no apply token. At the 6B
+implementation milestone, the task ran no production command and applied no
+production configuration. It did not
 materialize a RequiredTeam row, touch a ServiceEvent or scheduling revision,
 change Worship runtime/XLSX behavior, or begin Slice 7, Slice 8, or
-MO-S.REQUIRED.
+MO-S.REQUIRED. Subsequently, the reviewed SVCA production apply created four
+active valid static defaults for active profile PK `1` / `bethany_0930_cm`
+(`main.cm.digital.lighting`, `.projection`, `.sound`, and `.video`), with four
+creates and no reactivations/deactivations. Independent post-audit reported
+four valid active requirements and zero integrity blockers; a fresh same-set
+dry-run reported four already-active rows, no changes, no token, and
+`data_mutated: false`. This configuration changed no event operational state:
+no `ServiceEventRequiredTeam` materialization occurred, and Slice 7 remains
+pending.
 
 Historically, `MO-S.6D-PROFILE.1A` introduced the optional validated
 `ServiceEvent.service_profile_key` identity foundation. After 5F it is

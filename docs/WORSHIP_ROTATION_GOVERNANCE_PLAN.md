@@ -59,9 +59,14 @@ persisted as a static default. `GENERIC-DEPLOYMENT-CONFIG.6A` is
 **IMPLEMENTED / LOCAL VERIFIED** for the defaults foundation: active
 configuration reuses the canonical primary-path resolver to reject both a
 Worship rotation pool and any assignable child resolving under one. Inactive
-history is retained. No default was materialized, no selected Worship Team or
+history is retained. At the 6A foundation milestone, no default was
+materialized, no selected Worship Team or
 `ServiceEventRequiredTeam` row changed, and Slice 7 materialization remains
-pending. Named workbook adapters must be explicitly enabled per
+pending. `GENERIC-DEPLOYMENT-CONFIG.6B` is **PRODUCTION CONFIGURATION APPLY
+COMPLETE / VERIFIED**: the reviewed SVCA profile has four active valid static
+non-Worship defaults, independently post-audited and idempotently verified.
+The configuration created no `ServiceEventRequiredTeam` rows or selected Worship
+Team changes; Slice 7 remains pending. Named workbook adapters must be explicitly enabled per
 deployment; the integration gate and ServiceProfile consumer switch are
 implemented locally through GENERIC-DEPLOYMENT-CONFIG.5F, with production
 read-only closeout complete and verified.

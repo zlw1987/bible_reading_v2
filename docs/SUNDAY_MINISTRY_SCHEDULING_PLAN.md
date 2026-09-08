@@ -31,8 +31,11 @@ first-class Service Profile/FK, Ministry Team key, and integration gate are now
 implemented through the locally closed 5F consumer switch.
 `GENERIC-DEPLOYMENT-CONFIG.6A/6B` implement the
 `ServiceProfileMinistryRequirement` foundation and reviewed configuration
-tooling; no production default configuration has been applied. Slice 7 event
-materialization remains pending.
+tooling. **`GENERIC-DEPLOYMENT-CONFIG.6B — PRODUCTION CONFIGURATION APPLY
+COMPLETE / VERIFIED`**: the reviewed SVCA deployment has four active valid
+static defaults for `bethany_0930_cm`, and a fresh same-set dry-run verified
+idempotency. No `ServiceEventRequiredTeam` materialization has occurred; Slice
+7 event materialization remains pending.
 
 `MO-S.6D-PROFILE.1A` historically introduced the optional stable
 `ServiceEvent.service_profile_key` identity foundation. After generic
@@ -2292,7 +2295,8 @@ profile key and event type. Django Admin plus the read-only
 and the Ministry setup-readiness provider blocks only invalid active rows.
 Zero configured defaults is ready and not a warning.
 
-This is configuration/template data only. No default data was created, and no
+This is configuration/template data only. At the 6A implementation milestone,
+no default data was created, and no
 `ServiceEventRequiredTeam`, ServiceEvent scheduling revision, TeamAssignment,
 notification, selected Worship Team, or Worship XLSX contract changed.
 Existing explicit `ServiceEventRequiredTeam` rows remain operational truth.
@@ -2302,7 +2306,8 @@ retired.
 
 ### GENERIC-DEPLOYMENT-CONFIG.6B — Reviewed Profile Ministry Configuration
 
-Status: **IMPLEMENTED / LOCAL VERIFIED**.
+Status: **IMPLEMENTED / LOCAL VERIFIED; PRODUCTION CONFIGURATION APPLY COMPLETE
+/ VERIFIED**.
 
 The generic `configure_service_profile_ministry_requirements` command is now
 the preferred reproducible production-configuration path while the 6A Django
@@ -2333,8 +2338,15 @@ The current product-owner-reviewed SVCA evidence identifies profile
 `main.cm.digital.sound`, and `4`/`main.cm.digital.video`. PK/key pairs `5`
 through `11` in the reviewed inventory are explicitly not defaults. These are
 deployment facts only: no identity is hard-coded in generic runtime, migration,
-or command defaults, and the 6B implementation task ran no production command
-and applied none of these rows.
+or command defaults. At the 6B implementation milestone, the task ran no
+production command and applied none of these rows. Subsequently, the product
+owner explicitly applied the reviewed production configuration: four rows were
+created (`rows_mutated: 4`, `data_mutated: true`) with no reactivation,
+deactivation, or event materialization. The independent post-audit reported
+the four rows valid and active with zero integrity blockers (`READY / ACTIVE
+PROFILE MINISTRY DEFAULTS VALID`); the fresh same-set dry-run then reported
+four already active, no changes, no confirmation token, and
+`data_mutated: false`.
 
 Configuration remains separate from materialization. Dry-run and apply create
 zero `ServiceEventRequiredTeam` rows, change zero ServiceEvents or scheduling

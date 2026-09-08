@@ -48,10 +48,14 @@ switched in 3A. Integration gating is implemented by 5B. The non-workbook
 readiness, bounded reset, and Admin consumers are switched by 5D; workbook
 matching/signing is FK/Profile-authoritative after 5E. Profile-ministry default
 schema, validation, Admin, audit, and reviewed configuration tooling are
-implemented through 6A/6B; no production default configuration has been
-applied. Slice 7 materialization, MO-S.REQUIRED runtime, and external identity
-mapping remain unimplemented and separately gated; the production
-consumer-switch closeout is complete and verified.
+implemented through 6A/6B. **`GENERIC-DEPLOYMENT-CONFIG.6B — PRODUCTION
+CONFIGURATION APPLY COMPLETE / VERIFIED`**: the reviewed SVCA deployment has
+four active valid static ministry defaults for `bethany_0930_cm`, and a fresh
+same-set dry-run proves the configuration idempotent. No
+`ServiceEventRequiredTeam` materialization has occurred; Slice 7,
+MO-S.REQUIRED runtime, and external identity mapping remain unimplemented and
+separately gated. The production consumer-switch closeout is complete and
+verified.
 
 4A adds the generic read-only `audit_service_profile_identity` inventory and
 the dry-run-first `configure_service_profile_mapping` command. The inventory
@@ -151,8 +155,9 @@ closure proof. Production deployment/configuration/data and fresh-workbook
 rendered proof are now verified, so `runtime_consumer_switched` is formally
 true globally.
 
-Strongest current status: **`GENERIC-DEPLOYMENT-CONFIG.5F — PRODUCTION CLOSEOUT
-COMPLETE / VERIFIED`**.
+Current production closeouts: **`GENERIC-DEPLOYMENT-CONFIG.5F — PRODUCTION
+CLOSEOUT COMPLETE / VERIFIED`** and **`GENERIC-DEPLOYMENT-CONFIG.6B —
+PRODUCTION CONFIGURATION APPLY COMPLETE / VERIFIED`**.
 
 `GENERIC-DEPLOYMENT-CONFIG.6A` — **IMPLEMENTED / LOCAL VERIFIED** — adds the
 ministry-owned `ServiceProfileMinistryRequirement` configuration foundation,
@@ -170,7 +175,8 @@ creation, Worship runtime/XLSX contracts, and `runtime_consumer_switched=true`
 are unchanged. Slice 7 materialization and MO-S.REQUIRED runtime remain
 pending; the Lighting Pilot remains retired.
 
-`GENERIC-DEPLOYMENT-CONFIG.6B` — **IMPLEMENTED / LOCAL VERIFIED** — adds the
+`GENERIC-DEPLOYMENT-CONFIG.6B` — **IMPLEMENTED / LOCAL VERIFIED; PRODUCTION
+CONFIGURATION APPLY COMPLETE / VERIFIED** — adds the
 generic dry-run-first `configure_service_profile_ministry_requirements`
 reviewed configuration path. One invocation binds one exact
 `ServiceProfile.key` and the complete desired active static-default set as
@@ -180,11 +186,70 @@ the desired identities, and current 6A team-validity facts. Apply re-resolves
 and revalidates inside one transaction, fails closed on stale state, creates
 missing rows, reactivates retained history, and deactivates omitted active rows
 without deletion or `sort_order` changes. Exact no-op previews expose no apply
-token. The 6B implementation task ran no production command and applied no
-production configuration. It creates no `ServiceEventRequiredTeam`, changes no
+token. At the 6B implementation milestone, the task ran no production command
+and applied no production configuration. It creates no `ServiceEventRequiredTeam`, changes no
 ServiceEvent or scheduling revision, creates no assignment or notification,
 and changes no Worship selection or XLSX contract. Slice 7 materialization and
 MO-S.REQUIRED remain pending.
+
+#### 6B production configuration closeout: reviewed SVCA deployment
+
+This is deployment-specific production evidence, not generic CMS taxonomy or
+runtime behavior. The active production `ServiceProfile` is PK `1`, key
+`bethany_0930_cm`, event type `sunday_service`. The product owner reviewed the
+exact Ministry Team identity inventory and approved only these static defaults:
+
+| Team PK | `team_key` |
+|---:|---|
+| 1 | `main.cm.digital.lighting` |
+| 2 | `main.cm.digital.projection` |
+| 3 | `main.cm.digital.sound` |
+| 4 | `main.cm.digital.video` |
+
+The reviewed, explicitly non-selected identities are `main.cm.worship.c1`,
+`main.cm.worship.c2`, `main.cm.worship.c3`, `main.cm.worship.a`,
+`main.cm.digital`, `main.cm.worship`, and `main.em.worship`. No identity in
+either list is a generic runtime default.
+
+Before apply, the independent audit reported zero profiles with requirements,
+zero active or inactive requirements, zero valid or invalid active
+requirements, zero Worship-forbidden requirements, and zero integrity blockers
+(`READY / NO PROFILE MINISTRY DEFAULTS CONFIGURED`). The reviewed dry-run
+resolved the active PK `1` profile and classified the four approved teams as
+active, assignable, non-Worship-pool, and non-canonical-Worship-child. It
+reported `already_active: 0`, `create_new: 4`, `reactivate_existing: 0`,
+`deactivate_existing: 0`, `invalid_target: 0`, `stale_conflicting: 0`, and
+`inactive_history: 0`. Its reviewed state fingerprint was
+`1e08695fbb58a9d4d876d37bb9300b8cbdfe0bef4e1533ab2d6c8f87032ca7a8`;
+this is historical reviewed-state evidence, not a secret or reusable
+authorization.
+
+The product owner then explicitly ran the reviewed apply: `created: 4`,
+`reactivated: 0`, `deactivated: 0`, `rows_mutated: 4`, `data_mutated: true`,
+and `event_materialization: false`. Exactly four
+`ServiceProfileMinistryRequirement` rows were created. The independent
+read-only post-audit found requirement IDs `1` through `4` as valid active rows
+for the same profile and, respectively, the four approved team PK/key pairs;
+its summary was one profile with requirements, four active and four valid active
+requirements, zero inactive or invalid active requirements, zero
+Worship-forbidden requirements, and zero integrity blockers (`READY / ACTIVE
+PROFILE MINISTRY DEFAULTS VALID`).
+
+A fresh same-set post-apply dry-run reported `already_active: 4` and zero for
+`create_new`, `reactivate_existing`, `deactivate_existing`, `invalid_target`,
+`stale_conflicting`, and `inactive_history`: `READY / NO CHANGES`. It exposed
+no apply action or confirmation token and reported `data_mutated: false`. This
+is the production idempotency proof.
+
+The configuration apply changed only `ServiceProfileMinistryRequirement`
+configuration. It created no `ServiceEventRequiredTeam` rows; changed no
+`ServiceEvent` or scheduling revision; created or changed no `TeamAssignment`
+or notification; changed no Worship selection or Worship XLSX data/contracts;
+and created no serving or membership state. The frozen boundary remains:
+`ServiceProfileMinistryRequirement` is a deployment configuration/template and
+`ServiceEventRequiredTeam` is explicit per-event operational truth. There is no
+live inheritance, existing events did not silently change, and Slice 7
+materialization is not started.
 
 ### Historical production mapping: reviewed SVCA mapping only
 

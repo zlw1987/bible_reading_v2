@@ -192,6 +192,19 @@ ServiceEvent or scheduling revision, creates no assignment or notification,
 and changes no Worship selection or XLSX contract. Slice 7 materialization and
 MO-S.REQUIRED remain pending.
 
+`GENERIC-DEPLOYMENT-CONFIG.7A` — **READ-ONLY MATERIALIZATION PREVIEW / LOCAL
+VERIFIED** — adds a ministry-owned bounded existing-event inspector and
+`audit_service_profile_required_team_materialization` command. For one exact
+active ServiceProfile FK and inclusive configured-local-date scope, it reports
+valid active defaults, missing additions, persisted matching defaults, manual
+extras, explicit canonical-Worship rows, invalid explicit rows, and inactive
+default history. It records a deterministic V1 state fingerprint binding the
+profile, complete default surface, selected event identity/lifecycle/revision,
+persisted required-team surface, current team validity, and missing-pair
+calculation. It writes nothing: no ServiceEventRequiredTeam has been
+materialized in local or production data. Slice 7B reviewed apply, new-event
+automatic initialization, and MO-S.REQUIRED runtime remain pending.
+
 #### 6B production configuration closeout: reviewed SVCA deployment
 
 This is deployment-specific production evidence, not generic CMS taxonomy or

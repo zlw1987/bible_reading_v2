@@ -102,6 +102,15 @@ dry-run reported four already-active rows, no changes, no token, and
 no `ServiceEventRequiredTeam` materialization occurred, and Slice 7 remains
 pending.
 
+`GENERIC-DEPLOYMENT-CONFIG.7A` is **READ-ONLY MATERIALIZATION PREVIEW / LOCAL
+VERIFIED**. The ministry-owned inspector reviews only an exact FK-linked active
+profile and bounded inclusive local-date event scope. It distinguishes active
+defaults, missing additions, already-explicit defaults, manual extras,
+explicit canonical-Worship rows, invalid explicit rows, and inactive default
+history, with a deterministic V1 state fingerprint. It writes no operational
+state. Production materialization has not happened; Slice 7B reviewed apply,
+new-event automatic initialization, and MO-S.REQUIRED runtime remain pending.
+
 Historically, `MO-S.6D-PROFILE.1A` introduced the optional validated
 `ServiceEvent.service_profile_key` identity foundation. After 5F it is
 transitional compatibility/drift storage only; permanent runtime identity is

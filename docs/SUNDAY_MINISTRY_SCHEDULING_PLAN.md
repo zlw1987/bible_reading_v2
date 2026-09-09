@@ -2355,6 +2355,30 @@ selections. Worship XLSX behavior is unchanged. Slice 7 materialization and
 MO-S.REQUIRED remain pending; no Slice 8 work begins here, and the Lighting
 Pilot remains retired.
 
+### GENERIC-DEPLOYMENT-CONFIG.7A — Existing-Event RequiredTeam Materialization Preview
+
+Status: **READ-ONLY MATERIALIZATION PREVIEW / LOCAL VERIFIED**.
+
+The ministry-owned
+`audit_service_profile_required_team_materialization --profile-key KEY
+--start-date YYYY-MM-DD --end-date YYYY-MM-DD` command inspects the exact
+active profile and only its FK-linked events whose configured-local start date
+falls in the inclusive bounded range. It uses the canonical ServiceProfile
+runtime seam to fail closed on selected-event identity drift, reuses the 6A
+active-default validity facts and canonical primary-path Worship resolver, and
+reports every persisted RequiredTeam row as matching default, manual extra,
+explicit Worship evidence, invalid explicit evidence, and/or inactive-default
+history. Missing static defaults are review facts only. The V1 deterministic
+fingerprint binds profile/default configuration, event identity/lifecycle/
+revision, required-team surface, current team validity, and the missing-pair
+calculation.
+
+The command has no `--apply` and writes nothing: it creates, updates, or
+deletes no RequiredTeam row, ServiceEvent, revision, assignment, notification,
+audit row, or Worship selection. Production materialization has not happened.
+Slice 7B reviewed apply, new-event automatic initialization, and MO-S.REQUIRED
+runtime remain pending.
+
 ### MO-S.REQUIRED.0A — Effective Required-Team Semantics / Event Worship Entry Audit
 
 Status: **EFFECTIVE REQUIRED-TEAM SEMANTICS / EVENT WORSHIP ENTRY AUDIT

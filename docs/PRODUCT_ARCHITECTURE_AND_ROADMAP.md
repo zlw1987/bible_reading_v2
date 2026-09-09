@@ -99,9 +99,9 @@ creates and no reactivations/deactivations. Independent post-audit reported
 four valid active requirements and zero integrity blockers; a fresh same-set
 dry-run reported four already-active rows, no changes, no token, and
 `data_mutated: false`. This configuration changed no event operational state:
-no `ServiceEventRequiredTeam` materialization occurred, and Slice 7 remains
-pending at that 6B closeout milestone. Production materialization remains
-pending after the later 7B local implementation below.
+no `ServiceEventRequiredTeam` materialization occurred, and Slice 7 remained
+pending at that 6B closeout milestone. The later 7B production closeout is
+recorded below.
 
 `GENERIC-DEPLOYMENT-CONFIG.7A` is **PRODUCTION READ-ONLY PREVIEW VERIFIED**.
 The ministry-owned inspector reviews only an exact FK-linked active
@@ -117,17 +117,23 @@ zero review-evidence events and zero blockers. Fingerprint
 `8aa89d8d42a0516a4a8712009a15ceab4d8153ee70d360aa5ca837aec4600d10` is
 historical 7A evidence only, never a 7B token.
 
-`GENERIC-DEPLOYMENT-CONFIG.7B` is **IMPLEMENTED / LOCAL VERIFIED; PRODUCTION
-APPLY NOT RUN**. The separate dry-run-first command requires an exact profile,
+`GENERIC-DEPLOYMENT-CONFIG.7B` is **PRODUCTION MATERIALIZATION APPLY COMPLETE /
+VERIFIED**. The separate dry-run-first command requires an exact profile,
 inclusive local-date scope, and exact active staff/superuser actor. A distinct
 V1 SHA-256 token binds the actor and complete 7A state. Apply uses changed-event
 revision CAS, post-claim full-truth recomputation, create-only missing-pair
 writes, post-write recomputation, and one atomic shared-operation event audit
 per changed event. Existing/manual/history/Worship rows are preserved; complete
 events are untouched. No notification, assignment/member, Worship selection,
-new-event initialization, or MO-S.REQUIRED runtime is added. Production
-RequiredTeam materialization has not happened, and historical scope remains
-deliberately deferred.
+new-event initialization, or MO-S.REQUIRED runtime is added. The reviewed
+production operation `8f867561-d971-44f4-9842-cb021b285e4c` materialized only
+the 60 missing static-default pairs for `2026-09-08` through `2026-12-31`:
+event `81` was a no-op, events `82` through `96` advanced `2 -> 3` once, and
+15 audit rows were created. Independent 7A post-audit verified 64 expected / 64
+already explicit / zero missing / zero blockers; a fresh 7B dry-run proved 16
+complete no-ops with no token. Historical full-year backfill remains
+deliberately deferred with 140 expected missing pairs unless separately
+reviewed.
 
 Historically, `MO-S.6D-PROFILE.1A` introduced the optional validated
 `ServiceEvent.service_profile_key` identity foundation. After 5F it is

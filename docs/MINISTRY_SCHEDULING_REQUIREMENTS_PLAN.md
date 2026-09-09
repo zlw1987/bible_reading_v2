@@ -190,10 +190,13 @@ inherited. The valid selected Worship Team remains separate dynamic event state.
 The ServiceProfile/profile-ministry-default foundation and reviewed
 configuration are implemented, and the reviewed production static-default
 configuration is complete. The 7A read-only materialization preview is
-implemented and production verified; the 7B reviewed create-only
-materialization tooling is implemented/local verified, but its production apply
-has not run. Configuration/template data is not per-event operational truth,
-and the MO-S.REQUIRED effective-required runtime remains unimplemented.
+implemented and production verified. **`GENERIC-DEPLOYMENT-CONFIG.7B —
+PRODUCTION MATERIALIZATION APPLY COMPLETE / VERIFIED`**: the reviewed
+`2026-09-08` through `2026-12-31` existing-event scope has 64 explicit
+static-default pairs, zero missing pairs, and zero blockers after independent
+post-audit and a fresh no-op proof. Historical backfill remains deliberately
+deferred. Configuration/template data is not per-event operational truth, and
+the MO-S.REQUIRED effective-required runtime remains unimplemented.
 
 The earlier MO-S.5A wording that `rotation_anchor_team` is never required
 coverage is preserved as historical implementation chronology. Governed Worship

@@ -52,10 +52,11 @@ implemented through 6A/6B. **`GENERIC-DEPLOYMENT-CONFIG.6B — PRODUCTION
 CONFIGURATION APPLY COMPLETE / VERIFIED`**: the reviewed SVCA deployment has
 four active valid static ministry defaults for `bethany_0930_cm`, and a fresh
 same-set dry-run proves the configuration idempotent. Slice 7A production
-read-only preview evidence is verified. Slice 7B reviewed create-only tooling
-is implemented and locally verified, but no production 7B apply has run and no
-production `ServiceEventRequiredTeam` materialization has occurred.
-MO-S.REQUIRED runtime and external identity mapping remain unimplemented and
+read-only preview evidence is verified. **`GENERIC-DEPLOYMENT-CONFIG.7B —
+PRODUCTION MATERIALIZATION APPLY COMPLETE / VERIFIED`**: the separately
+reviewed `2026-09-08` through `2026-12-31` existing-event scope is closed with
+64 explicit static-default pairs and zero missing/blockers. Historical backfill
+remains deliberately deferred. MO-S.REQUIRED runtime and external identity mapping remain unimplemented and
 separately gated. The production consumer-switch closeout is complete and
 verified.
 
@@ -221,8 +222,8 @@ review. Historical missing defaults remain deliberately untouched; after a
 future reviewed operational-scope apply, the full-year preview is expected to
 retain 140 historical missing pairs unless separately reviewed.
 
-`GENERIC-DEPLOYMENT-CONFIG.7B` — **IMPLEMENTED / LOCAL VERIFIED; PRODUCTION
-APPLY NOT RUN** — adds the generic dry-run-first
+`GENERIC-DEPLOYMENT-CONFIG.7B` — **PRODUCTION MATERIALIZATION APPLY COMPLETE /
+VERIFIED** — adds the generic dry-run-first
 `materialize_service_profile_required_teams --profile-key KEY --start-date
 YYYY-MM-DD --end-date YYYY-MM-DD --actor-user-id USER_PK` command and a
 separate `SERVICE_PROFILE_REQUIRED_TEAM_MATERIALIZATION_PLAN_V1` contract.
@@ -242,8 +243,52 @@ Existing defaults, manual extras, explicit Worship rows, invalid historical
 rows, and inactive-default history are never changed or removed. Complete
 events receive no write, revision claim, or audit. The operation creates no
 event, TeamAssignment, TeamAssignmentMember, Notification, Worship selection,
-serving, or new-event initialization. Production 7B materialization has not
-occurred; MO-S.REQUIRED runtime remains pending.
+serving, or new-event initialization. The reviewed production apply is recorded
+below; MO-S.REQUIRED runtime remains unimplemented.
+
+#### 7B production materialization closeout: reviewed existing-event scope
+
+This is deployment-specific production evidence, not generic CMS behavior. The
+reviewed active profile was PK `1`, key `bethany_0930_cm`, event type
+`sunday_service`; the inclusive operational scope was `2026-09-08` through
+`2026-12-31`. The pre-apply reviewed 7B dry-run selected 16 events: 15 changed
+events and one complete no-op, with four active defaults, 64 expected pairs,
+four already-default pairs, 60 missing pairs, and zero manual extras, explicit
+Worship rows, invalid explicit rows, inactive-default history rows,
+review-evidence events, or blockers. The exact active staff/superuser actor was
+PK `1` / `levin-z`. The reviewed confirmation token
+`1daf728268caf723f69c8225ec6d0ae8ab2cf2c098486260c159c06e0f892442` is
+historical reviewed-state evidence only, never reusable authorization.
+
+The product owner explicitly ran that reviewed production apply. Operation
+`8f867561-d971-44f4-9842-cb021b285e4c` created only the 60 reviewed missing
+static-default `ServiceEventRequiredTeam` rows, changed events `82` through
+`96`, and created 15 audit rows. Event `81` was already complete and remained
+unchanged; events `82` through `96` advanced scheduling revision `2 -> 3`
+exactly once. It reported `data_mutated: true` and
+`event_materialization: true`. It created no assignment/member, notification,
+Worship selection, ServiceEvent, audience, or serving state.
+
+An independent post-apply 7A audit selected the same 16 events and reported
+four active defaults, 64 expected pairs, 64 already-default pairs, zero missing
+pairs, zero manual/review/Worship/invalid/inactive-history evidence, and zero
+blockers: `READY / NO MATERIALIZATION NEEDED`. Its post-apply fingerprint was
+`46c7e2a88b4b0ce9140fd7fe641d77fad3742f6f1de1d6faf8fadb17257f28bb`; all
+events `81` through `96` were at scheduling revision `3`.
+
+A fresh production 7B dry-run for the exact same profile/date scope/actor then
+reported 16 selected events, zero changed events, 16 complete no-ops, four
+active defaults, 64 expected and already-default pairs, zero missing pairs,
+zero review evidence/blockers, and `READY / NO MATERIALIZATION NEEDED`. It had
+no confirmation token and reported `data_mutated: false` and
+`event_materialization: false`. This is the production idempotency proof.
+
+The earlier full-year preview remains historical review context: 52 events, 208
+expected pairs, eight already present, and 200 missing before the approved
+operational apply. The owner deliberately deferred historical backfill; the
+reviewed scope added 60 pairs, so the full-year scope is expected to retain 140
+historical missing pairs unless separately reviewed. That deliberate deployment
+history/backfill deferral is neither a runtime invariant nor an error.
 
 #### 6B production configuration closeout: reviewed SVCA deployment
 
@@ -301,8 +346,9 @@ or notification; changed no Worship selection or Worship XLSX data/contracts;
 and created no serving or membership state. The frozen boundary remains:
 `ServiceProfileMinistryRequirement` is a deployment configuration/template and
 `ServiceEventRequiredTeam` is explicit per-event operational truth. There is no
-live inheritance, existing events did not silently change, and Slice 7
-materialization is not started.
+live inheritance, and the 6B configuration apply did not silently change
+existing events or start Slice 7 materialization. The later reviewed 7B
+existing-event materialization closeout is recorded above.
 
 ### Historical production mapping: reviewed SVCA mapping only
 
@@ -894,7 +940,7 @@ Each slice requires separate approval.
 | 4. Profile mapping/backfill | **IMPLEMENTED / LOCAL VERIFIED / PRODUCTION APPLY COMPLETE / POST-AUDIT VERIFIED (`GENERIC-DEPLOYMENT-CONFIG.4A`) for the reviewed SVCA mapping**: generic read-only key/type/FK inventory plus one-key-at-a-time reviewed profile creation and complete exact-target FK backfill; `SERVICE_PROFILE_MAPPING_PLAN_V1` binds full metadata and current event state, existing scheduling CAS supplies SQLite serialization and exactly-once revision advance, and independent post-audit proves dual consistency. Production has one reviewed profile, 52 exact dual-consistent mapped events, zero drift, and revisions advanced `1 -> 2` exactly once. At the 4A milestone, `runtime_consumer_switched` remained false. MEDIUM operationally. | Stop on conflict/unmapped/noncanonical/ambiguity/existing profile/non-null FK/stale/busy state; owner reviews every target apply. Repeat initial mapping correctly fails closed after configuration. |
 | 5. Integration boundary + consumer switch | **5A READ-ONLY AUDIT / DOCS-ONLY IMPLEMENTATION PLAN COMPLETE; 5B REGISTRY/GATES/IMPORT ISOLATION IMPLEMENTED / LOCAL VERIFIED; 5C CANONICAL RUNTIME IDENTITY SEAM IMPLEMENTED / LOCAL VERIFIED; 5D READINESS/RESET/ADMIN SWITCH IMPLEMENTED / LOCAL VERIFIED; 5E WORKBOOK FK MATCHING/CONFIRMATION/V2 SIGNING IMPLEMENTED / LOCAL VERIFIED; 5F PRODUCTION CLOSEOUT COMPLETE / VERIFIED**: [`GENERIC_DEPLOYMENT_CONFIGURATION_SLICE5_PLAN.md`](GENERIC_DEPLOYMENT_CONFIGURATION_SLICE5_PLAN.md) contains the classified inventory and verified production evidence. 5E makes workbook matching and post-CAS confirmation FK/Profile-authoritative and rejects V1 artifacts; 5F proves Class A legacy authority is zero in repository/runtime design and the deployed closeout verifies `runtime_consumer_switched` as true. MEDIUM-HIGH. | Verified: only the workbook key is enabled; identity audit and Readiness V2 are zero-drift/ready; a fresh V2 workbook preview is 52 exact no-ops with no confirmation; English/Chinese rendered surfaces were checked. |
 | 6. Profile ministry defaults | **FOUNDATION + REVIEWED CONFIGURATION TOOLING IMPLEMENTED / LOCAL VERIFIED (`GENERIC-DEPLOYMENT-CONFIG.6A/6B`)**: ministry-owned relation, active/static-team validation through canonical Worship primary-path resolution, inactive history, profile identity immutability extension, Admin, typed read-only audit, bounded setup-readiness blocker, and exact profile-key + team-PK/key complete-desired-set dry-run/apply tooling; no event materialization. LOW-MEDIUM. | Active configuration with an inactive profile/team, non-assignable team, or Worship-path team fails closed; state-bound V1 review fails stale; inactive history is retained; zero defaults is ready; owner reviews every deployment apply. |
-| 7. Materialization/drift | **7A PRODUCTION READ-ONLY PREVIEW VERIFIED; 7B IMPLEMENTED / LOCAL VERIFIED; PRODUCTION APPLY NOT RUN**: bounded existing-event preview plus actor/state-bound create-only CAS/apply/shared audit. Automatic new-event initialization remains separate and pending. MEDIUM-HIGH. | Exact dry-run, stale/busy/current-truth recomputation/rollback/idempotency and target-like SQLite concurrency tests; owner reviews every production apply. |
+| 7. Materialization/drift | **7A PRODUCTION READ-ONLY PREVIEW VERIFIED; 7B PRODUCTION MATERIALIZATION APPLY COMPLETE / VERIFIED**: bounded reviewed existing-event scope materialized 60 missing static-default pairs across 15 changed events; independent post-audit and fresh no-op proof verified 64 / 64 / 0 / zero blockers. Historical backfill and automatic new-event initialization remain separate and pending. MEDIUM-HIGH. | Exact dry-run, stale/busy/current-truth recomputation/rollback/idempotency and target-like SQLite concurrency tests; owner reviews every production apply. |
 | 8. MO-S.REQUIRED runtime | Effective resolver and bounded coverage/gap/Event-detail consumers; notifications/persisted audits explicit-only. MEDIUM. | Validate Team Schedule, Board, Today/leader attention, Staff Overview, event detail; review 52-event projection. |
 | 9. Production configuration/QA | Enable approved integrations, verify identity/default data, preview/materialize approved scope, focused QA. MEDIUM-HIGH operationally. | Backup/rollback and reviewed dry-run before apply; owner required. |
 | 10. Legacy contract retirement | Prove zero string consumers/drift, remove old field/tools in separate migration/docs slice. HIGH. | Last only; explicit destructive-schema approval. |

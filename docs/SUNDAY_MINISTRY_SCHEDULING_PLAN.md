@@ -35,11 +35,13 @@ tooling. **`GENERIC-DEPLOYMENT-CONFIG.6B — PRODUCTION CONFIGURATION APPLY
 COMPLETE / VERIFIED`**: the reviewed SVCA deployment has four active valid
 static defaults for `bethany_0930_cm`, and a fresh same-set dry-run verified
 idempotency. At that 6B production-configuration milestone, no
-`ServiceEventRequiredTeam` materialization had occurred. 7A is now
-**PRODUCTION READ-ONLY PREVIEW VERIFIED**, and 7B tooling is **IMPLEMENTED /
-LOCAL VERIFIED**; production 7B RequiredTeam materialization **APPLY has NOT
-RUN**, historical backfill remains deliberately deferred, and MO-S.REQUIRED
-runtime remains unimplemented.
+`ServiceEventRequiredTeam` materialization had occurred. 7A is
+**PRODUCTION READ-ONLY PREVIEW VERIFIED**, and **`GENERIC-DEPLOYMENT-CONFIG.7B
+— PRODUCTION MATERIALIZATION APPLY COMPLETE / VERIFIED`** for the reviewed
+`2026-09-08` through `2026-12-31` scope: 64 explicit static-default pairs, zero
+missing, and zero blockers. Historical backfill remains deliberately deferred;
+MO-S.REQUIRED runtime and automatic new-event default initialization remain
+unimplemented.
 
 `MO-S.6D-PROFILE.1A` historically introduced the optional stable
 `ServiceEvent.service_profile_key` identity foundation. After generic
@@ -2356,11 +2358,10 @@ Configuration remains separate from materialization. Dry-run and apply create
 zero `ServiceEventRequiredTeam` rows, change zero ServiceEvents or scheduling
 revisions, and create/change zero TeamAssignments, notifications, or Worship
 selections. Worship XLSX behavior is unchanged. At the 6B production-
-configuration milestone, Slice 7 materialization had not started. Current
-production RequiredTeam materialization remains pending: 7A is now production
-read-only preview verified, and 7B tooling is implemented/local verified with
-production apply not run. MO-S.REQUIRED remains pending; no Slice 8 work began
-in 6B, and the Lighting Pilot remains retired.
+configuration milestone, Slice 7 materialization had not started. The later
+reviewed 7B production closeout materialized the approved existing-event scope;
+MO-S.REQUIRED and automatic new-event initialization remain unimplemented. No
+Slice 8 work began in 6B, and the Lighting Pilot remains retired.
 
 ### GENERIC-DEPLOYMENT-CONFIG.7A — Existing-Event RequiredTeam Materialization Preview
 
@@ -2393,7 +2394,7 @@ historical 7A evidence only and cannot authorize 7B.
 
 ### GENERIC-DEPLOYMENT-CONFIG.7B — Reviewed Existing-Event Materialization Apply
 
-Status: **IMPLEMENTED / LOCAL VERIFIED; PRODUCTION APPLY NOT RUN**.
+Status: **PRODUCTION MATERIALIZATION APPLY COMPLETE / VERIFIED**.
 
 The generic operator command is one line:
 `python manage.py materialize_service_profile_required_teams --profile-key KEY --start-date YYYY-MM-DD --end-date YYYY-MM-DD --actor-user-id USER_PK`.
@@ -2420,10 +2421,15 @@ busy, duplicate, postcondition, or audit failure rolls back the entire apply.
 This is RequiredTeam operational-row materialization, not ServiceEvent
 creation. It creates no TeamAssignment, TeamAssignmentMember, Notification,
 Worship selection, serving state, automatic/recurring new-event initialization,
-or MO-S.REQUIRED runtime. Production 7B has not run. Historical missing pairs
-remain deliberately unmaterialized unless separately reviewed; after a future
-reviewed operational-scope apply, the full-year preview is expected to retain
-140 historical missing pairs.
+or MO-S.REQUIRED runtime. The reviewed production operation
+`8f867561-d971-44f4-9842-cb021b285e4c` applied the `2026-09-08` through
+`2026-12-31` scope: 60 rows created, 15 changed events/audit rows, event `81`
+preserved as a complete no-op, and events `82` through `96` advanced `2 -> 3`
+once. Independent 7A post-audit found 64 expected / 64 already explicit / zero
+missing / zero blockers, and a fresh same-scope 7B dry-run proved 16 complete
+no-ops with no confirmation token. Historical missing pairs remain deliberately
+unmaterialized unless separately reviewed; the full-year scope is expected to
+retain 140 historical missing pairs.
 
 ### MO-S.REQUIRED.0A — Effective Required-Team Semantics / Event Worship Entry Audit
 

@@ -63,13 +63,16 @@ preserved/review evidence through exact profile FKs without any writes. The
 full-year production preview was 52 / 208 / 8 / 200; the reviewed
 `2026-09-08` through `2026-12-31` scope was 16 / 64 / 4 / 60, with zero review
 evidence or blockers and historical materialization deliberately deferred.
-`GENERIC-DEPLOYMENT-CONFIG.7B` is **IMPLEMENTED / LOCAL VERIFIED; PRODUCTION
-APPLY NOT RUN**: its separate actor/state-bound, dry-run-first service creates
+`GENERIC-DEPLOYMENT-CONFIG.7B` is **PRODUCTION MATERIALIZATION APPLY COMPLETE /
+VERIFIED**: its separate actor/state-bound, dry-run-first service creates
 only reviewed missing static-default RequiredTeam pairs, claims/revises/audits
 only changed events, and atomically recomputes current truth around the SQLite
-writer boundary. Existing/manual/history/Worship rows are preserved. No
-production materialization occurred; automatic new-event initialization and
-MO-S.REQUIRED runtime remain pending. 5D has
+writer boundary. Existing/manual/history/Worship rows are preserved. The
+reviewed `2026-09-08` through `2026-12-31` production scope created 60 missing
+static-default pairs across 15 changed events; independent post-audit verified
+64 expected / 64 explicit / zero missing / zero blockers, and a fresh dry-run
+proved 16 no-ops with no token. Historical backfill, automatic new-event
+initialization, and MO-S.REQUIRED runtime remain pending. 5D has
  switched readiness, the retained bounded reset, and ServiceEvent Admin to
  FK/Profile authority. `GENERIC-DEPLOYMENT-CONFIG.5E` is IMPLEMENTED / LOCAL
  VERIFIED: Worship XLSX matching/confirmation is FK/Profile-authoritative,

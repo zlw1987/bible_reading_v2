@@ -89,7 +89,9 @@ def active_requirement_validation_reasons(profile, team):
     return tuple(reasons)
 
 
-def inspect_service_profile_ministry_requirements(*, profile_key=None):
+def inspect_service_profile_ministry_requirements(
+    *, profile_key=None, using="default"
+):
     """Inspect every row in deterministic PK order without changing data."""
 
     from events.models import ServiceProfile
@@ -99,11 +101,11 @@ def inspect_service_profile_ministry_requirements(*, profile_key=None):
     profile = None
     if profile_key is not None:
         try:
-            profile = ServiceProfile.objects.get(key=profile_key)
+            profile = ServiceProfile.objects.using(using).get(key=profile_key)
         except ServiceProfile.DoesNotExist as error:
             raise ServiceProfileRequirementProfileNotFound(profile_key) from error
 
-    queryset = ServiceProfileMinistryRequirement.objects.select_related(
+    queryset = ServiceProfileMinistryRequirement.objects.using(using).select_related(
         "service_profile",
         "ministry_team",
     )

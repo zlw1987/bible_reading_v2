@@ -187,7 +187,13 @@ The deployment-generic profile/default architecture is frozen in
 Profile ministry defaults are configuration that must be explicitly and
 reviewably materialized into event RequiredTeam rows; they are never live
 inherited. The valid selected Worship Team remains separate dynamic event state.
-Those profile/default/materialization proposals are also runtime unimplemented.
+The ServiceProfile/profile-ministry-default foundation and reviewed
+configuration are implemented, and the reviewed production static-default
+configuration is complete. The 7A read-only materialization preview is
+implemented and production verified; the 7B reviewed create-only
+materialization tooling is implemented/local verified, but its production apply
+has not run. Configuration/template data is not per-event operational truth,
+and the MO-S.REQUIRED effective-required runtime remains unimplemented.
 
 The earlier MO-S.5A wording that `rotation_anchor_team` is never required
 coverage is preserved as historical implementation chronology. Governed Worship
@@ -217,9 +223,9 @@ New Required Ministry Team choices must be active and assignable. Event edit
 must still include every already-stored inactive/non-assignable row so it stays
 visible for deliberate review and is never silently deleted. Digital Ministry
 and Worship ministry containers are not required. For the canonical 52
-`bethany_0930_cm` Sundays in 2026, the approved static rows are Lighting, Sound,
-Camera, and Projection only; A/C1/C2/C3 derive from each event's valid selected
-Worship Team.
+`bethany_0930_cm` Sundays in 2026, the approved static rows are Lighting,
+Projection, Sound, and Video only; A/C1/C2/C3 derive from each event's valid
+selected Worship Team.
 
 The canonical Event-page entry belongs on ServiceEvent detail as a current
 Worship Team readout plus an authorization-gated link to the existing governed

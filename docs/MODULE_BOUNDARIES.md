@@ -57,11 +57,19 @@ configuration, Admin, read-only audit, and invalid-active readiness blocker.
 VERIFIED**: the reviewed SVCA profile `bethany_0930_cm` has four active valid
 static defaults, independently post-audited and idempotently verified. This
 configuration did not materialize event requirements. `GENERIC-DEPLOYMENT-
-CONFIG.7A` is **READ-ONLY MATERIALIZATION PREVIEW / LOCAL VERIFIED**: its
+CONFIG.7A` is **PRODUCTION READ-ONLY PREVIEW VERIFIED**: its
 ministry-owned bounded existing-event inspector reports static-default gaps and
-preserved/review evidence through exact profile FKs without any writes. No
-production materialization occurred; Slice 7B apply, automatic new-event
-initialization, and MO-S.REQUIRED runtime remain pending. 5D has
+preserved/review evidence through exact profile FKs without any writes. The
+full-year production preview was 52 / 208 / 8 / 200; the reviewed
+`2026-09-08` through `2026-12-31` scope was 16 / 64 / 4 / 60, with zero review
+evidence or blockers and historical materialization deliberately deferred.
+`GENERIC-DEPLOYMENT-CONFIG.7B` is **IMPLEMENTED / LOCAL VERIFIED; PRODUCTION
+APPLY NOT RUN**: its separate actor/state-bound, dry-run-first service creates
+only reviewed missing static-default RequiredTeam pairs, claims/revises/audits
+only changed events, and atomically recomputes current truth around the SQLite
+writer boundary. Existing/manual/history/Worship rows are preserved. No
+production materialization occurred; automatic new-event initialization and
+MO-S.REQUIRED runtime remain pending. 5D has
  switched readiness, the retained bounded reset, and ServiceEvent Admin to
  FK/Profile authority. `GENERIC-DEPLOYMENT-CONFIG.5E` is IMPLEMENTED / LOCAL
  VERIFIED: Worship XLSX matching/confirmation is FK/Profile-authoritative,

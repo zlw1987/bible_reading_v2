@@ -123,8 +123,16 @@ def _fingerprint(payload):
     return hashlib.sha256(encoded).hexdigest()
 
 
+def materialization_preview_state_fingerprint(payload):
+    """Hash one complete 7A payload, excluding only its derived hash field."""
+
+    canonical = dict(payload)
+    canonical.pop("state_fingerprint", None)
+    return _fingerprint(canonical)
+
+
 def inspect_service_profile_required_team_materialization(
-    *, profile_key, start_date, end_date
+    *, profile_key, start_date, end_date, using="default"
 ):
     """Inspect one exact active profile in an inclusive local-date range.
 
@@ -137,12 +145,13 @@ def inspect_service_profile_required_team_materialization(
     if start_date > end_date:
         raise MaterializationInputError("start_date must not be after end_date.")
     try:
-        profile = ServiceProfile.objects.get(key=profile_key)
+        profile = ServiceProfile.objects.using(using).get(key=profile_key)
     except ServiceProfile.DoesNotExist as error:
         raise MaterializationProfileNotFound(profile_key) from error
 
     requirements = inspect_service_profile_ministry_requirements(
-        profile_key=profile_key
+        profile_key=profile_key,
+        using=using,
     )
     active_rows = tuple(
         row for row in requirements.rows if row.requirement_is_active
@@ -165,13 +174,13 @@ def inspect_service_profile_required_team_materialization(
     }
     requirement_models = {
         requirement.ministry_team_id: requirement
-        for requirement in ServiceProfileMinistryRequirement.objects.filter(
+        for requirement in ServiceProfileMinistryRequirement.objects.using(using).filter(
             service_profile=profile, is_active=True
         ).select_related("ministry_team").order_by("ministry_team_id", "pk")
     }
     requirement_models_all = {
         requirement.pk: requirement
-        for requirement in ServiceProfileMinistryRequirement.objects.filter(
+        for requirement in ServiceProfileMinistryRequirement.objects.using(using).filter(
             service_profile=profile
         ).select_related("ministry_team").order_by("pk")
     }
@@ -189,7 +198,7 @@ def inspect_service_profile_required_team_materialization(
 
     # Database datetime ``__date`` conversion is deployment-timezone dependent;
     # derive the requested configured-local date from each FK-selected event.
-    candidates = ServiceEvent.objects.filter(service_profile=profile).select_related(
+    candidates = ServiceEvent.objects.using(using).filter(service_profile=profile).select_related(
         "service_profile", "rotation_anchor_team"
     ).prefetch_related(
         "required_team_links__ministry_team"
@@ -308,5 +317,5 @@ def inspect_service_profile_required_team_materialization(
     # The public result is intentionally plain deterministic JSON-compatible
     # data; tuple/enums remain an internal typed implementation detail.
     payload = json.loads(json.dumps(payload, default=str))
-    payload["state_fingerprint"] = _fingerprint(payload)
+    payload["state_fingerprint"] = materialization_preview_state_fingerprint(payload)
     return payload

@@ -100,16 +100,34 @@ four valid active requirements and zero integrity blockers; a fresh same-set
 dry-run reported four already-active rows, no changes, no token, and
 `data_mutated: false`. This configuration changed no event operational state:
 no `ServiceEventRequiredTeam` materialization occurred, and Slice 7 remains
-pending.
+pending at that 6B closeout milestone. Production materialization remains
+pending after the later 7B local implementation below.
 
-`GENERIC-DEPLOYMENT-CONFIG.7A` is **READ-ONLY MATERIALIZATION PREVIEW / LOCAL
-VERIFIED**. The ministry-owned inspector reviews only an exact FK-linked active
+`GENERIC-DEPLOYMENT-CONFIG.7A` is **PRODUCTION READ-ONLY PREVIEW VERIFIED**.
+The ministry-owned inspector reviews only an exact FK-linked active
 profile and bounded inclusive local-date event scope. It distinguishes active
 defaults, missing additions, already-explicit defaults, manual extras,
 explicit canonical-Worship rows, invalid explicit rows, and inactive default
 history, with a deterministic V1 state fingerprint. It writes no operational
-state. Production materialization has not happened; Slice 7B reviewed apply,
-new-event automatic initialization, and MO-S.REQUIRED runtime remain pending.
+state. The production full-year preview reported 52 events / 208 expected / 8
+already present / 200 missing pairs. The product owner deferred historical
+backfill and reviewed only `2026-09-08` through `2026-12-31`: 16 events / 64
+expected / 4 already present / 60 missing pairs across 15 changed events, with
+zero review-evidence events and zero blockers. Fingerprint
+`8aa89d8d42a0516a4a8712009a15ceab4d8153ee70d360aa5ca837aec4600d10` is
+historical 7A evidence only, never a 7B token.
+
+`GENERIC-DEPLOYMENT-CONFIG.7B` is **IMPLEMENTED / LOCAL VERIFIED; PRODUCTION
+APPLY NOT RUN**. The separate dry-run-first command requires an exact profile,
+inclusive local-date scope, and exact active staff/superuser actor. A distinct
+V1 SHA-256 token binds the actor and complete 7A state. Apply uses changed-event
+revision CAS, post-claim full-truth recomputation, create-only missing-pair
+writes, post-write recomputation, and one atomic shared-operation event audit
+per changed event. Existing/manual/history/Worship rows are preserved; complete
+events are untouched. No notification, assignment/member, Worship selection,
+new-event initialization, or MO-S.REQUIRED runtime is added. Production
+RequiredTeam materialization has not happened, and historical scope remains
+deliberately deferred.
 
 Historically, `MO-S.6D-PROFILE.1A` introduced the optional validated
 `ServiceEvent.service_profile_key` identity foundation. After 5F it is
@@ -168,7 +186,7 @@ preserving legacy stored rows for review. The canonical Event-page entry is a
 read-only/current Worship section on ServiceEvent detail with an authorization-
 gated link to the existing governed selector, never a raw ordinary-form field.
 For the 52 canonical 2026 `bethany_0930_cm` events, the approved future static
-rows are Lighting, Sound, Camera, and Projection only; Digital Ministry and
+rows are Lighting, Projection, Sound, and Video only; Digital Ministry and
 Worship containers are not required, and A/C1/C2/C3 remain derived per event.
 
 ## 1. Project Identity

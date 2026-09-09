@@ -34,8 +34,12 @@ implemented through the locally closed 5F consumer switch.
 tooling. **`GENERIC-DEPLOYMENT-CONFIG.6B — PRODUCTION CONFIGURATION APPLY
 COMPLETE / VERIFIED`**: the reviewed SVCA deployment has four active valid
 static defaults for `bethany_0930_cm`, and a fresh same-set dry-run verified
-idempotency. No `ServiceEventRequiredTeam` materialization has occurred; Slice
-7 event materialization remains pending.
+idempotency. At that 6B production-configuration milestone, no
+`ServiceEventRequiredTeam` materialization had occurred. 7A is now
+**PRODUCTION READ-ONLY PREVIEW VERIFIED**, and 7B tooling is **IMPLEMENTED /
+LOCAL VERIFIED**; production 7B RequiredTeam materialization **APPLY has NOT
+RUN**, historical backfill remains deliberately deferred, and MO-S.REQUIRED
+runtime remains unimplemented.
 
 `MO-S.6D-PROFILE.1A` historically introduced the optional stable
 `ServiceEvent.service_profile_key` identity foundation. After generic
@@ -2351,13 +2355,16 @@ four already active, no changes, no confirmation token, and
 Configuration remains separate from materialization. Dry-run and apply create
 zero `ServiceEventRequiredTeam` rows, change zero ServiceEvents or scheduling
 revisions, and create/change zero TeamAssignments, notifications, or Worship
-selections. Worship XLSX behavior is unchanged. Slice 7 materialization and
-MO-S.REQUIRED remain pending; no Slice 8 work begins here, and the Lighting
-Pilot remains retired.
+selections. Worship XLSX behavior is unchanged. At the 6B production-
+configuration milestone, Slice 7 materialization had not started. Current
+production RequiredTeam materialization remains pending: 7A is now production
+read-only preview verified, and 7B tooling is implemented/local verified with
+production apply not run. MO-S.REQUIRED remains pending; no Slice 8 work began
+in 6B, and the Lighting Pilot remains retired.
 
 ### GENERIC-DEPLOYMENT-CONFIG.7A — Existing-Event RequiredTeam Materialization Preview
 
-Status: **READ-ONLY MATERIALIZATION PREVIEW / LOCAL VERIFIED**.
+Status: **PRODUCTION READ-ONLY PREVIEW VERIFIED**.
 
 The ministry-owned
 `audit_service_profile_required_team_materialization --profile-key KEY
@@ -2375,9 +2382,48 @@ calculation.
 
 The command has no `--apply` and writes nothing: it creates, updates, or
 deletes no RequiredTeam row, ServiceEvent, revision, assignment, notification,
-audit row, or Worship selection. Production materialization has not happened.
-Slice 7B reviewed apply, new-event automatic initialization, and MO-S.REQUIRED
-runtime remain pending.
+audit row, or Worship selection. Production read-only verification found 52
+full-year events / 208 expected / 8 already / 200 missing pairs. The owner
+deliberately deferred historical backfill and reviewed only `2026-09-08`
+through `2026-12-31`: 16 events / 64 expected / 4 already / 60 missing across
+15 changed events, with zero review-evidence events and blockers. The reviewed
+fingerprint
+`8aa89d8d42a0516a4a8712009a15ceab4d8153ee70d360aa5ca837aec4600d10` is
+historical 7A evidence only and cannot authorize 7B.
+
+### GENERIC-DEPLOYMENT-CONFIG.7B — Reviewed Existing-Event Materialization Apply
+
+Status: **IMPLEMENTED / LOCAL VERIFIED; PRODUCTION APPLY NOT RUN**.
+
+The generic operator command is one line:
+`python manage.py materialize_service_profile_required_teams --profile-key KEY --start-date YYYY-MM-DD --end-date YYYY-MM-DD --actor-user-id USER_PK`.
+It defaults to dry-run. Apply requires the same arguments plus
+`--apply --confirmation-token <64-lowercase-hex>` from the exact fresh ready
+plan. `SERVICE_PROFILE_REQUIRED_TEAM_MATERIALIZATION_PLAN_V1` binds the exact
+active staff/superuser actor and complete 7A fingerprint/payload, including
+profile/configuration/team validity, exact scope and events, lifecycle and
+expected revisions, every current RequiredTeam row, review evidence, blockers,
+and exact missing pairs. The 7A fingerprint is printed separately and is not
+accepted as the 7B token.
+
+Apply rebuilds the plan within one outer transaction, uses the canonical
+changed-event-only scheduling-revision CAS as the SQLite first-write boundary,
+then recomputes 7A truth before creating anything and allows only the claimed
+events' exact revision `+1`. It creates only reviewed missing static-default
+pairs in event/team PK order, recomputes the exact scope after writes, verifies
+zero missing and full expected coverage, and writes one `LogEntry` per changed
+event with one shared operation UUID. Existing default rows retain PK/time;
+manual extras, explicit Worship, inactive history, and invalid historical rows
+are preserved. Complete events receive no row, revision, or audit. Any stale,
+busy, duplicate, postcondition, or audit failure rolls back the entire apply.
+
+This is RequiredTeam operational-row materialization, not ServiceEvent
+creation. It creates no TeamAssignment, TeamAssignmentMember, Notification,
+Worship selection, serving state, automatic/recurring new-event initialization,
+or MO-S.REQUIRED runtime. Production 7B has not run. Historical missing pairs
+remain deliberately unmaterialized unless separately reviewed; after a future
+reviewed operational-scope apply, the full-year preview is expected to retain
+140 historical missing pairs.
 
 ### MO-S.REQUIRED.0A — Effective Required-Team Semantics / Event Worship Entry Audit
 
@@ -2541,9 +2587,9 @@ For exactly 52 canonical `bethany_0930_cm` Sunday events in 2026, the approved
 **static** RequiredTeam set is exactly:
 
 - Lighting Team / 灯光团队;
+- Projection Team / 幻灯片组;
 - Sound Team / 音控团队;
-- Camera Team / 摄像团队; and
-- Projection Team / 幻灯片组.
+- Video Team / 摄像团队.
 
 Digital Ministry / 影音事工 is a non-assignable container and is not required.
 Neither Worship ministry container is required. Worship A/C1/C2/C3 are never

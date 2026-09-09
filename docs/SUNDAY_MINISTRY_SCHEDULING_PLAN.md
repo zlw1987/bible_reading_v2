@@ -2431,6 +2431,69 @@ no-ops with no confirmation token. Historical missing pairs remain deliberately
 unmaterialized unless separately reviewed; the full-year scope is expected to
 retain 140 historical missing pairs.
 
+### GENERIC-DEPLOYMENT-CONFIG.7C-0A — New-Event RequiredTeam Initialization Decision
+
+Status: **READ-ONLY AUDIT / DOCS-ONLY DECISION COMPLETE; RUNTIME
+UNIMPLEMENTED**. `GENERIC-DEPLOYMENT-CONFIG.7C-0A-FU1` adds the docs-only
+SQLite first-write/current-truth guarantee and does not begin 7C-1A. The
+canonical detailed contract is
+[`GENERIC_DEPLOYMENT_CONFIGURATION_ARCHITECTURE.md`](GENERIC_DEPLOYMENT_CONFIGURATION_ARCHITECTURE.md#73-generic-deployment-config7c-0a--new-event-initialization-decision).
+
+The supported user-facing creation paths are ordinary single
+`/events/new/`, ordinary recurring `/events/recurring/new/`, and the
+single-event Django Admin add form. The bounded
+`rebuild_bethany_0930_service_events` APPLY is a separate deployment-specific
+52-event operator reset, not an interactive generic creation workflow. No
+workbook, planner, assignment, audit, 7A, or 7B path creates ServiceEvents.
+
+7C-1A should extend the two existing ordinary forms together and use one
+events-owned creation service. Single creation gains a server-rendered profile
+defaults review; recurring creation extends its existing Preview. An active
+profile must match `event_type`; its current valid active static defaults are
+shown and prechecked in the existing Required Ministry Teams picker, where the
+user may deliberately edit the exact final active/assignable set. No profile
+means no derived defaults. Zero defaults is ready and is stated visibly.
+Dynamic JavaScript is unnecessary.
+
+A versioned, signed, expiring snapshot binds the contract/request owner when
+required, event type, exact selected profile identity/current state, the
+complete relevant active/inactive default surface, relevant team identity and
+current activity/assignability/Worship validity, the displayed default set,
+and the audience validation baseline. Recurring review additionally binds all
+recurrence inputs, exact candidate dates, exact create dates, and exact skipped
+dates with their current duplicate classification/evidence. The 7A/7B
+fingerprints/tokens are not reused. Profile or event-type change invalidates
+review, and a crafted selected-profile final POST without a valid current
+snapshot is rejected. The final explicit team set may deliberately add/remove
+valid static teams, including removing every proposed default.
+
+One outer transaction owns the complete single event or recurring batch.
+Before writing it validates the snapshot and recomputes exact
+profile/default/submitted-team/audience truth plus recurring create/skip truth.
+The first intended ServiceEvent insert at revision `0` establishes SQLite's
+writer boundary; `select_for_update()` is not treated as a SQLite row lock.
+While holding that boundary, the service reloads and recomputes every
+review-sensitive fact. Only the expected transaction-local first insert may
+differ. For a single event, stale post-boundary truth rolls back that candidate
+before any partial creation survives. For recurring creation, complete batch
+classification is recomputed after the first insert, treating only that row as
+the expected effect; any concurrent duplicate or create/skip change rolls back
+the whole batch rather than silently shrinking or expanding it. Only then are
+remaining events and every exact audience/RequiredTeam set created and final
+revision-zero postconditions verified.
+
+7C-1A tests must cover both sides of the SQLite first-writer race, whole-batch
+duplicate/classification drift, rollback of the first inserted event after
+post-boundary failure, changed profile/type, crafted profile POST without a
+valid review, revision-zero success, and deliberate default removal. Use
+target-like file-backed two-connection SQLite tests where practical. The
+events-owned create-only orchestration reuses the canonical ministry inspector
+through the smallest existing seam and does not copy its validation logic,
+broaden module dependency metadata, or introduce a plugin abstraction.
+Existing-event edit/profile changes, Django Admin inlines, the bounded reset,
+7A/7B, Worship selection, assignments, notifications, and coverage runtime
+gain no automatic materialization or deletion.
+
 ### MO-S.REQUIRED.0A — Effective Required-Team Semantics / Event Worship Entry Audit
 
 Status: **EFFECTIVE REQUIRED-TEAM SEMANTICS / EVENT WORSHIP ENTRY AUDIT

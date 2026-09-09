@@ -56,9 +56,13 @@ read-only preview evidence is verified. **`GENERIC-DEPLOYMENT-CONFIG.7B —
 PRODUCTION MATERIALIZATION APPLY COMPLETE / VERIFIED`**: the separately
 reviewed `2026-09-08` through `2026-12-31` existing-event scope is closed with
 64 explicit static-default pairs and zero missing/blockers. Historical backfill
-remains deliberately deferred. MO-S.REQUIRED runtime and external identity mapping remain unimplemented and
-separately gated. The production consumer-switch closeout is complete and
-verified.
+remains deliberately deferred. **`GENERIC-DEPLOYMENT-CONFIG.7C-0A — NEW-EVENT
+INITIALIZATION AUDIT / IMPLEMENTATION DECISION COMPLETE`** freezes existing
+ordinary single+recurring forms, server-rendered reviewed defaults, and one
+atomic create service as the next `7C-1A` slice; that runtime remains
+unimplemented. MO-S.REQUIRED runtime and external identity mapping remain
+unimplemented and separately gated. The production consumer-switch closeout is
+complete and verified.
 
 4A adds the generic read-only `audit_service_profile_identity` inventory and
 the dry-run-first `configure_service_profile_mapping` command. The inventory
@@ -766,6 +770,215 @@ does **not** delete an event row. Any future removal workflow needs separate
 explicit row review. Materialization emits no current notification. Audit uses
 one operation ID and changed-event detail without private roster data.
 
+### 7.3 `GENERIC-DEPLOYMENT-CONFIG.7C-0A` — new-event initialization decision
+
+Status: **READ-ONLY REPOSITORY AUDIT / IMPLEMENTATION DECISION COMPLETE;
+RUNTIME UNIMPLEMENTED**. `GENERIC-DEPLOYMENT-CONFIG.7C-0A-FU1` closes the
+docs-only SQLite first-write/current-truth race in the planned 7C-1A contract;
+it does not begin that implementation.
+
+The current supported creation inventory is:
+
+| Path | Cardinality | Current transaction and writes | Profile exposure |
+|---|---:|---|---|
+| Ordinary `/events/new/` | One | `create_service_event()` owns one outer transaction containing `ServiceEvent.save()`, `required_teams.set()`, and audience-row replacement/creation through `form.save_audience_units()` | Both `service_profile` and `service_profile_key` are intentionally absent |
+| Ordinary `/events/recurring/new/` | Zero or many dates after duplicate filtering | `create_recurring_events()` owns one outer transaction for the complete batch; each loop creates one event, applies the same submitted RequiredTeam set, and creates the same selected audience rows | Both profile fields are intentionally absent; the page already has server-rendered Preview and Create actions |
+| Django Admin ServiceEvent add | One | Django Admin's change-form transaction owns the parent event plus RequiredTeam and audience inlines | Active profiles are selectable through the FK; the compatibility key is read-only; RequiredTeam rows remain separate manual inlines |
+| `rebuild_bethany_0930_service_events` explicit operator APPLY | Exactly the bounded 52-event replacement set | `apply_reset()` owns one destructive, token-gated outer transaction and `_create_canonical_event()` creates each exact profile-linked event plus its audience row | The exact profile is an operator prerequisite, not a user choice; this historical/deployment-specific reset deliberately creates no RequiredTeam rows |
+
+Repository-wide non-test searches found no other supported `ServiceEvent`
+creation writer. Direct ORM construction in tests and immutable historical
+migrations is not a user-facing creation path. Worship workbook confirmation,
+rotation planning, assignment flows, audits, 7A, and 7B operate on existing
+events and create no ServiceEvent.
+
+The ordinary Required Ministry Teams picker is already the correct explicit
+operational review surface, but its current choices are too broad: new single
+and recurring forms offer every active team, including non-assignable
+containers. Single-event edit offers active teams plus every already-linked
+team and replaces the stored set with `.set()`. The future create filter is
+active **and** assignable. Existing-event edit must retain every currently
+linked inactive/non-assignable row in its choices so an unrelated edit never
+silently drops review evidence. Admin remains a manual repair surface; it does
+not gain implicit profile-default materialization.
+
+#### Chosen UX and stale-state contract
+
+| Option | Repository fit | Decision |
+|---|---|---|
+| A. Extend existing single/recurring forms | Reuses both supported ordinary routes, the existing Required Ministry Teams picker, audience validation, and recurring Preview; needs one shared create service and focused form/template changes | **Recommend**: smallest complete reviewed consumer with no duplicate UI |
+| B. Separate profile-aware creation workflow | Would duplicate event fields, audience selection, permission checks, recurrence rules, and transaction behavior while leaving users to choose between overlapping create routes | Reject for 7C-1A |
+| C. Central initialization service only | Establishes a useful boundary but has no explicit user review/choice consumer, so it cannot by itself satisfy the frozen new-event contract | Reject as an incomplete shipping slice; build the service inside Option A |
+
+Choose **Option A**: extend the existing ordinary single and recurring creation
+forms. Do not add a duplicate profile-specific workflow (Option B), and do not
+ship an unused central writer with no user-facing reviewed consumer (Option C).
+Expose a bilingual, human-facing `ServiceProfile` choice only while creating;
+never expose `service_profile_key`. Choices are active profiles, and the
+submitted `event_type` must equal the selected profile's event type before a
+review can be produced.
+
+Review is server-rendered; dynamic JavaScript is not necessary. Single creation
+gets a **Review profile defaults** action. Recurring creation reuses and extends
+its existing **Preview** action. The review displays the selected profile and
+its exact active static defaults in configured order, states clearly that they
+are initial Required Ministry Teams rather than assignments or live
+inheritance, and prechecks those defaults in the existing picker. A user may
+then deliberately add or remove active assignable teams; the submitted picker
+set is the exact operational set to create. No profile leaves the picker with
+no profile-derived preselection. A valid active profile with zero defaults is
+ready and visibly says that no profile defaults are configured.
+
+The review carries a versioned signed, expiring, request-scoped snapshot. At
+minimum it binds:
+
+- contract version and, when required by the repository signing pattern, the
+  exact requesting user/owner identity;
+- submitted `event_type`;
+- selected profile PK/key/type/current active state plus its current identity
+  and update evidence;
+- the complete relevant active **and inactive** requirement surface, including
+  row identity, order, active state, and update evidence;
+- every relevant MinistryTeam PK/key and current activity, assignability, and
+  canonical Worship-path validity;
+- the exact default set displayed to the user;
+- the selected audience and its validation baseline where used by the current
+  workflow; and
+- an expiration bound.
+
+Recurring review additionally binds every recurrence input, every exact
+candidate local date, every date classified for creation, and every skipped
+date plus the reason/current duplicate evidence used by the existing duplicate
+semantics. Neither the 7A state fingerprint nor the 7B confirmation token is a
+7C review artifact and neither may be reused.
+
+The final user-selected RequiredTeam set may deliberately differ from the
+profile defaults because those defaults are proposed/prechecked configuration,
+not mandatory inheritance. Every submitted new team must nevertheless still
+be active, assignable, and valid under the approved static-team rules. Changing
+the selected profile or `event_type` after review invalidates the review. A
+crafted final POST selecting a profile without a valid current signed snapshot
+for that exact profile/type state is rejected. No profile still means no
+profile-derived defaults; zero active defaults remains a valid reviewed state.
+Inactive requirement history is bound review evidence but is not a default or
+blocker.
+
+#### SQLite first-write and current-truth contract
+
+One outer atomic transaction owns the complete single event or recurring
+batch. Before writing, the create-only orchestration decodes and validates the
+signed snapshot; re-resolves the exact ServiceProfile; recomputes complete
+profile/default/team validity and every submitted explicit RequiredTeam's
+validity; recomputes audience validity; and, for recurring creation, recomputes
+the exact candidate/create/skip classification. It then establishes SQLite's
+writer boundary through the first intended ServiceEvent creation write.
+`select_for_update()` must not be described or relied on as a row lock on
+SQLite.
+
+After that first write, while the writer boundary is held, the orchestration
+reloads and recomputes **all** review-sensitive current truth. Only the expected
+transaction-local consequence of the first intended event insert may differ
+from the reviewed/pre-write state. Any changed external fact, invalid state,
+unexpected duplicate, or post-write mismatch rolls back that first insert and
+the entire transaction. No partially created event, audience row, or
+RequiredTeam row survives. If 7C-1A finds a safer existing repository-supported
+first-write ordering, it may use that ordering only if it preserves the same
+all-or-nothing, post-boundary current-truth guarantee.
+
+For one event the required order is: validate reviewed state; enter the outer
+transaction; insert the candidate ServiceEvent at `scheduling_revision = 0`;
+use that insert as the writer boundary; re-resolve/recompute exact profile
+identity, profile/type compatibility, the complete relevant default surface,
+relevant team state/Worship validity, and audience validity; require equality
+with the reviewed contract except for the inserted row; create the exact
+reviewed explicit RequiredTeam rows and audience rows; verify postconditions;
+and commit. A failed post-first-write check rolls back the candidate event.
+
+For recurring creation the first candidate event insert establishes the writer
+boundary. The orchestration then recomputes the **complete** batch
+candidate/create/skip classification plus profile/default/team/audience truth.
+It must equal the signed reviewed batch except for that one expected
+transaction-local created row. Only then may it create the remaining events
+and every event's exact RequiredTeam/audience rows. Final postconditions prove
+the exact reviewed event set and revision zero for every new event. A concurrent
+duplicate or any other create/skip change rolls back the whole batch; apply
+never silently shrinks or expands the reviewed batch.
+
+#### Central creation boundary and revisions
+
+`events` should own one new central creation service because it owns the event
+creation transaction and the two ordinary callers. The service should consume
+one or more fully validated event specifications, the exact selected audience
+units, the exact reviewed RequiredTeam set, the optional selected profile, and
+the reviewed profile-default snapshot. It reuses:
+
+- `events.service_profile_runtime.prepare_service_event_profile()` for the
+  exact FK/compatibility pair and event-type/active validation;
+- `ministry.service_profile_ministry_requirements` as the canonical
+  read-only default/team-validity classifier; and
+- the current audience-combination validation, while creating new audience
+  rows rather than invoking an edit-oriented delete/recreate operation.
+
+Inside one outer `transaction.atomic()`, the service follows the pre-write,
+first-intended-insert, and post-boundary recomputation contract above; then it
+creates every remaining event, every audience row, and the exact explicit
+`ServiceEventRequiredTeam` rows. Recurring creation passes one exact reviewed
+static/manual set to every event and is all-or-nothing. Every successfully
+created event remains at the model's normal `scheduling_revision = 0`; initial
+audience and RequiredTeam rows do not advance it. Busy, integrity, validation,
+stale-current-truth, or postcondition failure rolls back the complete single
+event or recurring batch.
+
+The events-owned orchestration must not copy or reinterpret Ministry profile-
+default validation. It calls the canonical ministry inspector/service through
+the smallest existing cross-domain seam needed by this repository. This adds no
+module-registry dependency metadata and no plugin/extension abstraction.
+Existing edit paths must never call the create-only service. Django Admin and
+the Bethany reset remain unchanged.
+
+Do not reuse the 7B writer for this purpose. 7B is an existing-event,
+changed-event-only CAS/audit workflow. The new creation service may reuse the
+same read-only validity semantics, but it needs no existing-event revision
+claim and must not manufacture a 7B audit/materialization operation.
+
+Single and recurring creation should ship together in one `7C-1A` slice. Their
+form layouts differ, but they share the same profile review contract, explicit
+team picker, audience requirement, failure rules, and final atomic service.
+Shipping only one would leave duplicated creation logic and inconsistent
+ordinary behavior. Django Admin and the bounded reset stay outside that
+consumer slice: their current manual/technical semantics remain explicit and
+gain no hidden default behavior.
+
+The exact proposed `GENERIC-DEPLOYMENT-CONFIG.7C-1A` scope is: create-only
+profile selection for both ordinary forms; bilingual server-rendered
+single-review and recurring-preview output; a versioned signed review snapshot;
+strict active/assignable new-team choices with existing invalid-row
+preservation on edit; one events-owned atomic single/batch creation service;
+exact profile-pair preparation; all-or-nothing event/audience/explicit
+RequiredTeam creation; revision-zero postconditions; and focused tests for no
+profile, zero defaults, deliberate edits, invalid/stale configuration,
+recurrence drift, rollback, and unchanged existing-event/Admin/reset behavior.
+The matrix must include: a profile/default writer winning before the first
+event write produces stale with zero created rows; 7C winning the SQLite
+first-write boundary prevents a relevant concurrent configuration writer from
+silently committing inside the reviewed transaction; recurring duplicate or
+create/skip drift rolls back the whole batch; post-first-write recomputation
+failure rolls back the first inserted event; changed profile/type rejects the
+review; a crafted profile POST without a valid snapshot is rejected; successful
+events remain revision zero; and deliberate removal of every proposed default
+remains a valid explicit final selection. Use target-like file-backed,
+two-connection SQLite tests where practical, following existing scheduling
+concurrency patterns.
+
+Explicit non-goals are schema/migrations; live inheritance; signals,
+`post_save`, startup/background materialization, or `ServiceEvent.save()` side
+effects; default-driven deletion; existing-event profile-change
+materialization/removal; Admin/default-inline automation; changes to the
+Bethany reset or 7A/7B; Worship A/C1/C2/C3 static rows; `rotation_anchor_team`;
+assignments, members, serving, notifications, permissions, audience inference,
+adapters, production data, historical backfill, and MO-S.REQUIRED coverage
+runtime.
+
 ## 8. Worship Is a Separate Dynamic Axis
 
 ```text
@@ -940,7 +1153,7 @@ Each slice requires separate approval.
 | 4. Profile mapping/backfill | **IMPLEMENTED / LOCAL VERIFIED / PRODUCTION APPLY COMPLETE / POST-AUDIT VERIFIED (`GENERIC-DEPLOYMENT-CONFIG.4A`) for the reviewed SVCA mapping**: generic read-only key/type/FK inventory plus one-key-at-a-time reviewed profile creation and complete exact-target FK backfill; `SERVICE_PROFILE_MAPPING_PLAN_V1` binds full metadata and current event state, existing scheduling CAS supplies SQLite serialization and exactly-once revision advance, and independent post-audit proves dual consistency. Production has one reviewed profile, 52 exact dual-consistent mapped events, zero drift, and revisions advanced `1 -> 2` exactly once. At the 4A milestone, `runtime_consumer_switched` remained false. MEDIUM operationally. | Stop on conflict/unmapped/noncanonical/ambiguity/existing profile/non-null FK/stale/busy state; owner reviews every target apply. Repeat initial mapping correctly fails closed after configuration. |
 | 5. Integration boundary + consumer switch | **5A READ-ONLY AUDIT / DOCS-ONLY IMPLEMENTATION PLAN COMPLETE; 5B REGISTRY/GATES/IMPORT ISOLATION IMPLEMENTED / LOCAL VERIFIED; 5C CANONICAL RUNTIME IDENTITY SEAM IMPLEMENTED / LOCAL VERIFIED; 5D READINESS/RESET/ADMIN SWITCH IMPLEMENTED / LOCAL VERIFIED; 5E WORKBOOK FK MATCHING/CONFIRMATION/V2 SIGNING IMPLEMENTED / LOCAL VERIFIED; 5F PRODUCTION CLOSEOUT COMPLETE / VERIFIED**: [`GENERIC_DEPLOYMENT_CONFIGURATION_SLICE5_PLAN.md`](GENERIC_DEPLOYMENT_CONFIGURATION_SLICE5_PLAN.md) contains the classified inventory and verified production evidence. 5E makes workbook matching and post-CAS confirmation FK/Profile-authoritative and rejects V1 artifacts; 5F proves Class A legacy authority is zero in repository/runtime design and the deployed closeout verifies `runtime_consumer_switched` as true. MEDIUM-HIGH. | Verified: only the workbook key is enabled; identity audit and Readiness V2 are zero-drift/ready; a fresh V2 workbook preview is 52 exact no-ops with no confirmation; English/Chinese rendered surfaces were checked. |
 | 6. Profile ministry defaults | **FOUNDATION + REVIEWED CONFIGURATION TOOLING IMPLEMENTED / LOCAL VERIFIED (`GENERIC-DEPLOYMENT-CONFIG.6A/6B`)**: ministry-owned relation, active/static-team validation through canonical Worship primary-path resolution, inactive history, profile identity immutability extension, Admin, typed read-only audit, bounded setup-readiness blocker, and exact profile-key + team-PK/key complete-desired-set dry-run/apply tooling; no event materialization. LOW-MEDIUM. | Active configuration with an inactive profile/team, non-assignable team, or Worship-path team fails closed; state-bound V1 review fails stale; inactive history is retained; zero defaults is ready; owner reviews every deployment apply. |
-| 7. Materialization/drift | **7A PRODUCTION READ-ONLY PREVIEW VERIFIED; 7B PRODUCTION MATERIALIZATION APPLY COMPLETE / VERIFIED**: bounded reviewed existing-event scope materialized 60 missing static-default pairs across 15 changed events; independent post-audit and fresh no-op proof verified 64 / 64 / 0 / zero blockers. Historical backfill and automatic new-event initialization remain separate and pending. MEDIUM-HIGH. | Exact dry-run, stale/busy/current-truth recomputation/rollback/idempotency and target-like SQLite concurrency tests; owner reviews every production apply. |
+| 7. Materialization/drift | **7A PRODUCTION READ-ONLY PREVIEW VERIFIED; 7B PRODUCTION MATERIALIZATION APPLY COMPLETE / VERIFIED; 7C-0A NEW-EVENT AUDIT/DECISION COMPLETE**: bounded reviewed existing-event scope materialized 60 missing static-default pairs across 15 changed events; independent post-audit and fresh no-op proof verified 64 / 64 / 0 / zero blockers. Historical backfill remains deliberately deferred. New-event runtime remains pending; 7C-0A selects existing ordinary single+recurring forms, server-rendered reviewed defaults, and one atomic create service for 7C-1A. MEDIUM-HIGH. | Existing events keep the 7B CAS/apply contract. New events require a state-bound review, exact active/assignable explicit set, atomic event+audience+RequiredTeam creation, revision-zero postcondition, and stale/invalid rollback. |
 | 8. MO-S.REQUIRED runtime | Effective resolver and bounded coverage/gap/Event-detail consumers; notifications/persisted audits explicit-only. MEDIUM. | Validate Team Schedule, Board, Today/leader attention, Staff Overview, event detail; review 52-event projection. |
 | 9. Production configuration/QA | Enable approved integrations, verify identity/default data, preview/materialize approved scope, focused QA. MEDIUM-HIGH operationally. | Backup/rollback and reviewed dry-run before apply; owner required. |
 | 10. Legacy contract retirement | Prove zero string consumers/drift, remove old field/tools in separate migration/docs slice. HIGH. | Last only; explicit destructive-schema approval. |

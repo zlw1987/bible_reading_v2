@@ -1435,7 +1435,7 @@ class ServiceEventFoundationTests(TestCase):
         self.assertContains(response, "Required Ministry Teams")
         self.assertContains(response, "Lighting Team")
 
-    def test_ordinary_event_viewer_does_not_see_rotation_anchor_metadata(self):
+    def test_ordinary_event_viewer_sees_only_bounded_invalid_worship_review(self):
         self.set_language("en")
         event = self.create_visible_event(rotation_anchor_team=self.required_team)
 
@@ -1445,11 +1445,12 @@ class ServiceEventFoundationTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertNotContains(response, "Rotation Anchor Team")
         self.assertNotContains(response, "Lighting Team")
+        self.assertContains(response, "Worship Team review required")
         self.assertNotContains(response, "Missing")
         self.assertNotContains(response, "Unassigned")
         self.assertNotContains(response, "Coverage")
 
-    def test_staff_event_viewer_sees_rotation_anchor_metadata(self):
+    def test_staff_event_viewer_sees_bounded_invalid_worship_review(self):
         self.set_language("en")
         event = self.create_event(rotation_anchor_team=self.required_team)
 
@@ -1457,8 +1458,8 @@ class ServiceEventFoundationTests(TestCase):
         response = self.client.get(reverse("service_event_detail", args=[event.id]))
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Current Worship Team")
-        self.assertContains(response, "Lighting Team")
+        self.assertContains(response, "Worship Team review required")
+        self.assertNotContains(response, "Lighting Team")
 
     def test_staff_detail_shows_structure_audience_unit_labels(self):
         self.set_language("en")
@@ -1520,7 +1521,7 @@ class ServiceEventFoundationTests(TestCase):
         self.assertNotContains(response, "ServiceEventAudienceScope")
         self.assertNotContains(response, "CHURCH")
 
-    def test_team_assignment_manager_sees_rotation_anchor_metadata(self):
+    def test_team_assignment_manager_sees_bounded_invalid_worship_review(self):
         self.set_language("en")
         event = self.create_event(rotation_anchor_team=self.required_team)
         ChurchRoleAssignment.objects.create(
@@ -1533,8 +1534,8 @@ class ServiceEventFoundationTests(TestCase):
         response = self.client.get(reverse("service_event_detail", args=[event.id]))
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Current Worship Team")
-        self.assertContains(response, "Lighting Team")
+        self.assertContains(response, "Worship Team review required")
+        self.assertNotContains(response, "Lighting Team")
 
     def test_regular_event_viewer_does_not_see_coworker_coverage(self):
         self.set_language("en")
@@ -2286,7 +2287,7 @@ class ServiceEventFoundationTests(TestCase):
         # "Audience" label sourced from ServiceEventAudienceScope rows.
         self.assertContains(response, "Audience")
         self.assertContains(response, "Required Ministry Teams")
-        self.assertContains(response, "Current Worship Team")
+        self.assertContains(response, "Worship Team")
 
     def test_coverage_viewer_detail_shows_management_metadata(self):
         self.set_language("en")
@@ -2306,7 +2307,7 @@ class ServiceEventFoundationTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Management details")
         self.assertContains(response, "Required Ministry Teams")
-        self.assertContains(response, "Current Worship Team")
+        self.assertContains(response, "Worship Team")
 
 
 class ServiceEventAdminAudienceIntegrityTests(TestCase):

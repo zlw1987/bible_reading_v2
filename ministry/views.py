@@ -93,6 +93,7 @@ from .services.copy_forward_suggestions import (
     compare_current_assignments_to_suggestion,
     find_copy_forward_suggestion,
 )
+from .services.effective_required_teams import inspect_effective_required_teams
 from .services.sunday_schedule_board import build_sunday_schedule_board
 from .services.worship_context import (
     build_canonical_worship_contexts,
@@ -110,7 +111,9 @@ from .services.worship_context_review import (
     require_rendered_context_is_current,
     signature_from_canonical_context,
 )
-from .services.worship_governance import inspect_worship_ownership_consistency
+from .services.worship_governance import (
+    inspect_worship_ownership_consistency_for_events,
+)
 from .services.worship_assignment_guard import (
     validate_worship_assignment_write,
 )
@@ -556,10 +559,7 @@ def leader_needs_attention_rows(user, *, days=LEADER_NEEDS_ATTENTION_DAYS, langu
     end_at = _local_midnight(end_date + timedelta(days=1))
     event_queryset = (
         events_with_coverage_queryset()
-        .filter(
-            start_datetime__lt=end_at,
-            required_team_links__isnull=False,
-        )
+        .filter(start_datetime__lt=end_at)
         .exclude(
             status__in=[
                 ServiceEvent.STATUS_DRAFT,
@@ -571,7 +571,13 @@ def leader_needs_attention_rows(user, *, days=LEADER_NEEDS_ATTENTION_DAYS, langu
     )
     if not is_global_manager:
         event_queryset = event_queryset.filter(
-            required_team_links__ministry_team_id__in=manageable_team_ids
+            Q(required_team_links__ministry_team_id__in=manageable_team_ids)
+            | Q(rotation_anchor_team_id__in=manageable_team_ids)
+        ).distinct()
+    else:
+        event_queryset = event_queryset.filter(
+            Q(required_team_links__isnull=False)
+            | Q(rotation_anchor_team__isnull=False)
         ).distinct()
 
     events = [
@@ -608,12 +614,17 @@ def leader_needs_attention_rows(user, *, days=LEADER_NEEDS_ATTENTION_DAYS, langu
 
     issue_rows = []
     for event in events:
-        for coverage_row in coverage_by_event[event.id]["rows"]:
+        event_coverage = coverage_by_event[event.id]
+        for coverage_row in event_coverage["rows"]:
             unconfirmed_members = [
                 member
                 for member in coverage_row["members"]
                 if not member["confirmed"]
             ]
+            is_worship_review_row = (
+                event_coverage["worship_review_required"]
+                and coverage_row["is_derived_worship_requirement"]
+            )
             if coverage_row["kind"] in {
                 COVERAGE_UNASSIGNED,
                 COVERAGE_EMPTY_ASSIGNMENT,
@@ -626,7 +637,17 @@ def leader_needs_attention_rows(user, *, days=LEADER_NEEDS_ATTENTION_DAYS, langu
                     else "Awaiting confirmation"
                 )
             else:
-                continue
+                if not is_worship_review_row:
+                    continue
+                issue_label = "需要检查" if language == "zh" else "Review required"
+
+            if is_worship_review_row and coverage_row["kind"] in {
+                COVERAGE_UNASSIGNED,
+                COVERAGE_EMPTY_ASSIGNMENT,
+            }:
+                issue_label = (
+                    f"{issue_label} · {'需要检查' if language == 'zh' else 'Review required'}"
+                )
 
             team = coverage_row["team"]
             schedule_params = schedule_query_string(
@@ -1530,7 +1551,9 @@ def team_schedule(request, team_id):
         .order_by("start_datetime", "id")
     )
     candidate_events = list(event_queryset)
-    ownership_inspections = {}
+    ownership_inspections = inspect_worship_ownership_consistency_for_events(
+        candidate_events
+    )
     valid_selected_event_ids = set()
     events = []
     for event in candidate_events:
@@ -1539,14 +1562,13 @@ def team_schedule(request, team_id):
             for link in event.required_team_links.all()
         )
         assigned_for_team = event.id in assigned_event_ids
-        valid_selected_team = False
-        if event.rotation_anchor_team_id is not None:
-            inspection = inspect_worship_ownership_consistency(event)
-            ownership_inspections[event.id] = inspection
-            valid_selected_team = (
-                event.rotation_anchor_team_id == team.id
-                and inspection.selected_team_is_eligible
-            )
+        inspection = ownership_inspections[event.id]
+        effective = inspect_effective_required_teams(
+            event, worship_ownership=inspection
+        )
+        valid_selected_team = (
+            getattr(effective.derived_worship_team, "pk", None) == team.id
+        )
         if valid_selected_team:
             valid_selected_event_ids.add(event.id)
         if required_for_team or assigned_for_team or valid_selected_team:
@@ -1559,6 +1581,8 @@ def team_schedule(request, team_id):
         language=language,
         allowed_team_ids=[team.id],
         allowed_assignment_ids=visible_assignment_ids,
+        worship_ownership_inspections=ownership_inspections,
+        suppress_derived_worship_rows=True,
     )
 
     assignments_by_event = {}
@@ -2369,11 +2393,13 @@ def team_assignment_list(request):
         )
         if coverage_team_ids is None:
             required_event_queryset = required_event_queryset.filter(
-                required_team_links__isnull=False,
+                Q(required_team_links__isnull=False)
+                | Q(rotation_anchor_team__isnull=False),
             )
         else:
             required_event_queryset = required_event_queryset.filter(
-                required_team_links__ministry_team_id__in=coverage_team_ids,
+                Q(required_team_links__ministry_team_id__in=coverage_team_ids)
+                | Q(rotation_anchor_team_id__in=coverage_team_ids),
             )
         event_ids.update(
             event.id
@@ -2398,9 +2424,13 @@ def team_assignment_list(request):
             "event": event,
             "coverage_rows": coverage_by_event[event.id]["rows"],
             "missing_count": coverage_by_event[event.id]["missing_count"],
+            "worship_review_required": coverage_by_event[event.id][
+                "worship_review_required"
+            ],
         }
         for event in events
         if coverage_by_event[event.id]["rows"]
+        or coverage_by_event[event.id]["worship_review_required"]
     ]
 
     status_text = assignment_form_text(get_user_language(request))

@@ -126,6 +126,11 @@
 {% if event_coverage.rows %}
 <div class="card">
     <h2>{% if language == "zh" %}本次聚会服事覆盖{% else %}Event Assignment Coverage{% endif %}</h2>
+    {% if event_coverage.worship_review_required %}
+    <p class="status status-warning">
+        {% if language == "zh" %}敬拜安排需要检查{% else %}Worship scheduling review required{% endif %}
+    </p>
+    {% endif %}
     {% include "ministry/_coverage_rows.html" with coverage_rows=event_coverage.rows %}
 </div>
 {% endif %}

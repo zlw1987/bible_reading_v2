@@ -76,11 +76,44 @@
                 {% if language == "zh" %}取消聚会{% else %}Cancel Event{% endif %}
             </button>
         </form>
-        {% if can_change_worship_team %}
+    </div>
+    {% endif %}
+</div>
+
+<div class="card">
+    <h2>{% if language == "zh" %}敬拜团队{% else %}Worship Team{% endif %}</h2>
+    {% if effective_required_teams.selected_team_is_eligible %}
+    <p>
+        <strong>{% if language == "zh" %}当前{% else %}Current{% endif %}:</strong>
+        {{ effective_required_teams.derived_worship_team|ministry_team_name:language }}
+    </p>
+    {% if effective_required_teams.worship_review_required %}
+    <p class="status status-warning">
+        {% if language == "zh" %}敬拜安排需要检查{% else %}Worship scheduling review required{% endif %}
+    </p>
+    {% elif effective_required_teams.worship_ownership.state == "selected_unscheduled" %}
+    <p class="muted">
+        {% if language == "zh" %}已选择，尚未排班{% else %}Selected, not yet scheduled{% endif %}
+    </p>
+    {% elif effective_required_teams.worship_ownership.state == "consistent" %}
+    <p class="status status-good">
+        {% if language == "zh" %}已安排敬拜服事{% else %}Worship scheduled{% endif %}
+    </p>
+    {% endif %}
+    {% elif effective_required_teams.worship_review_required %}
+    <p class="status status-warning">
+        {% if language == "zh" %}当前敬拜团队需要检查{% else %}Worship Team review required{% endif %}
+    </p>
+    {% else %}
+    <p class="muted">
+        {% if language == "zh" %}尚未选择敬拜团队{% else %}Worship Team not selected{% endif %}
+    </p>
+    {% endif %}
+    {% if can_change_worship_team %}
+    <div class="actions">
         <a class="button button-secondary" href="{% url 'change_worship_team' event.id %}">
             {% if language == "zh" %}更改敬拜团队{% else %}Change Worship Team{% endif %}
         </a>
-        {% endif %}
     </div>
     {% endif %}
 </div>
@@ -107,18 +140,6 @@
     {% if not event|event_uses_structure_audience %}
     <p class="muted">
         {% if language == "zh" %}尚未选择教会结构适用范围；普通用户看不到此聚会。{% else %}No structure audience is selected; ordinary users cannot see this gathering.{% endif %}
-    </p>
-    {% endif %}
-
-    {% if event.rotation_anchor_team_id %}
-    <p>
-        <strong>{% if language == "zh" %}当前敬拜团队{% else %}Current Worship Team{% endif %}:</strong>
-        {{ event.rotation_anchor_team|ministry_team_name:language }}
-    </p>
-    {% else %}
-    <p>
-        <strong>{% if language == "zh" %}当前敬拜团队{% else %}Current Worship Team{% endif %}:</strong>
-        {% if language == "zh" %}尚未选择敬拜团队{% else %}Worship Team not selected{% endif %}
     </p>
     {% endif %}
 

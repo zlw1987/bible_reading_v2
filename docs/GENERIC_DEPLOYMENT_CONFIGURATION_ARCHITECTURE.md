@@ -60,8 +60,10 @@ remains deliberately deferred. **`GENERIC-DEPLOYMENT-CONFIG.7C-1A` —
 IMPLEMENTED / LOCAL VERIFIED** implements the 7C-0A/FU1 contract for ordinary
 single and recurring creation: optional reviewed profile-default suggestions,
 an explicit final RequiredTeam set, and one atomic events-owned creation
-boundary. Profileless creation remains supported. MO-S.REQUIRED runtime and
-external identity mapping remain unimplemented and separately gated. The
+boundary. Profileless creation remains supported. **`MO-S.REQUIRED.1A —
+IMPLEMENTED / LOCAL VERIFIED`** adds the separately gated effective-required
+read/runtime consumer slice; external identity mapping remains unimplemented
+and separately gated. The
 production consumer-switch closeout is complete and verified.
 
 4A adds the generic read-only `audit_service_profile_identity` inventory and
@@ -248,7 +250,7 @@ rows, and inactive-default history are never changed or removed. Complete
 events receive no write, revision claim, or audit. The operation creates no
 event, TeamAssignment, TeamAssignmentMember, Notification, Worship selection,
 serving, or new-event initialization. The reviewed production apply is recorded
-below; MO-S.REQUIRED runtime remains unimplemented.
+below and remains unchanged by the later MO-S.REQUIRED.1A read/runtime slice.
 
 #### 7B production materialization closeout: reviewed existing-event scope
 
@@ -774,8 +776,9 @@ one operation ID and changed-event detail without private roster data.
 
 Status: **7C-0A/FU1 CONTRACT COMPLETE; 7C-1A IMPLEMENTED / LOCAL VERIFIED**.
 The implementation preserves the frozen SQLite first-write/current-truth
-contract and does not change the historical 7B closeout or implement
-MO-S.REQUIRED runtime.
+contract and does not change the historical 7B closeout. 7C itself does not
+implement MO-S.REQUIRED runtime; the later 1A slice is read-only and does not
+change this writer contract.
 
 The current supported creation inventory is:
 
@@ -979,6 +982,15 @@ runtime.
 
 ## 8. Worship Is a Separate Dynamic Axis
 
+Status: **`MO-S.REQUIRED.1A — IMPLEMENTED / LOCAL VERIFIED`**. One canonical
+read-only ministry resolver implements the union below from event operational
+truth, with exact-ID de-duplication and explicit/derived provenance. Generic
+coverage, gap, readiness, and already-authorized attention consumers use it;
+ownership conflict/review remains separate from missing coverage. Team Schedule
+and Sunday Board retain dedicated Worship presentation, and Event detail has a
+bounded readout plus the existing authorization-gated selector link. The slice
+creates no row, changes no permission, and adds no schema or migration.
+
 ```text
 effective required teams
     = explicit ServiceEventRequiredTeam rows
@@ -1152,7 +1164,7 @@ Each slice requires separate approval.
 | 5. Integration boundary + consumer switch | **5A READ-ONLY AUDIT / DOCS-ONLY IMPLEMENTATION PLAN COMPLETE; 5B REGISTRY/GATES/IMPORT ISOLATION IMPLEMENTED / LOCAL VERIFIED; 5C CANONICAL RUNTIME IDENTITY SEAM IMPLEMENTED / LOCAL VERIFIED; 5D READINESS/RESET/ADMIN SWITCH IMPLEMENTED / LOCAL VERIFIED; 5E WORKBOOK FK MATCHING/CONFIRMATION/V2 SIGNING IMPLEMENTED / LOCAL VERIFIED; 5F PRODUCTION CLOSEOUT COMPLETE / VERIFIED**: [`GENERIC_DEPLOYMENT_CONFIGURATION_SLICE5_PLAN.md`](GENERIC_DEPLOYMENT_CONFIGURATION_SLICE5_PLAN.md) contains the classified inventory and verified production evidence. 5E makes workbook matching and post-CAS confirmation FK/Profile-authoritative and rejects V1 artifacts; 5F proves Class A legacy authority is zero in repository/runtime design and the deployed closeout verifies `runtime_consumer_switched` as true. MEDIUM-HIGH. | Verified: only the workbook key is enabled; identity audit and Readiness V2 are zero-drift/ready; a fresh V2 workbook preview is 52 exact no-ops with no confirmation; English/Chinese rendered surfaces were checked. |
 | 6. Profile ministry defaults | **FOUNDATION + REVIEWED CONFIGURATION TOOLING IMPLEMENTED / LOCAL VERIFIED (`GENERIC-DEPLOYMENT-CONFIG.6A/6B`)**: ministry-owned relation, active/static-team validation through canonical Worship primary-path resolution, inactive history, profile identity immutability extension, Admin, typed read-only audit, bounded setup-readiness blocker, and exact profile-key + team-PK/key complete-desired-set dry-run/apply tooling; no event materialization. LOW-MEDIUM. | Active configuration with an inactive profile/team, non-assignable team, or Worship-path team fails closed; state-bound V1 review fails stale; inactive history is retained; zero defaults is ready; owner reviews every deployment apply. |
 | 7. Materialization/drift | **7A PRODUCTION READ-ONLY PREVIEW VERIFIED; 7B PRODUCTION MATERIALIZATION APPLY COMPLETE / VERIFIED; 7C-1A IMPLEMENTED / LOCAL VERIFIED**: the historical reviewed existing-event materialization remains closed and unchanged. Ordinary single+recurring creation now uses optional server-reviewed profile suggestions and one atomic events-owned service; profileless creation remains supported and final RequiredTeam rows remain explicit truth. MEDIUM-HIGH. | Existing events keep the 7B CAS/apply contract. New events use a distinct expiring state-bound review for selected profiles, exact active/assignable explicit sets, SQLite first-insert/post-boundary recomputation, atomic event+audience+RequiredTeam creation, revision-zero postconditions, and stale/invalid rollback. Admin/reset/adapters remain unchanged. |
-| 8. MO-S.REQUIRED runtime | Effective resolver and bounded coverage/gap/Event-detail consumers; notifications/persisted audits explicit-only. MEDIUM. | Validate Team Schedule, Board, Today/leader attention, Staff Overview, event detail; review 52-event projection. |
+| 8. MO-S.REQUIRED runtime | **IMPLEMENTED / LOCAL VERIFIED (`MO-S.REQUIRED.1A`)**: read-only effective resolver, exact-ID provenance/de-duplication, bounded coverage/gap/attention/Event-detail adoption; notifications, persisted writers/audits, and profile-default materialization remain explicit-only. MEDIUM. | Locally verified Team Schedule and Board single Worship projection, Today/leader attention, Staff Overview, Event detail, canonical governance, and persisted-writer isolation; no production claim. |
 | 9. Production configuration/QA | Enable approved integrations, verify identity/default data, preview/materialize approved scope, focused QA. MEDIUM-HIGH operationally. | Backup/rollback and reviewed dry-run before apply; owner required. |
 | 10. Legacy contract retirement | Prove zero string consumers/drift, remove old field/tools in separate migration/docs slice. HIGH. | Last only; explicit destructive-schema approval. |
 

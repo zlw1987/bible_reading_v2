@@ -225,7 +225,11 @@ def staff_overview(request):
         ).count()
         upcoming_events_with_required_teams = list(
             events_with_coverage_queryset()
-            .filter(start_datetime__gte=now, required_team_links__isnull=False)
+            .filter(start_datetime__gte=now)
+            .filter(
+                Q(required_team_links__isnull=False)
+                | Q(rotation_anchor_team__isnull=False)
+            )
             .exclude(
                 status__in=[
                     ServiceEvent.STATUS_DRAFT,

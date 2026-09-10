@@ -145,7 +145,8 @@ or complete recurring batch plus exact audience and RequiredTeam rows, using
 the first revision-zero event INSERT as SQLite's writer boundary and
 recomputing reviewed current truth afterward. Admin, reset, adapters/XLSX, the
 historical 7B closeout, assignments/members, notifications, and Worship
-selection remain unchanged. MO-S.REQUIRED runtime remains unimplemented.
+selection remain unchanged. 7C itself did not implement MO-S.REQUIRED runtime;
+the later 1A read/runtime slice leaves this creation contract unchanged.
 
 Historically, `MO-S.6D-PROFILE.1A` introduced the optional validated
 `ServiceEvent.service_profile_key` identity foundation. After 5F it is
@@ -191,18 +192,26 @@ action, confirming that production matches the reviewed annual Worship Team
 selection set.
 
 `MO-S.REQUIRED.0A` is **EFFECTIVE REQUIRED-TEAM SEMANTICS / EVENT WORSHIP
-ENTRY AUDIT COMPLETE; RUNTIME UNIMPLEMENTED**. It freezes effective required
+ENTRY AUDIT COMPLETE**. `MO-S.REQUIRED.1A` is **IMPLEMENTED / LOCAL VERIFIED**.
+It implements effective required
 teams as stored `ServiceEventRequiredTeam` rows plus the exact current selected
 Worship Team only when canonical governance reports the selection eligible.
 The Worship member is derived and never persisted as a RequiredTeam row;
-ownership conflict/ambiguity remains separate. Coverage/gap consumers should
-adopt the effective set, while stored-row writes/audits and NOTIFY.1G downstream
+exact-ID de-duplication retains explicit and derived provenance, and ownership
+conflict/ambiguity remains separate from missing coverage. Generic coverage,
+gap, and authorized leader-attention consumers use the effective set, while
+stored-row writes/audits and NOTIFY.1G downstream
 recipient classification remain explicit-only. Team Schedule/Sunday Board keep
-their dedicated Worship presentation and existing reachability. The normal
+their dedicated Worship presentation and existing reachability without a
+duplicate generic Worship projection. ServiceEvent detail has a bounded
+read-only Worship state and an authorization-gated link to the existing
+governed selector. The normal
 Required Team picker will exclude inactive/non-assignable new choices while
 preserving legacy stored rows for review. The canonical Event-page entry is a
 read-only/current Worship section on ServiceEvent detail with an authorization-
 gated link to the existing governed selector, never a raw ordinary-form field.
+The slice adds no permission, schema/migration, persistence, or production-data
+change.
 For the 52 canonical 2026 `bethany_0930_cm` events, the approved future static
 rows are Lighting, Projection, Sound, and Video only; Digital Ministry and
 Worship containers are not required, and A/C1/C2/C3 remain derived per event.

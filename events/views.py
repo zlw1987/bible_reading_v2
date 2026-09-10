@@ -29,6 +29,9 @@ from ministry.services.assignment_coverage import (
     build_assignment_coverage,
     events_with_coverage_queryset,
 )
+from ministry.services.effective_required_teams import (
+    inspect_effective_required_teams,
+)
 from ministry.services.worship_governance import (
     WorshipOwnershipConsistencyState,
     eligible_worship_team_candidates,
@@ -536,6 +539,7 @@ def service_event_detail(request, event_id):
 
     can_manage = can_manage_service_events(request.user)
     can_view_coverage = can_manage or can_manage_team_assignments(request.user)
+    effective_required_teams = inspect_effective_required_teams(event)
     event_coverage = None
     if can_view_coverage:
         assignments = assignment_coverage_queryset().filter(service_event=event)
@@ -543,6 +547,9 @@ def service_event_detail(request, event_id):
             [event],
             list(assignments),
             language=get_user_language(request),
+            worship_ownership_inspections={
+                event.id: effective_required_teams.worship_ownership
+            },
         )[event.id]
 
     return render(
@@ -554,6 +561,7 @@ def service_event_detail(request, event_id):
             "required_teams": event.required_teams.all().order_by("name"),
             "can_view_coverage": can_view_coverage,
             "event_coverage": event_coverage,
+            "effective_required_teams": effective_required_teams,
             "can_change_worship_team": can_change_worship_team(
                 request.user, event
             ),

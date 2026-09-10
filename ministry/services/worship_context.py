@@ -9,7 +9,7 @@ from ..models import TeamAssignment, TeamAssignmentMember
 from .worship_governance import (
     CURRENT_WORSHIP_ASSIGNMENT_STATUSES,
     WorshipOwnershipConsistencyState,
-    inspect_worship_ownership_consistency,
+    inspect_worship_ownership_consistency_for_events,
 )
 
 
@@ -88,13 +88,19 @@ def build_canonical_worship_contexts(events, *, ownership_inspections=None):
 
     events = list(events)
     ownership_inspections = dict(ownership_inspections or {})
+    missing_inspection_events = [
+        event for event in events if event.id not in ownership_inspections
+    ]
+    if missing_inspection_events:
+        ownership_inspections.update(
+            inspect_worship_ownership_consistency_for_events(
+                missing_inspection_events
+            )
+        )
     contexts = {}
     consistent = []
     for event in events:
-        inspection = ownership_inspections.get(event.id)
-        if inspection is None:
-            inspection = inspect_worship_ownership_consistency(event)
-            ownership_inspections[event.id] = inspection
+        inspection = ownership_inspections[event.id]
         if inspection.state == WorshipOwnershipConsistencyState.CONSISTENT:
             consistent.append((event, inspection))
         else:

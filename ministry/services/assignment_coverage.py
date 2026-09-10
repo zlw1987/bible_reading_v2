@@ -5,6 +5,10 @@ from django.db.models import Prefetch
 from events.models import ServiceEvent, ServiceEventRequiredTeam
 
 from ..models import TeamAssignment, TeamAssignmentMember
+from .effective_required_teams import inspect_effective_required_teams
+from .worship_governance import (
+    inspect_worship_ownership_consistency_for_events,
+)
 
 
 COVERAGE_ASSIGNED = "assigned"
@@ -112,12 +116,25 @@ def build_assignment_coverage(
     language="en",
     allowed_team_ids=None,
     allowed_assignment_ids=None,
+    worship_ownership_inspections=None,
+    suppress_derived_worship_rows=False,
 ):
+    events = list(events)
     text = coverage_text(language)
     restrict_teams = allowed_team_ids is not None
     restrict_assignments = allowed_assignment_ids is not None
     allowed_team_ids = set(allowed_team_ids or [])
     allowed_assignment_ids = set(allowed_assignment_ids or [])
+    worship_ownership_inspections = dict(worship_ownership_inspections or {})
+    missing_inspection_events = [
+        event for event in events if event.id not in worship_ownership_inspections
+    ]
+    if missing_inspection_events:
+        worship_ownership_inspections.update(
+            inspect_worship_ownership_consistency_for_events(
+                missing_inspection_events
+            )
+        )
 
     assignments_by_event = defaultdict(list)
     assignments_by_event_team = defaultdict(list)
@@ -135,14 +152,22 @@ def build_assignment_coverage(
     for event in events:
         rows = []
         required_team_ids = []
-        required_links = list(getattr(event, "required_team_links").all())
+        effective_inspection = inspect_effective_required_teams(
+            event,
+            worship_ownership=worship_ownership_inspections.get(event.id),
+        )
 
-        for required_link in required_links:
-            team = required_link.ministry_team
+        for requirement_fact in effective_inspection.facts:
+            team = requirement_fact.team
             if restrict_teams and team.id not in allowed_team_ids:
                 continue
 
             required_team_ids.append(team.id)
+            if (
+                suppress_derived_worship_rows
+                and requirement_fact.is_derived_worship
+            ):
+                continue
             team_assignments = assignments_by_event_team.get((event.id, team.id), [])
             if not team_assignments:
                 rows.append(
@@ -153,6 +178,14 @@ def build_assignment_coverage(
                         "members": [],
                         "count": 0,
                         "summary_label": text["unassigned"],
+                        "requirement_fact": requirement_fact,
+                        "is_explicit_requirement": requirement_fact.is_explicit,
+                        "is_derived_worship_requirement": (
+                            requirement_fact.is_derived_worship
+                        ),
+                        "explicit_required_team_link_id": (
+                            requirement_fact.explicit_required_team_link_id
+                        ),
                     }
                 )
                 continue
@@ -182,6 +215,14 @@ def build_assignment_coverage(
                         "members": members,
                         "count": count,
                         "summary_label": summary,
+                        "requirement_fact": requirement_fact,
+                        "is_explicit_requirement": requirement_fact.is_explicit,
+                        "is_derived_worship_requirement": (
+                            requirement_fact.is_derived_worship
+                        ),
+                        "explicit_required_team_link_id": (
+                            requirement_fact.explicit_required_team_link_id
+                        ),
                     }
                 )
 
@@ -202,14 +243,33 @@ def build_assignment_coverage(
                     "members": members,
                     "count": len(members),
                     "summary_label": text["additional"],
+                    "requirement_fact": None,
+                    "is_explicit_requirement": False,
+                    "is_derived_worship_requirement": False,
+                    "explicit_required_team_link_id": None,
                 }
             )
 
+        missing_count = sum(
+            1 for row in rows if row["kind"] == COVERAGE_UNASSIGNED
+        )
         coverage_by_event[event.id] = {
             "event": event,
             "rows": rows,
-            "missing_count": sum(
-                1 for row in rows if row["kind"] == COVERAGE_UNASSIGNED
+            "missing_count": missing_count,
+            "effective_required_teams": effective_inspection,
+            "worship_review_required": (
+                effective_inspection.worship_review_required
+            ),
+            "has_operational_conflict": (
+                effective_inspection.has_operational_conflict
+            ),
+            "operational_review_count": int(
+                effective_inspection.worship_review_required
+            ),
+            "is_operationally_clean": (
+                missing_count == 0
+                and not effective_inspection.worship_review_required
             ),
         }
 

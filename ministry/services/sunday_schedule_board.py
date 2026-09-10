@@ -13,6 +13,7 @@ from .assignment_coverage import (
     build_assignment_coverage,
     events_with_coverage_queryset,
 )
+from .effective_required_teams import inspect_effective_required_teams
 from .worship_context import (
     CURRENT_ASSIGNMENT_STATUSES,
     WORSHIP_CONTEXT_AMBIGUOUS,
@@ -26,7 +27,7 @@ from .worship_context_review import (
     classify_downstream_worship_review,
     signature_from_canonical_context,
 )
-from .worship_governance import inspect_worship_ownership_consistency
+from .worship_governance import inspect_worship_ownership_consistency_for_events
 
 
 SUNDAY_BOARD_WINDOW_WEEKS = 8
@@ -122,7 +123,9 @@ def build_sunday_schedule_board(
         )
 
     required_team_ids_by_event = {}
-    ownership_inspections = {}
+    ownership_inspections = inspect_worship_ownership_consistency_for_events(
+        candidate_events
+    )
     valid_selected_team_ids_by_event = {}
     eligible_events = []
     for event in candidate_events:
@@ -130,12 +133,13 @@ def build_sunday_schedule_board(
             link.ministry_team_id for link in event.required_team_links.all()
         }
         required_team_ids_by_event[event.id] = required_team_ids
-        valid_selected_team_id = None
-        if event.rotation_anchor_team_id is not None:
-            inspection = inspect_worship_ownership_consistency(event)
-            ownership_inspections[event.id] = inspection
-            if inspection.selected_team_is_eligible:
-                valid_selected_team_id = event.rotation_anchor_team_id
+        inspection = ownership_inspections[event.id]
+        effective = inspect_effective_required_teams(
+            event, worship_ownership=inspection
+        )
+        valid_selected_team_id = getattr(
+            effective.derived_worship_team, "pk", None
+        )
         valid_selected_team_ids_by_event[event.id] = valid_selected_team_id
         participating_team_ids = (
             required_team_ids | assignment_team_ids_by_event[event.id]
@@ -173,6 +177,8 @@ def build_sunday_schedule_board(
         eligible_events,
         eligible_assignments,
         language=language,
+        worship_ownership_inspections=ownership_inspections,
+        suppress_derived_worship_rows=True,
     )
     canonical_worship_contexts = build_canonical_worship_contexts(
         eligible_events,

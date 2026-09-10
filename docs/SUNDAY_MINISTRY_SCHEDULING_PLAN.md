@@ -2519,11 +2519,32 @@ inheritance and does not implement MO-S.REQUIRED runtime.
 ### MO-S.REQUIRED.0A — Effective Required-Team Semantics / Event Worship Entry Audit
 
 Status: **EFFECTIVE REQUIRED-TEAM SEMANTICS / EVENT WORSHIP ENTRY AUDIT
-COMPLETE; RUNTIME UNIMPLEMENTED**.
+COMPLETE**.
 
 This docs-only repository audit freezes the next implementation contract. It
 does not change a model, migration, form, view, template, test, dependency,
 application row, permission, notification, or deployment state.
+
+### MO-S.REQUIRED.1A — Effective Required-Team Runtime
+
+Status: **IMPLEMENTED / LOCAL VERIFIED**.
+
+The frozen 0A semantic is implemented by the read-only
+`ministry.services.effective_required_teams` resolver. Generic assignment
+coverage, required-team gap counts, setup readiness, and already-authorized
+leader-attention consumers now use the effective set. Exact-ID de-duplication
+retains explicit and derived-Worship provenance; invalid selection fails closed,
+while an eligible selection remains required during separately exposed
+ownership conflict/review states. `missing_count` remains only unmatched
+effective requirements. No derived requirement is persisted.
+
+Team Schedule and Sunday Board share canonical governance while retaining one
+dedicated Worship projection. ServiceEvent detail exposes a bounded current,
+unscheduled/scheduled, or review-required Worship readout and links to the
+existing governed selector only when current authority permits. No permission,
+schema/migration, RequiredTeam, assignment/member, notification,
+ServiceProfile/default, Worship-selection, 7A/7B/7C writer, or production-data
+semantic changed.
 
 #### Canonical semantic and provenance
 
@@ -2544,12 +2565,11 @@ effective_required_teams(event)
 
 The union is by exact `MinistryTeam` identity, so a legacy explicit row for the
 same selected Worship child does not duplicate it. The helper must preserve
-provenance: consumers must be able to distinguish stored explicit teams from
-the one derived Worship team. A later implementation should centralize this in
-`ministry` beside Worship governance/coverage, not add a model property that
-creates an `events -> ministry` domain cycle. It may expose three functions or
-one immutable result carrying `explicit_teams`, `effective_worship_team`, and
-the deterministic de-duplicated union.
+provenance: consumers can distinguish stored explicit teams from the one
+derived Worship team. The implementation is centralized in `ministry` beside
+Worship governance/coverage, not as a model property that creates an
+`events -> ministry` domain cycle. Its immutable result carries deterministic
+de-duplicated facts plus the canonical Worship inspection.
 
 The derived Worship requirement is never persisted as a
 `ServiceEventRequiredTeam`. Selecting, changing, or clearing Worship creates or
@@ -2603,10 +2623,9 @@ conflict/ambiguity copy. Generic coverage may use the same effective semantic
 internally, but must not render the selected team twice.
 
 Operational reachability remains a separate concern. The current third
-predicate is already correct. A later implementation may replace its local
-eligibility check with `effective_required_worship_team(event)`, or have both
-paths share one resolver, but must not change the reachable event set merely to
-create an abstraction. The selected valid Worship Team remains reachable before
+predicate remains correct and now shares the canonical resolver rather than a
+second eligibility rule; the reachable event set is unchanged. The selected
+valid Worship Team remains reachable before
 an assignment exists; the four static downstream teams are reachable before an
 assignment because they have explicit rows.
 
@@ -2695,9 +2714,9 @@ Apply requires an explicit gate and is idempotent, creating only missing
 approved rows. It never creates an assignment/member, changes Worship, audience,
 or unrelated required rows, or emits a Notification.
 
-#### Future focused acceptance matrix
+#### Focused acceptance matrix
 
-The runtime slice must cover: exact selected child only; C1-to-C2 and clear;
+The implemented runtime tests cover: exact selected child only; change and clear;
 invalid selection; explicit/derived de-duplication; missing/empty/scheduled;
 unselected siblings absent; conflict/ambiguity separated from eligibility;
 the four static downstream teams; strict picker filtering plus legacy-row
@@ -2705,8 +2724,8 @@ preservation; detail-page read-only/action states for full manager, exact
 planner, applicable pool Lead, ordinary viewer, and unauthorized viewer; reuse
 of the existing selector; no second anchor write; no RequiredTeam persistence
 from Worship change; no permission/serving/audience mutation; no NOTIFY.1G
-downstream duplication; and the 52-event dry-run/idempotent setup contract with
-zero assignment/member/anchor/audience/notification effects.
+downstream duplication; and isolation from the reviewed persisted-row
+materialization and new-event creation contracts.
 
 ## 15. Test, rollout, and limited-trial strategy
 

@@ -5,6 +5,11 @@
     <div class="assignment-coverage-row assignment-coverage-row-{{ row.kind }}">
         <div class="assignment-coverage-main">
             <strong>{{ row.team|ministry_team_name:language }}</strong>
+            {% if row.is_derived_worship_requirement %}
+            <span class="muted">
+                {% if language == "zh" %}已选敬拜团队{% else %}Selected Worship Team{% endif %}
+            </span>
+            {% endif %}
             <span class="status {% if row.kind == 'assigned' %}status-good{% elif row.kind == 'unassigned' %}status-danger{% elif row.kind == 'empty_assignment' %}status-warning{% else %}status{% endif %}">
                 {{ row.summary_label }}
             </span>

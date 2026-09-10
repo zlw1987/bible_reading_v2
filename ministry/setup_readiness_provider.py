@@ -26,6 +26,10 @@ from ministry.service_profile_ministry_requirements import (
 from ministry.structure_readiness import run_audit as run_ministry_audit
 
 from .models import TeamAssignment, TeamAssignmentMember
+from .services.effective_required_teams import inspect_effective_required_teams
+from .services.worship_governance import (
+    inspect_worship_ownership_consistency_for_events,
+)
 
 
 def _build_ministry_structure_section(ministry_audit, profile_requirements):
@@ -150,8 +154,10 @@ def _count_upcoming_required_team_gaps(now, section):
             status=ServiceEvent.STATUS_PUBLISHED,
             start_datetime__gte=now,
         )
+        .select_related("rotation_anchor_team")
         .prefetch_related(
             "required_team_links__ministry_team",
+            "audience_scope_links__unit",
             Prefetch(
                 "team_assignments",
                 queryset=TeamAssignment.objects.exclude(
@@ -162,6 +168,8 @@ def _count_upcoming_required_team_gaps(now, section):
         .order_by("start_datetime", "id")
     )
 
+    events = list(events)
+    ownership_inspections = inspect_worship_ownership_consistency_for_events(events)
     gaps = 0
     for event in events:
         covered_team_ids = set()
@@ -173,13 +181,24 @@ def _count_upcoming_required_team_gaps(now, section):
             if has_active_member:
                 covered_team_ids.add(assignment.ministry_team_id)
 
-        for link in event.required_team_links.all():
-            if link.ministry_team_id not in covered_team_ids:
+        effective = inspect_effective_required_teams(
+            event, worship_ownership=ownership_inspections[event.pk]
+        )
+        for fact in effective.facts:
+            if fact.team.pk not in covered_team_ids:
                 gaps += 1
                 section.detail(
                     "upcoming_required_team_gaps",
-                    f"event_id={event.id} team=#{link.ministry_team_id} "
-                    f"({link.ministry_team.get_name('en')})",
+                    f"event_id={event.id} team=#{fact.team.pk} "
+                    f"({fact.team.get_name('en')}) "
+                    "source="
+                    + (
+                        "explicit+derived_worship"
+                        if fact.is_explicit and fact.is_derived_worship
+                        else "derived_worship"
+                        if fact.is_derived_worship
+                        else "explicit"
+                    ),
                 )
     return gaps
 

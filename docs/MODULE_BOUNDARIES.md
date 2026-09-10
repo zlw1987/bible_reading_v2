@@ -80,7 +80,16 @@ not copy its Worship/default rules. Optional profile defaults are reviewed
 suggestions only, while final RequiredTeam and audience rows are explicit
 event-owned truth; profileless creation remains supported. It adds no plugin,
 registry dependency, notification producer, assignment/member write, Admin or
-adapter behavior, live inheritance, or MO-S.REQUIRED runtime. 5D has
+adapter behavior, live inheritance, or MO-S.REQUIRED runtime. The later
+**`MO-S.REQUIRED.1A — IMPLEMENTED / LOCAL VERIFIED`** slice stays within the
+same `events -> ministry` relationship: a ministry-owned read-only resolver
+combines explicit event requirements with only the exact canonically eligible
+selected Worship Team. Generic coverage/gap/readiness and already-authorized
+attention consumers use that effective set; Team Schedule and Sunday Board
+retain one dedicated Worship projection, Event detail exposes only bounded
+state plus the existing governed link, and stored-row writers/audits and
+NOTIFY.1G remain explicit-only. It adds no module dependency, permission,
+schema/migration, live ServiceProfile inheritance, or data write. 5D has
  switched readiness, the retained bounded reset, and ServiceEvent Admin to
  FK/Profile authority. `GENERIC-DEPLOYMENT-CONFIG.5E` is IMPLEMENTED / LOCAL
  VERIFIED: Worship XLSX matching/confirmation is FK/Profile-authoritative,

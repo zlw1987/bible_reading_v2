@@ -195,8 +195,14 @@ PRODUCTION MATERIALIZATION APPLY COMPLETE / VERIFIED`**: the reviewed
 `2026-09-08` through `2026-12-31` existing-event scope has 64 explicit
 static-default pairs, zero missing pairs, and zero blockers after independent
 post-audit and a fresh no-op proof. Historical backfill remains deliberately
-deferred. Configuration/template data is not per-event operational truth, and
-the MO-S.REQUIRED effective-required runtime remains unimplemented.
+deferred. Configuration/template data is not per-event operational truth.
+
+**`MO-S.REQUIRED.1A — IMPLEMENTED / LOCAL VERIFIED`**: one ministry-owned,
+read-only resolver now derives effective runtime requirements from event
+operational truth. It returns every persisted `ServiceEventRequiredTeam` plus
+the exact selected Worship Team only when canonical Worship governance reports
+it eligible. Exact team identity de-duplicates the union while retaining
+explicit and derived provenance. No derived Worship requirement is persisted.
 
 The earlier MO-S.5A wording that `rotation_anchor_team` is never required
 coverage is preserved as historical implementation chronology. Governed Worship
@@ -215,12 +221,19 @@ not persisted as a RequiredTeam row. Invalid raw selection fails closed.
 Eligible selection remains the intended requirement during separately reported
 ownership conflict/ambiguity, but conflict/ambiguity is not clean coverage.
 
-Coverage, gap, and leader-attention consumers should use the effective set.
+Coverage, gap, and leader-attention consumers use the effective set. Missing
+coverage remains the count of effective requirements with no matching
+assignment; canonical Worship conflict/review evidence is a separate
+operational-attention axis and does not fabricate a missing-team gap.
 Stored-row form writes, recurring creation, Admin/setup repair, persisted-data
 audits/fingerprints, and NOTIFY.1G downstream-team resolution remain explicit-
 only. Team Schedule and Sunday Board retain their existing exact selected-team
 reachability and dedicated Worship presentation, sharing the canonical resolver
-without duplicating the selected team in generic columns.
+without duplicating the selected team in generic columns. ServiceEvent detail
+now exposes a bounded Worship readout and, only to an already-authorized user,
+a link to the existing governed selector. This local runtime slice changes no
+permission, schema, migration, production data, assignment, notification,
+ServiceProfile/default, RequiredTeam, or Worship-selection write semantic.
 
 New Required Ministry Team choices must be active and assignable. Event edit
 must still include every already-stored inactive/non-assignable row so it stays
@@ -230,7 +243,7 @@ and Worship ministry containers are not required. For the canonical 52
 Projection, Sound, and Video only; A/C1/C2/C3 derive from each event's valid
 selected Worship Team.
 
-The canonical Event-page entry belongs on ServiceEvent detail as a current
-Worship Team readout plus an authorization-gated link to the existing governed
-selector. Raw `rotation_anchor_team` remains excluded from ordinary event
-forms. Implementation and focused tests require a separate approved slice.
+The canonical Event-page entry is implemented on ServiceEvent detail as a
+current Worship Team readout plus an authorization-gated link to the existing
+governed selector. Raw `rotation_anchor_team` remains excluded from ordinary
+event forms.

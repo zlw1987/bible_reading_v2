@@ -290,7 +290,8 @@ class WorshipOperationalReachabilityTests(TestCase):
         self.assertTrue(payloads)
 
         rendered = self.team_schedule(self.c1_lead)
-        self.assertContains(rendered, "Selected Worship Team assignment")
+        self.assertContains(rendered, "Worship serving")
+        self.assertNotContains(rendered, "Selected Worship Team assignment")
         self.assertNotContains(rendered, "Additional assignment")
 
     def test_exact_team_authority_is_independent_from_selection_authority(self):

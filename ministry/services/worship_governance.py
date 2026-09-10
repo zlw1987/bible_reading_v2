@@ -101,6 +101,23 @@ def _unit_is_equal_or_descendant_of_any(unit, ancestor_ids):
     return bool(set(path_ids) & ancestor_ids)
 
 
+def _active_audience_unit_ids(event):
+    prefetched = getattr(event, "_prefetched_objects_cache", {}).get(
+        "audience_scope_links"
+    )
+    if prefetched is not None:
+        return frozenset(
+            link.unit_id
+            for link in prefetched
+            if link.unit is not None and link.unit.is_active
+        )
+    return frozenset(
+        event.audience_scope_links.filter(unit__is_active=True).values_list(
+            "unit_id", flat=True
+        )
+    )
+
+
 def applicable_worship_rotation_pools(event):
     """Return operational Worship pools applicable to ``event`` audience.
 
@@ -112,11 +129,7 @@ def applicable_worship_rotation_pools(event):
     if event is None or not getattr(event, "pk", None):
         return ()
 
-    audience_unit_ids = set(
-        event.audience_scope_links.filter(unit__is_active=True).values_list(
-            "unit_id", flat=True
-        )
-    )
+    audience_unit_ids = _active_audience_unit_ids(event)
     if not audience_unit_ids:
         return ()
 
@@ -237,7 +250,7 @@ def eligible_worship_team_candidates(event):
 
 
 def _current_worship_assignment_references(
-    event, applicable_pools, eligible_candidates
+    event, applicable_pools, eligible_candidates, *, assignments=None
 ):
     if event is None or not getattr(event, "pk", None):
         return ()
@@ -245,14 +258,15 @@ def _current_worship_assignment_references(
     applicable_pool_ids = {item.pool.pk for item in applicable_pools}
     eligible_team_ids = {item.team.pk for item in eligible_candidates}
     references = []
-    assignments = (
-        TeamAssignment.objects.filter(
-            service_event=event,
-            status__in=CURRENT_WORSHIP_ASSIGNMENT_STATUSES,
+    if assignments is None:
+        assignments = (
+            TeamAssignment.objects.filter(
+                service_event=event,
+                status__in=CURRENT_WORSHIP_ASSIGNMENT_STATUSES,
+            )
+            .select_related("ministry_team")
+            .order_by("id")
         )
-        .select_related("ministry_team")
-        .order_by("id")
-    )
     for assignment in assignments:
         resolution = _resolve_primary_worship_pool(assignment.ministry_team)
         if resolution.pool is None or resolution.pool_inspection is None:
@@ -273,17 +287,29 @@ def _current_worship_assignment_references(
     return tuple(references)
 
 
-def inspect_worship_ownership_consistency(event):
+def inspect_worship_ownership_consistency(
+    event,
+    *,
+    applicable_pools=None,
+    eligible_candidates=None,
+    current_assignments=None,
+):
     """Inspect selected-team/current-assignment ownership without side effects."""
 
-    applicable_pools = applicable_worship_rotation_pools(event)
-    candidates = _eligible_worship_team_candidates(applicable_pools)
+    if applicable_pools is None:
+        applicable_pools = applicable_worship_rotation_pools(event)
+    if eligible_candidates is None:
+        eligible_candidates = _eligible_worship_team_candidates(applicable_pools)
+    candidates = eligible_candidates
     eligible_team_ids = {candidate.team.pk for candidate in candidates}
     selected_team = getattr(event, "rotation_anchor_team", None)
     selected_team_id = getattr(event, "rotation_anchor_team_id", None)
     selected_is_eligible = selected_team_id in eligible_team_ids
     current = _current_worship_assignment_references(
-        event, applicable_pools, candidates
+        event,
+        applicable_pools,
+        candidates,
+        assignments=current_assignments,
     )
     matching_ids = tuple(
         reference.assignment_id
@@ -339,3 +365,49 @@ def inspect_worship_ownership_consistency(event):
         matching_assignment_ids=matching_ids,
         conflicting_assignment_ids=conflicting_ids,
     )
+
+
+def inspect_worship_ownership_consistency_for_events(events):
+    """Batch canonical ownership inspection without cross-request caching.
+
+    Current assignments are fetched in one query. Events with the same active
+    audience-unit identity reuse the exact same canonical pool/candidate
+    computation for this call only; each final state is still produced by
+    :func:`inspect_worship_ownership_consistency`.
+    """
+
+    events = list(events)
+    event_ids = [event.pk for event in events if getattr(event, "pk", None)]
+    assignments_by_event = {event_id: [] for event_id in event_ids}
+    assignments = (
+        TeamAssignment.objects.filter(
+            service_event_id__in=event_ids,
+            status__in=CURRENT_WORSHIP_ASSIGNMENT_STATUSES,
+        )
+        .select_related("ministry_team")
+        .order_by("service_event_id", "id")
+    )
+    for assignment in assignments:
+        assignments_by_event[assignment.service_event_id].append(assignment)
+
+    pool_cache = {}
+    candidate_cache = {}
+    results = {}
+    for event in events:
+        audience_key = tuple(sorted(_active_audience_unit_ids(event)))
+        applicable = pool_cache.get(audience_key)
+        if applicable is None:
+            applicable = applicable_worship_rotation_pools(event)
+            pool_cache[audience_key] = applicable
+        pool_key = tuple(item.pool.pk for item in applicable)
+        candidates = candidate_cache.get(pool_key)
+        if candidates is None:
+            candidates = _eligible_worship_team_candidates(applicable)
+            candidate_cache[pool_key] = candidates
+        results[event.pk] = inspect_worship_ownership_consistency(
+            event,
+            applicable_pools=applicable,
+            eligible_candidates=candidates,
+            current_assignments=assignments_by_event.get(event.pk, ()),
+        )
+    return results

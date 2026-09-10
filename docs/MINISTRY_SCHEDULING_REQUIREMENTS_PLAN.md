@@ -180,7 +180,8 @@ MO-S.5A is complete as rotation anchor foundation. MO-S.5B is complete as a limi
 
 ## 8. MO-S.REQUIRED.0A Current Effective Required-Team Contract
 
-Status: **docs/audit complete; runtime unimplemented**.
+Status: **docs/audit complete; runtime implemented by `MO-S.REQUIRED.1A`
+and production runtime verified**.
 
 The deployment-generic profile/default architecture is frozen in
 [`GENERIC_DEPLOYMENT_CONFIGURATION_ARCHITECTURE.md`](GENERIC_DEPLOYMENT_CONFIGURATION_ARCHITECTURE.md).
@@ -197,12 +198,22 @@ static-default pairs, zero missing pairs, and zero blockers after independent
 post-audit and a fresh no-op proof. Historical backfill remains deliberately
 deferred. Configuration/template data is not per-event operational truth.
 
-**`MO-S.REQUIRED.1A — IMPLEMENTED / LOCAL VERIFIED`**: one ministry-owned,
+**`MO-S.REQUIRED.1A — IMPLEMENTED / LOCAL VERIFIED / PRODUCTION RUNTIME VERIFIED`**:
+one ministry-owned,
 read-only resolver now derives effective runtime requirements from event
 operational truth. It returns every persisted `ServiceEventRequiredTeam` plus
 the exact selected Worship Team only when canonical Worship governance reports
 it eligible. Exact team identity de-duplicates the union while retaining
 explicit and derived provenance. No derived Worship requirement is persisted.
+The product owner subsequently deployed the slice and ran the canonical
+read-only production projection for future `bethany_0930_cm` events: 16 events,
+64 explicit pairs, 16 valid derived Worship requirements, 80 effective pairs,
+16 eligible selections, and zero review-required events. Every event had four
+explicit and five effective requirements. The 16 `selected_unscheduled` states
+are valid operational scheduling gaps--the selected Worship Team is canonically
+valid and participates in effective coverage, but has no current matching
+Worship `TeamAssignment`--not configuration drift or invalid state. This
+verification made no production write and persisted no derived requirement.
 
 The earlier MO-S.5A wording that `rotation_anchor_team` is never required
 coverage is preserved as historical implementation chronology. Governed Worship

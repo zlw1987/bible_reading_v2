@@ -44,8 +44,13 @@ missing, and zero blockers. Historical backfill remains deliberately deferred.
 ordinary single and recurring creation: optional profile defaults are reviewed
 suggestions, the final RequiredTeam set is explicit, profileless creation stays
 supported, and one atomic events-owned service preserves revision-zero and the
-SQLite first-write/recompute contract. MO-S.REQUIRED runtime remains
-unimplemented.
+SQLite first-write/recompute contract. **`MO-S.REQUIRED.1A` is IMPLEMENTED /
+LOCAL VERIFIED / PRODUCTION RUNTIME VERIFIED**. The owner-run canonical
+read-only production projection for 16 future reviewed events verified 64
+persisted explicit RequiredTeam pairs plus 16 eligible derived selected Worship
+requirements, for 80 effective pairs and `review_required = 0`; it made no
+production write, and `selected_unscheduled` is a valid operational gap, not
+configuration drift.
 
 `MO-S.6D-PROFILE.1A` historically introduced the optional stable
 `ServiceEvent.service_profile_key` identity foundation. After generic
@@ -110,8 +115,12 @@ or a production import in this planning slice.
   C1, C2, or C3 when configured as an ordinary assignable `MinistryTeam`. The
   current governed runtime uses it as the event-level selection of the team
   that owns Worship for that
-  occurrence. It is still not an assignment, required team, audience,
-  visibility, permission, serving, or coverage source.
+  occurrence. It is still not an assignment, persisted
+  `ServiceEventRequiredTeam` declaration, audience, visibility, permission,
+  serving row, or proof that Worship has been scheduled. Under
+  `MO-S.REQUIRED.1A`, only an exact selected team that canonical governance
+  reports as `selected_team_is_eligible` is derived into runtime
+  effective-required coverage, without persistence.
 - `ServiceEventRequiredTeam` says which teams are expected for an event. It
   does not create a `TeamAssignment`.
 - `MinistryTeam` is generic and has descriptive hierarchy/taxonomy plus an
@@ -2527,7 +2536,7 @@ application row, permission, notification, or deployment state.
 
 ### MO-S.REQUIRED.1A — Effective Required-Team Runtime
 
-Status: **IMPLEMENTED / LOCAL VERIFIED**.
+Status: **IMPLEMENTED / LOCAL VERIFIED / PRODUCTION RUNTIME VERIFIED**.
 
 The frozen 0A semantic is implemented by the read-only
 `ministry.services.effective_required_teams` resolver. Generic assignment
@@ -2545,6 +2554,43 @@ existing governed selector only when current authority permits. No permission,
 schema/migration, RequiredTeam, assignment/member, notification,
 ServiceProfile/default, Worship-selection, 7A/7B/7C writer, or production-data
 semantic changed.
+
+#### Production runtime verification closeout
+
+The product owner deployed `MO-S.REQUIRED.1A` and ran the canonical read-only
+production projection for future `bethany_0930_cm` events. The projection made
+no production write and found 16 events, 64 explicit pairs, 80 effective pairs,
+16 eligible selected Worship Teams, 16 derived Worship requirements, and
+`review_required = 0`. Thus the verified effective union is 64 persisted static
+pairs plus 16 valid derived Worship requirements; no derived Worship
+requirement was persisted.
+
+| Event | Date | Explicit | Effective | Selected Worship Team |
+|---:|---|---:|---:|---|
+| 81 | 2026-09-13 | 4 | 5 | `main.cm.worship.c3` |
+| 82 | 2026-09-20 | 4 | 5 | `main.cm.worship.c1` |
+| 83 | 2026-09-27 | 4 | 5 | `main.cm.worship.c2` |
+| 84 | 2026-10-04 | 4 | 5 | `main.cm.worship.a` |
+| 85 | 2026-10-11 | 4 | 5 | `main.cm.worship.c3` |
+| 86 | 2026-10-18 | 4 | 5 | `main.cm.worship.c1` |
+| 87 | 2026-10-25 | 4 | 5 | `main.cm.worship.c2` |
+| 88 | 2026-11-01 | 4 | 5 | `main.cm.worship.a` |
+| 89 | 2026-11-08 | 4 | 5 | `main.cm.worship.c3` |
+| 90 | 2026-11-15 | 4 | 5 | `main.cm.worship.c1` |
+| 91 | 2026-11-22 | 4 | 5 | `main.cm.worship.c2` |
+| 92 | 2026-11-29 | 4 | 5 | `main.cm.worship.c3` |
+| 93 | 2026-12-06 | 4 | 5 | `main.cm.worship.a` |
+| 94 | 2026-12-13 | 4 | 5 | `main.cm.worship.c1` |
+| 95 | 2026-12-20 | 4 | 5 | `main.cm.worship.c2` |
+| 96 | 2026-12-27 | 4 | 5 | `main.cm.worship.c3` |
+
+All 16 states were `selected_unscheduled`, with
+`selected_team_is_eligible = true` and `review_required = false`. This is a
+valid operational scheduling state, not configuration drift or an invalid
+state: each selected Worship Team is canonically valid and therefore
+participates in effective required coverage, but no current matching Worship
+`TeamAssignment` exists yet. No Worship ownership conflict/review blocker was
+found.
 
 #### Canonical semantic and provenance
 

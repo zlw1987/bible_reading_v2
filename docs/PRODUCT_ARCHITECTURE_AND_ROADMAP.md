@@ -192,7 +192,8 @@ action, confirming that production matches the reviewed annual Worship Team
 selection set.
 
 `MO-S.REQUIRED.0A` is **EFFECTIVE REQUIRED-TEAM SEMANTICS / EVENT WORSHIP
-ENTRY AUDIT COMPLETE**. `MO-S.REQUIRED.1A` is **IMPLEMENTED / LOCAL VERIFIED**.
+ENTRY AUDIT COMPLETE**. `MO-S.REQUIRED.1A` is **IMPLEMENTED / LOCAL VERIFIED /
+PRODUCTION RUNTIME VERIFIED**.
 It implements effective required
 teams as stored `ServiceEventRequiredTeam` rows plus the exact current selected
 Worship Team only when canonical governance reports the selection eligible.
@@ -212,6 +213,14 @@ read-only/current Worship section on ServiceEvent detail with an authorization-
 gated link to the existing governed selector, never a raw ordinary-form field.
 The slice adds no permission, schema/migration, persistence, or production-data
 change.
+The product owner deployed the slice and ran the canonical read-only production
+projection for 16 future `bethany_0930_cm` events: 64 persisted explicit pairs
+plus 16 canonically eligible derived Worship requirements yielded 80 effective
+pairs; all 16 selections were eligible and `review_required = 0`. No derived
+requirement was persisted and the verification made no production write. The
+current `selected_unscheduled` states are legitimate operational scheduling
+gaps pending matching Worship assignments, not configuration drift or invalid
+state.
 For the 52 canonical 2026 `bethany_0930_cm` events, the approved future static
 rows are Lighting, Projection, Sound, and Video only; Digital Ministry and
 Worship containers are not required, and A/C1/C2/C3 remain derived per event.

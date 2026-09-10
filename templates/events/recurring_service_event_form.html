@@ -24,7 +24,7 @@
 <form method="post" class="card">
     {% csrf_token %}
     {% for field in form %}
-    {% if field.name != "audience_units" and field.name != "status" %}
+    {% if field.name != "audience_units" and field.name != "status" and field.name != "review_token" %}
     <div class="form-row" data-field="{{ field.name }}">
         {{ field.label_tag }}
         {{ field }}
@@ -42,6 +42,8 @@
         {{ audience_field.errors }}
     </div>
     {% endwith %}
+
+    {{ form.review_token }}
 
     <div class="form-row" data-field="{{ form.status.name }}">
         {{ form.status.label_tag }}
@@ -61,6 +63,46 @@
 </form>
 
 {% if preview %}
+{% if preview.profile %}
+<section class="card" aria-labelledby="recurring-profile-review-heading">
+    <h2 id="recurring-profile-review-heading">
+        {% if language == "zh" %}初始需要事工团队建议{% else %}Initial Required Ministry Team suggestions{% endif %}
+    </h2>
+    <p>
+        <strong>
+            {% if language == "en" and preview.profile.name_en %}
+                {{ preview.profile.name_en }}
+            {% else %}
+                {{ preview.profile.name }}
+            {% endif %}
+        </strong>
+    </p>
+    <p class="muted">
+        {% if language == "zh" %}
+            这些是所有待创建聚会可调整的初始建议，不是排班，也不是实时继承。最终勾选的团队会明确保存到每一场新聚会。
+        {% else %}
+            These are adjustable initial suggestions for every event to be created, not assignments or live inheritance. The final checked teams will be explicitly stored on each new event.
+        {% endif %}
+    </p>
+    {% if preview.default_teams %}
+    <ul>
+        {% for team in preview.default_teams %}
+        <li>{% if language == "en" and team.name_en %}{{ team.name_en }}{% else %}{{ team.name }}{% endif %}</li>
+        {% endfor %}
+    </ul>
+    {% else %}
+    <p class="muted">
+        {% if language == "zh" %}这个聚会配置目前没有默认团队。{% else %}Zero defaults are configured for this Service Profile.{% endif %}
+    </p>
+    {% endif %}
+</section>
+{% else %}
+<section class="card">
+    <p class="muted">
+        {% if language == "zh" %}未选择聚会配置；不会建议任何配置默认团队。{% else %}No Service Profile selected; no profile defaults are proposed.{% endif %}
+    </p>
+</section>
+{% endif %}
 <div class="grid grid-2">
     <div class="card">
         <h2 class="card-title">

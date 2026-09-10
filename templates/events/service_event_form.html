@@ -41,7 +41,7 @@
     {{ form.non_field_errors }}
 
     {% for field in form %}
-    {% if field.name != "audience_units" and field.name != "status" %}
+    {% if field.name != "audience_units" and field.name != "status" and field.name != "review_token" %}
     <div class="form-row" data-field="{{ field.name }}">
         {{ field.label_tag }}
         {{ field }}
@@ -60,6 +60,43 @@
     </div>
     {% endwith %}
 
+    {{ form.review_token }}
+
+    {% if profile_review %}
+    <section class="card" aria-labelledby="profile-default-review-heading">
+        <h2 id="profile-default-review-heading">
+            {% if language == "zh" %}初始需要事工团队建议{% else %}Initial Required Ministry Team suggestions{% endif %}
+        </h2>
+        <p>
+            <strong>
+                {% if language == "en" and profile_review.profile.name_en %}
+                    {{ profile_review.profile.name_en }}
+                {% else %}
+                    {{ profile_review.profile.name }}
+                {% endif %}
+            </strong>
+        </p>
+        <p class="muted">
+            {% if language == "zh" %}
+                这些是创建时可调整的初始建议，不是排班，也不是实时继承。最终勾选的团队会成为这场聚会明确保存的需要团队。
+            {% else %}
+                These are adjustable initial suggestions, not assignments or live inheritance. The final checked teams become this event's explicitly stored requirements.
+            {% endif %}
+        </p>
+        {% if profile_review.default_teams %}
+        <ul>
+            {% for team in profile_review.default_teams %}
+            <li>{% if language == "en" and team.name_en %}{{ team.name_en }}{% else %}{{ team.name }}{% endif %}</li>
+            {% endfor %}
+        </ul>
+        {% else %}
+        <p class="muted">
+            {% if language == "zh" %}这个聚会配置目前没有默认团队。{% else %}Zero defaults are configured for this Service Profile.{% endif %}
+        </p>
+        {% endif %}
+    </section>
+    {% endif %}
+
     <div class="form-row" data-field="{{ form.status.name }}">
         {{ form.status.label_tag }}
         {{ form.status }}
@@ -68,6 +105,11 @@
     </div>
 
     <div class="actions">
+        {% if not is_edit %}
+        <button type="submit" name="review_profile" value="1" class="button-secondary">
+            {% if language == "zh" %}检查聚会配置的默认团队{% else %}Review profile defaults{% endif %}
+        </button>
+        {% endif %}
         <button type="submit">
             {% if language == "zh" %}保存{% else %}Save{% endif %}
         </button>

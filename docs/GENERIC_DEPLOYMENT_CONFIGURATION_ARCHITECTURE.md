@@ -56,13 +56,13 @@ read-only preview evidence is verified. **`GENERIC-DEPLOYMENT-CONFIG.7B —
 PRODUCTION MATERIALIZATION APPLY COMPLETE / VERIFIED`**: the separately
 reviewed `2026-09-08` through `2026-12-31` existing-event scope is closed with
 64 explicit static-default pairs and zero missing/blockers. Historical backfill
-remains deliberately deferred. **`GENERIC-DEPLOYMENT-CONFIG.7C-0A — NEW-EVENT
-INITIALIZATION AUDIT / IMPLEMENTATION DECISION COMPLETE`** freezes existing
-ordinary single+recurring forms, server-rendered reviewed defaults, and one
-atomic create service as the next `7C-1A` slice; that runtime remains
-unimplemented. MO-S.REQUIRED runtime and external identity mapping remain
-unimplemented and separately gated. The production consumer-switch closeout is
-complete and verified.
+remains deliberately deferred. **`GENERIC-DEPLOYMENT-CONFIG.7C-1A` —
+IMPLEMENTED / LOCAL VERIFIED** implements the 7C-0A/FU1 contract for ordinary
+single and recurring creation: optional reviewed profile-default suggestions,
+an explicit final RequiredTeam set, and one atomic events-owned creation
+boundary. Profileless creation remains supported. MO-S.REQUIRED runtime and
+external identity mapping remain unimplemented and separately gated. The
+production consumer-switch closeout is complete and verified.
 
 4A adds the generic read-only `audit_service_profile_identity` inventory and
 the dry-run-first `configure_service_profile_mapping` command. The inventory
@@ -770,19 +770,19 @@ does **not** delete an event row. Any future removal workflow needs separate
 explicit row review. Materialization emits no current notification. Audit uses
 one operation ID and changed-event detail without private roster data.
 
-### 7.3 `GENERIC-DEPLOYMENT-CONFIG.7C-0A` — new-event initialization decision
+### 7.3 `GENERIC-DEPLOYMENT-CONFIG.7C-0A` / `7C-1A` — new-event initialization
 
-Status: **READ-ONLY REPOSITORY AUDIT / IMPLEMENTATION DECISION COMPLETE;
-RUNTIME UNIMPLEMENTED**. `GENERIC-DEPLOYMENT-CONFIG.7C-0A-FU1` closes the
-docs-only SQLite first-write/current-truth race in the planned 7C-1A contract;
-it does not begin that implementation.
+Status: **7C-0A/FU1 CONTRACT COMPLETE; 7C-1A IMPLEMENTED / LOCAL VERIFIED**.
+The implementation preserves the frozen SQLite first-write/current-truth
+contract and does not change the historical 7B closeout or implement
+MO-S.REQUIRED runtime.
 
 The current supported creation inventory is:
 
 | Path | Cardinality | Current transaction and writes | Profile exposure |
 |---|---:|---|---|
-| Ordinary `/events/new/` | One | `create_service_event()` owns one outer transaction containing `ServiceEvent.save()`, `required_teams.set()`, and audience-row replacement/creation through `form.save_audience_units()` | Both `service_profile` and `service_profile_key` are intentionally absent |
-| Ordinary `/events/recurring/new/` | Zero or many dates after duplicate filtering | `create_recurring_events()` owns one outer transaction for the complete batch; each loop creates one event, applies the same submitted RequiredTeam set, and creates the same selected audience rows | Both profile fields are intentionally absent; the page already has server-rendered Preview and Create actions |
+| Ordinary `/events/new/` | One | The shared events-owned creation service owns one outer transaction and explicitly creates the event, RequiredTeam rows, and audience rows | Optional active-profile selector plus server-rendered review; the compatibility key is never exposed |
+| Ordinary `/events/recurring/new/` | Zero or many dates after duplicate filtering | The same service owns the complete deterministic batch; every created event receives the same explicit RequiredTeam and audience sets | Optional active-profile selector extends Preview with reviewed defaults; the compatibility key is never exposed |
 | Django Admin ServiceEvent add | One | Django Admin's change-form transaction owns the parent event plus RequiredTeam and audience inlines | Active profiles are selectable through the FK; the compatibility key is read-only; RequiredTeam rows remain separate manual inlines |
 | `rebuild_bethany_0930_service_events` explicit operator APPLY | Exactly the bounded 52-event replacement set | `apply_reset()` owns one destructive, token-gated outer transaction and `_create_canonical_event()` creates each exact profile-linked event plus its audience row | The exact profile is an operator prerequisite, not a user choice; this historical/deployment-specific reset deliberately creates no RequiredTeam rows |
 
@@ -792,15 +792,12 @@ migrations is not a user-facing creation path. Worship workbook confirmation,
 rotation planning, assignment flows, audits, 7A, and 7B operate on existing
 events and create no ServiceEvent.
 
-The ordinary Required Ministry Teams picker is already the correct explicit
-operational review surface, but its current choices are too broad: new single
-and recurring forms offer every active team, including non-assignable
-containers. Single-event edit offers active teams plus every already-linked
-team and replaces the stored set with `.set()`. The future create filter is
-active **and** assignable. Existing-event edit must retain every currently
-linked inactive/non-assignable row in its choices so an unrelated edit never
-silently drops review evidence. Admin remains a manual repair surface; it does
-not gain implicit profile-default materialization.
+The ordinary Required Ministry Teams picker remains the explicit operational
+review surface. New single and recurring forms now offer only active **and**
+assignable teams. Single-event edit unions those normal choices with every
+exact already-linked team, including inactive/non-assignable history, so an
+unrelated edit does not silently drop evidence. Admin remains a manual repair
+surface and gains no implicit profile-default materialization.
 
 #### Chosen UX and stale-state contract
 
@@ -854,8 +851,9 @@ semantics. Neither the 7A state fingerprint nor the 7B confirmation token is a
 
 The final user-selected RequiredTeam set may deliberately differ from the
 profile defaults because those defaults are proposed/prechecked configuration,
-not mandatory inheritance. Every submitted new team must nevertheless still
-be active, assignable, and valid under the approved static-team rules. Changing
+not mandatory inheritance. Every deliberate ordinary picker addition must be
+active and assignable; only profile-derived defaults use the canonical stricter
+profile-default/Worship classification. Changing
 the selected profile or `event_type` after review invalidates the review. A
 crafted final POST selecting a profile without a valid current signed snapshot
 for that exact profile/type state is rejected. No profile still means no
@@ -1153,7 +1151,7 @@ Each slice requires separate approval.
 | 4. Profile mapping/backfill | **IMPLEMENTED / LOCAL VERIFIED / PRODUCTION APPLY COMPLETE / POST-AUDIT VERIFIED (`GENERIC-DEPLOYMENT-CONFIG.4A`) for the reviewed SVCA mapping**: generic read-only key/type/FK inventory plus one-key-at-a-time reviewed profile creation and complete exact-target FK backfill; `SERVICE_PROFILE_MAPPING_PLAN_V1` binds full metadata and current event state, existing scheduling CAS supplies SQLite serialization and exactly-once revision advance, and independent post-audit proves dual consistency. Production has one reviewed profile, 52 exact dual-consistent mapped events, zero drift, and revisions advanced `1 -> 2` exactly once. At the 4A milestone, `runtime_consumer_switched` remained false. MEDIUM operationally. | Stop on conflict/unmapped/noncanonical/ambiguity/existing profile/non-null FK/stale/busy state; owner reviews every target apply. Repeat initial mapping correctly fails closed after configuration. |
 | 5. Integration boundary + consumer switch | **5A READ-ONLY AUDIT / DOCS-ONLY IMPLEMENTATION PLAN COMPLETE; 5B REGISTRY/GATES/IMPORT ISOLATION IMPLEMENTED / LOCAL VERIFIED; 5C CANONICAL RUNTIME IDENTITY SEAM IMPLEMENTED / LOCAL VERIFIED; 5D READINESS/RESET/ADMIN SWITCH IMPLEMENTED / LOCAL VERIFIED; 5E WORKBOOK FK MATCHING/CONFIRMATION/V2 SIGNING IMPLEMENTED / LOCAL VERIFIED; 5F PRODUCTION CLOSEOUT COMPLETE / VERIFIED**: [`GENERIC_DEPLOYMENT_CONFIGURATION_SLICE5_PLAN.md`](GENERIC_DEPLOYMENT_CONFIGURATION_SLICE5_PLAN.md) contains the classified inventory and verified production evidence. 5E makes workbook matching and post-CAS confirmation FK/Profile-authoritative and rejects V1 artifacts; 5F proves Class A legacy authority is zero in repository/runtime design and the deployed closeout verifies `runtime_consumer_switched` as true. MEDIUM-HIGH. | Verified: only the workbook key is enabled; identity audit and Readiness V2 are zero-drift/ready; a fresh V2 workbook preview is 52 exact no-ops with no confirmation; English/Chinese rendered surfaces were checked. |
 | 6. Profile ministry defaults | **FOUNDATION + REVIEWED CONFIGURATION TOOLING IMPLEMENTED / LOCAL VERIFIED (`GENERIC-DEPLOYMENT-CONFIG.6A/6B`)**: ministry-owned relation, active/static-team validation through canonical Worship primary-path resolution, inactive history, profile identity immutability extension, Admin, typed read-only audit, bounded setup-readiness blocker, and exact profile-key + team-PK/key complete-desired-set dry-run/apply tooling; no event materialization. LOW-MEDIUM. | Active configuration with an inactive profile/team, non-assignable team, or Worship-path team fails closed; state-bound V1 review fails stale; inactive history is retained; zero defaults is ready; owner reviews every deployment apply. |
-| 7. Materialization/drift | **7A PRODUCTION READ-ONLY PREVIEW VERIFIED; 7B PRODUCTION MATERIALIZATION APPLY COMPLETE / VERIFIED; 7C-0A NEW-EVENT AUDIT/DECISION COMPLETE**: bounded reviewed existing-event scope materialized 60 missing static-default pairs across 15 changed events; independent post-audit and fresh no-op proof verified 64 / 64 / 0 / zero blockers. Historical backfill remains deliberately deferred. New-event runtime remains pending; 7C-0A selects existing ordinary single+recurring forms, server-rendered reviewed defaults, and one atomic create service for 7C-1A. MEDIUM-HIGH. | Existing events keep the 7B CAS/apply contract. New events require a state-bound review, exact active/assignable explicit set, atomic event+audience+RequiredTeam creation, revision-zero postcondition, and stale/invalid rollback. |
+| 7. Materialization/drift | **7A PRODUCTION READ-ONLY PREVIEW VERIFIED; 7B PRODUCTION MATERIALIZATION APPLY COMPLETE / VERIFIED; 7C-1A IMPLEMENTED / LOCAL VERIFIED**: the historical reviewed existing-event materialization remains closed and unchanged. Ordinary single+recurring creation now uses optional server-reviewed profile suggestions and one atomic events-owned service; profileless creation remains supported and final RequiredTeam rows remain explicit truth. MEDIUM-HIGH. | Existing events keep the 7B CAS/apply contract. New events use a distinct expiring state-bound review for selected profiles, exact active/assignable explicit sets, SQLite first-insert/post-boundary recomputation, atomic event+audience+RequiredTeam creation, revision-zero postconditions, and stale/invalid rollback. Admin/reset/adapters remain unchanged. |
 | 8. MO-S.REQUIRED runtime | Effective resolver and bounded coverage/gap/Event-detail consumers; notifications/persisted audits explicit-only. MEDIUM. | Validate Team Schedule, Board, Today/leader attention, Staff Overview, event detail; review 52-event projection. |
 | 9. Production configuration/QA | Enable approved integrations, verify identity/default data, preview/materialize approved scope, focused QA. MEDIUM-HIGH operationally. | Backup/rollback and reviewed dry-run before apply; owner required. |
 | 10. Legacy contract retirement | Prove zero string consumers/drift, remove old field/tools in separate migration/docs slice. HIGH. | Last only; explicit destructive-schema approval. |

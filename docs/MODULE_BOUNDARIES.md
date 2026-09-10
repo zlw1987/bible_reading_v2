@@ -71,8 +71,16 @@ writer boundary. Existing/manual/history/Worship rows are preserved. The
 reviewed `2026-09-08` through `2026-12-31` production scope created 60 missing
 static-default pairs across 15 changed events; independent post-audit verified
 64 expected / 64 explicit / zero missing / zero blockers, and a fresh dry-run
-proved 16 no-ops with no token. Historical backfill, automatic new-event
-initialization, and MO-S.REQUIRED runtime remain pending. 5D has
+proved 16 no-ops with no token. Historical backfill remains pending.
+`GENERIC-DEPLOYMENT-CONFIG.7C-1A` is **IMPLEMENTED / LOCAL VERIFIED** within
+the existing `events -> ministry` domain relationship. The events-owned
+create-only service handles ordinary single and recurring ServiceEvent writes;
+it calls the ministry-owned canonical profile-requirement inspector but does
+not copy its Worship/default rules. Optional profile defaults are reviewed
+suggestions only, while final RequiredTeam and audience rows are explicit
+event-owned truth; profileless creation remains supported. It adds no plugin,
+registry dependency, notification producer, assignment/member write, Admin or
+adapter behavior, live inheritance, or MO-S.REQUIRED runtime. 5D has
  switched readiness, the retained bounded reset, and ServiceEvent Admin to
  FK/Profile authority. `GENERIC-DEPLOYMENT-CONFIG.5E` is IMPLEMENTED / LOCAL
  VERIFIED: Worship XLSX matching/confirmation is FK/Profile-authoritative,

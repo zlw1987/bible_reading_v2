@@ -51,6 +51,14 @@ from .scheduling_revision import (
     SchedulingRevisionError,
     advance_scheduling_revisions,
 )
+from .service_event_creation import (
+    CreationReviewFailure,
+    ServiceEventCreationError,
+    build_creation_review,
+    build_recurring_event_preview as build_reviewed_recurring_event_preview,
+    create_recurring_service_events as create_reviewed_recurring_service_events,
+    create_single_service_event,
+)
 
 from .forms import (
     RecurringServiceEventForm,
@@ -127,6 +135,35 @@ def event_ui_text(language, key):
                 "Scheduling changed or is busy. Generate a new preview and try again."
             ),
             "rotation_confirmation_saved": "Worship rotation updated.",
+            "profile_review_required": (
+                "Review the selected Service Profile defaults before creating."
+            ),
+            "profile_unavailable": (
+                "The selected Service Profile is no longer available or active."
+            ),
+            "profile_type_mismatch": (
+                "The selected Service Profile does not match the event type."
+            ),
+            "profile_defaults_changed": (
+                "The Service Profile or its default-team configuration changed. "
+                "Review again."
+            ),
+            "profile_defaults_invalid": (
+                "The selected Service Profile has an invalid active default. "
+                "Ask an administrator to correct it before reviewing again."
+            ),
+            "team_configuration_changed": (
+                "Ministry Team configuration changed. Review again."
+            ),
+            "audience_changed": "Audience structure changed. Review again.",
+            "recurring_set_changed": (
+                "The recurring event set changed. Generate a fresh Preview."
+            ),
+            "creation_busy": (
+                "Event creation is busy or current configuration changed. "
+                "Review the current state and try again."
+            ),
+            "profile_defaults_reviewed": "Profile defaults reviewed successfully.",
         },
         "zh": {
             "no_permission": "你没有管理聚会事件的权限。",
@@ -152,9 +189,38 @@ def event_ui_text(language, key):
                 "排班资料已有变化或系统正忙。请重新生成预览后再试。"
             ),
             "rotation_confirmation_saved": "敬拜轮值已更新。",
+            "profile_review_required": "使用所选聚会配置创建前，请先检查其默认团队。",
+            "profile_unavailable": "所选聚会配置已不存在或已停用。",
+            "profile_type_mismatch": "所选聚会配置与聚会类型不符。",
+            "profile_defaults_changed": "聚会配置或默认团队设置已有变化，请重新检查。",
+            "profile_defaults_invalid": "所选聚会配置含有无效的启用默认团队，请管理员修正后重试。",
+            "team_configuration_changed": "事工团队设置已有变化，请重新检查。",
+            "audience_changed": "适用范围结构已有变化，请重新检查。",
+            "recurring_set_changed": "固定聚会日期集合已有变化，请重新预览。",
+            "creation_busy": "聚会创建正忙或当前设置已有变化，请检查当前状态后重试。",
+            "profile_defaults_reviewed": "聚会配置的默认团队已检查。",
         },
     }
     return labels.get(language, labels["en"])[key]
+
+
+def _creation_error_text(language, failure):
+    keys = {
+        CreationReviewFailure.REVIEW_REQUIRED: "profile_review_required",
+        CreationReviewFailure.INVALID_REVIEW: "profile_review_required",
+        CreationReviewFailure.PROFILE_UNAVAILABLE: "profile_unavailable",
+        CreationReviewFailure.PROFILE_TYPE_MISMATCH: "profile_type_mismatch",
+        CreationReviewFailure.PROFILE_DEFAULTS_CHANGED: "profile_defaults_changed",
+        CreationReviewFailure.INVALID_PROFILE_DEFAULTS: "profile_defaults_invalid",
+        CreationReviewFailure.TEAM_CONFIGURATION_CHANGED: (
+            "team_configuration_changed"
+        ),
+        CreationReviewFailure.AUDIENCE_CHANGED: "audience_changed",
+        CreationReviewFailure.RECURRING_SET_CHANGED: "recurring_set_changed",
+        CreationReviewFailure.BUSY: "creation_busy",
+        CreationReviewFailure.POSTCONDITION: "creation_busy",
+    }
+    return event_ui_text(language, keys[failure])
 
 
 def can_manage_service_events(user):
@@ -502,19 +568,83 @@ def create_service_event(request):
         messages.error(request, event_ui_text(language, "no_permission"))
         return redirect("service_event_list")
 
+    profile_review = None
     if request.method == "POST":
-        form = ServiceEventForm(request.POST, language=language)
+        form = ServiceEventForm(
+            request.POST,
+            language=language,
+            include_profile_selection=True,
+        )
         if form.is_valid():
-            with transaction.atomic():
-                event = form.save(commit=False)
-                event.created_by = request.user
-                event.save()
-                event.required_teams.set(form.cleaned_data["required_teams"])
-                form.save_audience_units(event)
-            messages.success(request, event_ui_text(language, "saved"))
-            return redirect("service_event_detail", event_id=event.id)
+            profile = form.cleaned_data.get("service_profile")
+            if "review_profile" in request.POST:
+                if profile is None:
+                    form.add_error(
+                        "service_profile",
+                        event_ui_text(language, "profile_review_required"),
+                    )
+                else:
+                    try:
+                        profile_review = build_creation_review(
+                            mode="single",
+                            user=request.user,
+                            profile_id=profile.pk,
+                            event_type=form.cleaned_data["event_type"],
+                            audience_ids=[
+                                unit.pk
+                                for unit in form.cleaned_data["audience_units"]
+                            ],
+                        )
+                    except ServiceEventCreationError as exc:
+                        form.add_error(
+                            None,
+                            _creation_error_text(language, exc.failure),
+                        )
+                    else:
+                        data = request.POST.copy()
+                        selected_ids = {
+                            str(team.pk)
+                            for team in form.cleaned_data["required_teams"]
+                        }
+                        selected_ids.update(
+                            str(team.pk) for team in profile_review.default_teams
+                        )
+                        data.setlist("required_teams", sorted(selected_ids, key=int))
+                        data["review_token"] = profile_review.signed_payload
+                        form = ServiceEventForm(
+                            data,
+                            language=language,
+                            include_profile_selection=True,
+                        )
+                        messages.success(
+                            request,
+                            event_ui_text(language, "profile_defaults_reviewed"),
+                        )
+            else:
+                try:
+                    result = create_single_service_event(
+                        cleaned_data=form.cleaned_data,
+                        user=request.user,
+                        profile_id=profile.pk if profile else None,
+                        review_token=form.cleaned_data.get("review_token") or "",
+                        team_ids=[
+                            team.pk for team in form.cleaned_data["required_teams"]
+                        ],
+                        audience_ids=[
+                            unit.pk for unit in form.cleaned_data["audience_units"]
+                        ],
+                    )
+                except ServiceEventCreationError as exc:
+                    form.add_error(None, _creation_error_text(language, exc.failure))
+                else:
+                    event = result.events[0]
+                    messages.success(request, event_ui_text(language, "saved"))
+                    return redirect("service_event_detail", event_id=event.id)
     else:
-        form = ServiceEventForm(language=language)
+        form = ServiceEventForm(
+            language=language,
+            include_profile_selection=True,
+        )
 
     return render(
         request,
@@ -522,81 +652,30 @@ def create_service_event(request):
         {
             "form": form,
             "is_edit": False,
+            "profile_review": profile_review,
         },
     )
 
 
 def build_recurring_event_preview(cleaned_data):
-    dates_to_create = []
-    dates_to_skip = []
-    current_date = cleaned_data["start_date"]
-    end_date = cleaned_data["end_date"]
-    weekday = int(cleaned_data["weekday"])
-
-    while current_date <= end_date:
-        if current_date.weekday() == weekday:
-            start_datetime = timezone.make_aware(
-                timezone.datetime.combine(current_date, cleaned_data["start_time"]),
-                timezone.get_current_timezone(),
-            )
-            duplicate_filter = {
-                "start_datetime": start_datetime,
-                "event_type": cleaned_data["event_type"],
-                "title": cleaned_data["title"],
-            }
-            if (
-                ServiceEvent.objects.filter(**duplicate_filter)
-                .exclude(status=ServiceEvent.STATUS_CANCELLED)
-                .exists()
-            ):
-                dates_to_skip.append(current_date)
-            else:
-                dates_to_create.append(current_date)
-        current_date += timezone.timedelta(days=1)
-
-    return dates_to_create, dates_to_skip
+    return build_reviewed_recurring_event_preview(cleaned_data)
 
 
 def create_recurring_events(cleaned_data, user):
-    dates_to_create, dates_to_skip = build_recurring_event_preview(cleaned_data)
-    created_count = 0
-    required_teams = cleaned_data.get("required_teams")
-    # SE-SCOPE.1A/SE-CTX.1A: recurring app creates use structure audience rows
-    # only. Legacy scope/context fields remain at model defaults.
-    audience_units = list(cleaned_data.get("audience_units") or [])
-
-    with transaction.atomic():
-        for event_date in dates_to_create:
-            start_datetime = timezone.make_aware(
-                timezone.datetime.combine(event_date, cleaned_data["start_time"]),
-                timezone.get_current_timezone(),
-            )
-            end_datetime = None
-            if cleaned_data.get("end_time"):
-                end_datetime = timezone.make_aware(
-                    timezone.datetime.combine(event_date, cleaned_data["end_time"]),
-                    timezone.get_current_timezone(),
-                )
-            event = ServiceEvent.objects.create(
-                title=cleaned_data["title"],
-                title_en=cleaned_data.get("title_en") or "",
-                description=cleaned_data.get("description") or "",
-                description_en=cleaned_data.get("description_en") or "",
-                event_type=cleaned_data["event_type"],
-                start_datetime=start_datetime,
-                end_datetime=end_datetime,
-                location=cleaned_data.get("location") or "",
-                meeting_link=cleaned_data.get("meeting_link") or "",
-                status=cleaned_data["status"],
-                created_by=user,
-            )
-            event.required_teams.set(required_teams)
-            if audience_units:
-                for unit in audience_units:
-                    event.audience_scope_links.create(unit=unit)
-            created_count += 1
-
-    return created_count, len(dates_to_skip), dates_to_create, dates_to_skip
+    result = create_reviewed_recurring_service_events(
+        cleaned_data=cleaned_data,
+        user=user,
+        profile_id=None,
+        review_token="",
+        team_ids=[team.pk for team in cleaned_data.get("required_teams") or ()],
+        audience_ids=[unit.pk for unit in cleaned_data.get("audience_units") or ()],
+    )
+    return (
+        len(result.events),
+        len(result.dates_to_skip),
+        list(result.dates_to_create),
+        list(result.dates_to_skip),
+    )
 
 
 @login_required
@@ -608,32 +687,81 @@ def create_recurring_service_events(request):
 
     preview = None
     if request.method == "POST":
-        form = RecurringServiceEventForm(request.POST, language=language)
+        form = RecurringServiceEventForm(
+            request.POST,
+            language=language,
+            include_profile_selection=True,
+        )
         if form.is_valid():
+            profile = form.cleaned_data.get("service_profile")
             if "preview" in request.POST:
-                dates_to_create, dates_to_skip = build_recurring_event_preview(
-                    form.cleaned_data
-                )
-                preview = {
-                    "dates_to_create": dates_to_create,
-                    "dates_to_skip": dates_to_skip,
-                    "total_count": len(dates_to_create),
-                }
+                try:
+                    review = build_creation_review(
+                        mode="recurring",
+                        user=request.user,
+                        profile_id=profile.pk if profile else None,
+                        event_type=form.cleaned_data["event_type"],
+                        audience_ids=[
+                            unit.pk for unit in form.cleaned_data["audience_units"]
+                        ],
+                        recurring_data=form.cleaned_data,
+                    )
+                except ServiceEventCreationError as exc:
+                    form.add_error(None, _creation_error_text(language, exc.failure))
+                else:
+                    data = request.POST.copy()
+                    selected_ids = {
+                        str(team.pk) for team in form.cleaned_data["required_teams"]
+                    }
+                    selected_ids.update(
+                        str(team.pk) for team in review.default_teams
+                    )
+                    data.setlist("required_teams", sorted(selected_ids, key=int))
+                    data["review_token"] = review.signed_payload
+                    form = RecurringServiceEventForm(
+                        data,
+                        language=language,
+                        include_profile_selection=True,
+                    )
+                    preview = {
+                        "dates_to_create": review.dates_to_create,
+                        "dates_to_skip": review.dates_to_skip,
+                        "total_count": len(review.dates_to_create),
+                        "profile": review.profile,
+                        "default_teams": review.default_teams,
+                        "inactive_requirement_count": review.inactive_requirement_count,
+                    }
             elif "create" in request.POST:
-                created_count, skipped_count, dates_to_create, dates_to_skip = (
-                    create_recurring_events(form.cleaned_data, request.user)
-                )
-                messages.success(
-                    request,
-                    f"Created: {created_count}; skipped: {skipped_count}.",
-                )
-                preview = {
-                    "dates_to_create": dates_to_create,
-                    "dates_to_skip": dates_to_skip,
-                    "total_count": created_count,
-                }
+                try:
+                    result = create_reviewed_recurring_service_events(
+                        cleaned_data=form.cleaned_data,
+                        user=request.user,
+                        profile_id=profile.pk if profile else None,
+                        review_token=form.cleaned_data.get("review_token") or "",
+                        team_ids=[
+                            team.pk for team in form.cleaned_data["required_teams"]
+                        ],
+                        audience_ids=[
+                            unit.pk for unit in form.cleaned_data["audience_units"]
+                        ],
+                    )
+                except ServiceEventCreationError as exc:
+                    form.add_error(None, _creation_error_text(language, exc.failure))
+                else:
+                    messages.success(
+                        request,
+                        f"Created: {len(result.events)}; skipped: {len(result.dates_to_skip)}.",
+                    )
+                    preview = {
+                        "dates_to_create": result.dates_to_create,
+                        "dates_to_skip": result.dates_to_skip,
+                        "total_count": len(result.events),
+                    }
     else:
-        form = RecurringServiceEventForm(language=language)
+        form = RecurringServiceEventForm(
+            language=language,
+            include_profile_selection=True,
+        )
 
     return render(
         request,

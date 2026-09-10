@@ -39,8 +39,12 @@ idempotency. At that 6B production-configuration milestone, no
 **PRODUCTION READ-ONLY PREVIEW VERIFIED**, and **`GENERIC-DEPLOYMENT-CONFIG.7B
 — PRODUCTION MATERIALIZATION APPLY COMPLETE / VERIFIED`** for the reviewed
 `2026-09-08` through `2026-12-31` scope: 64 explicit static-default pairs, zero
-missing, and zero blockers. Historical backfill remains deliberately deferred;
-MO-S.REQUIRED runtime and automatic new-event default initialization remain
+missing, and zero blockers. Historical backfill remains deliberately deferred.
+**`GENERIC-DEPLOYMENT-CONFIG.7C-1A` is IMPLEMENTED / LOCAL VERIFIED** for
+ordinary single and recurring creation: optional profile defaults are reviewed
+suggestions, the final RequiredTeam set is explicit, profileless creation stays
+supported, and one atomic events-owned service preserves revision-zero and the
+SQLite first-write/recompute contract. MO-S.REQUIRED runtime remains
 unimplemented.
 
 `MO-S.6D-PROFILE.1A` historically introduced the optional stable
@@ -2360,7 +2364,8 @@ revisions, and create/change zero TeamAssignments, notifications, or Worship
 selections. Worship XLSX behavior is unchanged. At the 6B production-
 configuration milestone, Slice 7 materialization had not started. The later
 reviewed 7B production closeout materialized the approved existing-event scope;
-MO-S.REQUIRED and automatic new-event initialization remain unimplemented. No
+At that milestone MO-S.REQUIRED and automatic new-event initialization were
+unimplemented; 7C-1A later implemented only the new-event flow. No
 Slice 8 work began in 6B, and the Lighting Pilot remains retired.
 
 ### GENERIC-DEPLOYMENT-CONFIG.7A — Existing-Event RequiredTeam Materialization Preview
@@ -2431,13 +2436,12 @@ no-ops with no confirmation token. Historical missing pairs remain deliberately
 unmaterialized unless separately reviewed; the full-year scope is expected to
 retain 140 historical missing pairs.
 
-### GENERIC-DEPLOYMENT-CONFIG.7C-0A — New-Event RequiredTeam Initialization Decision
+### GENERIC-DEPLOYMENT-CONFIG.7C-0A / 7C-1A — New-Event RequiredTeam Initialization
 
-Status: **READ-ONLY AUDIT / DOCS-ONLY DECISION COMPLETE; RUNTIME
-UNIMPLEMENTED**. `GENERIC-DEPLOYMENT-CONFIG.7C-0A-FU1` adds the docs-only
-SQLite first-write/current-truth guarantee and does not begin 7C-1A. The
-canonical detailed contract is
-[`GENERIC_DEPLOYMENT_CONFIGURATION_ARCHITECTURE.md`](GENERIC_DEPLOYMENT_CONFIGURATION_ARCHITECTURE.md#73-generic-deployment-config7c-0a--new-event-initialization-decision).
+Status: **7C-0A/FU1 CONTRACT COMPLETE; 7C-1A IMPLEMENTED / LOCAL VERIFIED**.
+`GENERIC-DEPLOYMENT-CONFIG.7C-0A-FU1` froze the SQLite first-write/current-
+truth guarantee now implemented by 7C-1A. The canonical detailed contract is
+[`GENERIC_DEPLOYMENT_CONFIGURATION_ARCHITECTURE.md`](GENERIC_DEPLOYMENT_CONFIGURATION_ARCHITECTURE.md#73-generic-deployment-config7c-0a--7c-1a--new-event-initialization).
 
 The supported user-facing creation paths are ordinary single
 `/events/new/`, ordinary recurring `/events/recurring/new/`, and the
@@ -2493,6 +2497,24 @@ broaden module dependency metadata, or introduce a plugin abstraction.
 Existing-event edit/profile changes, Django Admin inlines, the bounded reset,
 7A/7B, Worship selection, assignments, notifications, and coverage runtime
 gain no automatic materialization or deletion.
+
+The shipped ordinary forms expose an optional active Service Profile only in
+explicit creation mode and never expose the compatibility key. Single review
+and recurring Preview use the distinct expiring
+`SERVICE_EVENT_PROFILE_CREATION_REVIEW_V1` signed contract. They reuse the
+canonical ministry requirement inspector, display zero defaults as a valid
+state, merge valid defaults with existing explicit checkbox selections, and
+allow deliberate removal/addition before creation. New picker choices are
+active+assignable; edit additionally retains every exact stored legacy row.
+The shared create-only service explicitly creates events, audience rows, and
+RequiredTeam rows in deterministic order inside one transaction. Its first
+event INSERT establishes SQLite's writer boundary, all review-sensitive truth
+is recomputed afterward, and stale/busy/duplicate/child/postcondition failures
+roll back the entire single event or batch. Every created event remains at
+`scheduling_revision = 0`; an all-skip recurring preview is a zero-write no-op.
+Admin, the Bethany reset, adapters/XLSX, 7A/7B, assignments/members,
+notifications, and Worship selection are unchanged. This is not live
+inheritance and does not implement MO-S.REQUIRED runtime.
 
 ### MO-S.REQUIRED.0A — Effective Required-Team Semantics / Event Worship Entry Audit
 
@@ -2590,18 +2612,15 @@ assignment because they have explicit rows.
 
 #### Required-Team picker and legacy-row contract
 
-Current single edit uses `active OR already selected`; recurring creation uses
-`active`. Neither path currently requires `is_assignable=True`, so active
-containers can be selected. Admin's inline autocomplete is also not restricted
-to assignable teams.
-
-The later normal-picker filter is `is_active=True AND is_assignable=True`.
-Single-event edit must union every team already stored for that exact event,
+As implemented by 7C-1A, the ordinary normal-picker filter is
+`is_active=True AND is_assignable=True`. Single-event edit unions every team
+already stored for that exact event,
 including inactive or non-assignable rows, so the user can see and deliberately
 review/remove it and an unrelated save does not silently drop it. Recurring
 creation has no legacy initial rows and uses only the strict new-choice filter.
-Admin remains an explicit stored-row repair surface: existing invalid links
-stay visible, while any future restriction on new inline additions must retain
+Admin's inline autocomplete remains unchanged and is an explicit stored-row
+repair surface: existing invalid links stay visible, while any future
+restriction on new inline additions must retain
 those existing rows. No save path may silently delete legacy invalid rows.
 
 #### Event-page Worship Team entry and authority

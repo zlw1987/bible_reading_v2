@@ -135,6 +135,18 @@ complete no-ops with no token. Historical full-year backfill remains
 deliberately deferred with 140 expected missing pairs unless separately
 reviewed.
 
+`GENERIC-DEPLOYMENT-CONFIG.7C-1A` is **IMPLEMENTED / LOCAL VERIFIED**.
+Ordinary single and recurring ServiceEvent creation may optionally select an
+active Service Profile and review its canonical valid ministry defaults as
+initial RequiredTeam suggestions. The final checkbox set remains explicit
+per-event operational truth; profileless creation remains supported and there
+is no live inheritance. One events-owned service atomically creates the event
+or complete recurring batch plus exact audience and RequiredTeam rows, using
+the first revision-zero event INSERT as SQLite's writer boundary and
+recomputing reviewed current truth afterward. Admin, reset, adapters/XLSX, the
+historical 7B closeout, assignments/members, notifications, and Worship
+selection remain unchanged. MO-S.REQUIRED runtime remains unimplemented.
+
 Historically, `MO-S.6D-PROFILE.1A` introduced the optional validated
 `ServiceEvent.service_profile_key` identity foundation. After 5F it is
 transitional compatibility/drift storage only; permanent runtime identity is

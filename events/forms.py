@@ -16,6 +16,7 @@ from .models import (
     ServiceEvent,
     ServiceEventAudienceScope,
     ServiceEventPlannerAssignment,
+    ServiceProfile,
 )
 
 
@@ -34,6 +35,18 @@ FORM_TEXT = {
         "location": "Location",
         "meeting_link": "Meeting Link",
         "required_teams": "Required Ministry Teams",
+        "service_profile": "Service Profile (optional)",
+        "service_profile_help": (
+            "Optionally choose a profile to review configured initial Required "
+            "Ministry Team suggestions before creation. This creates no assignment "
+            "and no live inheritance."
+        ),
+        "service_profile_invalid": (
+            "The selected Service Profile is no longer available or active."
+        ),
+        "required_teams_invalid": (
+            "Ministry Team configuration changed. Review again."
+        ),
         "audience_units": "Audience Scope",
         "audience_units_help": (
             "Selected units control which ordinary users can see this gathering. "
@@ -83,6 +96,13 @@ FORM_TEXT = {
         "audience_scope_root_combo": "全教会不能与其他单元同时选择。",
         "audience_scope_ancestor_combo": "不要同时选择一个单元及其上级或下级单元。",
         "required_teams": "需要的事工团队",
+        "service_profile": "聚会配置（可选）",
+        "service_profile_help": (
+            "可选择聚会配置，并在创建前检查其建议的初始需要事工团队。"
+            "这不会建立排班，也不会形成实时继承。"
+        ),
+        "service_profile_invalid": "所选聚会配置已不存在或已停用。",
+        "required_teams_invalid": "事工团队设置已有变化，请重新检查。",
         "status": "状态",
         "sunday_service": "主日崇拜",
         "bible_study": "查经",
@@ -123,6 +143,17 @@ class MinistryTeamChoiceField(forms.ModelChoiceField):
 
     def label_from_instance(self, team):
         return team.get_name(self.language)
+
+
+class ServiceProfileChoiceField(forms.ModelChoiceField):
+    def __init__(self, *args, language="en", **kwargs):
+        self.language = language
+        super().__init__(*args, **kwargs)
+
+    def label_from_instance(self, profile):
+        if self.language == "en" and profile.name_en:
+            return profile.name_en
+        return profile.name
 
 
 class ChurchStructureUnitMultipleChoiceField(forms.ModelMultipleChoiceField):
@@ -346,7 +377,13 @@ class ServiceEventForm(AudienceUnitOptionsMixin, forms.ModelForm):
             ),
         }
 
-    def __init__(self, *args, language="en", **kwargs):
+    def __init__(
+        self,
+        *args,
+        language="en",
+        include_profile_selection=False,
+        **kwargs,
+    ):
         super().__init__(*args, **kwargs)
         self.language = language
         text = form_text(language)
@@ -400,7 +437,27 @@ class ServiceEventForm(AudienceUnitOptionsMixin, forms.ModelForm):
         )
         self.fields["required_teams"].help_text = text["required_teams_help"]
         self.fields["required_teams"].language = language
-        required_team_filter = Q(is_active=True)
+        if include_profile_selection:
+            self.fields["service_profile"] = ServiceProfileChoiceField(
+                language=language,
+                queryset=ServiceProfile.objects.filter(is_active=True).order_by(
+                    "name", "name_en", "id"
+                ),
+                required=False,
+                label=text["service_profile"],
+                help_text=text["service_profile_help"],
+                error_messages={
+                    "invalid_choice": text["service_profile_invalid"],
+                },
+                empty_label=(
+                    "不使用聚会配置" if language == "zh" else "No Service Profile"
+                ),
+            )
+            self.fields["review_token"] = forms.CharField(
+                required=False,
+                widget=forms.HiddenInput,
+            )
+        required_team_filter = Q(is_active=True, is_assignable=True)
         if self.instance.pk:
             required_team_filter |= Q(required_service_events=self.instance)
         self.fields["required_teams"].queryset = (
@@ -408,6 +465,9 @@ class ServiceEventForm(AudienceUnitOptionsMixin, forms.ModelForm):
             .distinct()
             .order_by("name")
         )
+        self.fields["required_teams"].error_messages["invalid_choice"] = text[
+            "required_teams_invalid"
+        ]
         self.fields["start_datetime"].input_formats = ["%Y-%m-%dT%H:%M"]
         self.fields["end_datetime"].input_formats = ["%Y-%m-%dT%H:%M"]
 
@@ -743,7 +803,13 @@ class RecurringServiceEventForm(AudienceUnitOptionsMixin, forms.Form):
     description = forms.CharField(required=False, widget=forms.Textarea(attrs={"rows": 4}))
     description_en = forms.CharField(required=False, widget=forms.Textarea(attrs={"rows": 4}))
 
-    def __init__(self, *args, language="en", **kwargs):
+    def __init__(
+        self,
+        *args,
+        language="en",
+        include_profile_selection=False,
+        **kwargs,
+    ):
         super().__init__(*args, **kwargs)
         self.language = language
         text = form_text(language)
@@ -795,8 +861,32 @@ class RecurringServiceEventForm(AudienceUnitOptionsMixin, forms.Form):
         self.fields["required_teams"].language = language
         self.fields["required_teams"].queryset = MinistryTeam.objects.filter(
             is_active=True,
+            is_assignable=True,
         ).order_by("name")
         self.add_audience_units_field(text)
+        if include_profile_selection:
+            self.fields["service_profile"] = ServiceProfileChoiceField(
+                language=language,
+                queryset=ServiceProfile.objects.filter(is_active=True).order_by(
+                    "name", "name_en", "id"
+                ),
+                required=False,
+                label=text["service_profile"],
+                help_text=text["service_profile_help"],
+                error_messages={
+                    "invalid_choice": text["service_profile_invalid"],
+                },
+                empty_label=(
+                    "不使用聚会配置" if language == "zh" else "No Service Profile"
+                ),
+            )
+            self.fields["review_token"] = forms.CharField(
+                required=False,
+                widget=forms.HiddenInput,
+            )
+        self.fields["required_teams"].error_messages["invalid_choice"] = text[
+            "required_teams_invalid"
+        ]
         self.fields["weekday"].choices = weekday_choices(language)
 
         if not self.is_bound:

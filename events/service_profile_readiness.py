@@ -16,7 +16,10 @@ from django.core.exceptions import ValidationError
 from django.utils import timezone
 
 from .models import ServiceEvent, ServiceProfile, validate_service_profile_key
-from .service_profile_runtime import inspect_service_profile_identity
+from .service_profile_runtime import (
+    ServiceProfileIdentityState,
+    inspect_service_profile_identity,
+)
 
 
 SERVICE_PROFILE_READINESS_CONTRACT_VERSION = "SERVICE_PROFILE_READINESS_V3"
@@ -460,7 +463,7 @@ def build_audit(*, profile_key, year, target_time, event_type):
                 tagged=False,
             )
             for event, identity in exact_time_identities
-            if not identity.is_exact
+            if identity.state == ServiceProfileIdentityState.EVENT_TYPE_MISMATCH
         ]
         candidates = []
         if not exact_for_date:

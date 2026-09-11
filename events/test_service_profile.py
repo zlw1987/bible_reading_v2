@@ -44,6 +44,30 @@ class ServiceProfileModelTests(TestCase):
         with self.assertRaises(ValidationError):
             ServiceProfile.objects.create(**profile_values(key="not a key"))
 
+    def test_profile_key_grammar_and_normalized_uniqueness_are_enforced(self):
+        for key in ("sunday.main-11", "sunday_main", "sunday.alt"):
+            with self.subTest(key=key):
+                profile = ServiceProfile.objects.create(
+                    **profile_values(key=key, name=key)
+                )
+                self.assertEqual(profile.key, key)
+        with self.assertRaises(ValidationError):
+            ServiceProfile.objects.create(**profile_values(key=" SUNDAY.MAIN "))
+
+    def test_profile_name_and_event_type_are_required_and_valid(self):
+        with self.assertRaises(ValidationError):
+            ServiceProfile.objects.create(**profile_values(name=""))
+        with self.assertRaises(ValidationError):
+            ServiceProfile.objects.create(**profile_values(event_type="not-an-event"))
+
+    def test_unreferenced_identity_is_editable(self):
+        self.profile.key = "weekday.study"
+        self.profile.event_type = ServiceEvent.EVENT_BIBLE_STUDY
+        self.profile.save()
+        self.profile.refresh_from_db()
+        self.assertEqual(self.profile.key, "weekday.study")
+        self.assertEqual(self.profile.event_type, ServiceEvent.EVENT_BIBLE_STUDY)
+
     def test_fk_contract_is_optional_and_protected(self):
         field = ServiceEvent._meta.get_field("service_profile")
         self.assertTrue(field.null)
@@ -88,12 +112,49 @@ class ServiceProfileModelTests(TestCase):
         with self.assertRaises(ValidationError):
             self.profile.save()
 
+    def test_referenced_profile_metadata_remains_editable_without_event_revision(self):
+        event = ServiceEvent.objects.create(**event_values(service_profile=self.profile))
+        before_revision = event.scheduling_revision
+        self.profile.name = "Renamed Sunday"
+        self.profile.description = "Updated description"
+        self.profile.is_active = False
+        self.profile.save()
+        event.refresh_from_db()
+        self.assertEqual(event.service_profile_id, self.profile.pk)
+        self.assertEqual(event.scheduling_revision, before_revision)
+
 
 class ServiceProfileAdminTests(TestCase):
     def setUp(self):
         self.user = User.objects.create_superuser("profile-admin", "x@example.com", "pass")
         self.request = RequestFactory().get("/admin/events/serviceevent/")
         self.request.user = self.user
+
+    def admin_event_form(self, event, *, profile):
+        form_class = ServiceEventAdmin(ServiceEvent, admin.site).get_form(
+            self.request, obj=event
+        )
+        start = timezone.localtime(event.start_datetime)
+        return form_class(
+            data={
+                "title": event.title,
+                "title_en": event.title_en,
+                "description": event.description,
+                "description_en": event.description_en,
+                "event_type": event.event_type,
+                "service_profile": str(profile.pk) if profile else "",
+                "start_datetime_0": start.strftime("%Y-%m-%d"),
+                "start_datetime_1": start.strftime("%H:%M:%S"),
+                "end_datetime_0": "",
+                "end_datetime_1": "",
+                "location": event.location,
+                "meeting_link": event.meeting_link,
+                "host_language_unit": "",
+                "status": event.status,
+                "created_by": "",
+            },
+            instance=event,
+        )
 
     def test_admin_hides_compatibility_field(self):
         model_admin = ServiceEventAdmin(ServiceEvent, admin.site)
@@ -121,3 +182,41 @@ class ServiceProfileAdminTests(TestCase):
         )
         self.assertIn("key", readonly)
         self.assertIn("event_type", readonly)
+
+    def test_profile_admin_creates_canonical_profile(self):
+        form_class = ServiceProfileAdmin(ServiceProfile, admin.site).get_form(
+            self.request
+        )
+        form = form_class(
+            data={
+                "key": " Sunday.Main-11 ",
+                "name": "Sunday Main",
+                "name_en": "",
+                "description": "",
+                "description_en": "",
+                "event_type": ServiceEvent.EVENT_SUNDAY_SERVICE,
+                "is_active": "on",
+            }
+        )
+        self.assertTrue(form.is_valid(), form.errors)
+        self.assertEqual(form.save().key, "sunday.main-11")
+
+    def test_admin_selects_and_clears_only_the_fk_with_revision_boundary(self):
+        profile = ServiceProfile.objects.create(**profile_values())
+        event = ServiceEvent.objects.create(**event_values())
+
+        selected = self.admin_event_form(event, profile=profile)
+        self.assertTrue(selected.is_valid(), selected.errors)
+        saved = selected.save()
+        saved.refresh_from_db()
+        self.assertEqual(saved.service_profile_id, profile.pk)
+        self.assertEqual(saved.service_profile_key, "")
+        self.assertEqual(saved.scheduling_revision, 1)
+
+        cleared = self.admin_event_form(saved, profile=None)
+        self.assertTrue(cleared.is_valid(), cleared.errors)
+        saved = cleared.save()
+        saved.refresh_from_db()
+        self.assertIsNone(saved.service_profile_id)
+        self.assertEqual(saved.service_profile_key, "")
+        self.assertEqual(saved.scheduling_revision, 2)

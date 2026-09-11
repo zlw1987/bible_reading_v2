@@ -18,7 +18,6 @@ from .models import (
     ServiceProfile,
 )
 from .service_profile_runtime import (
-    ServiceProfileIdentityState,
     ServiceProfileMutationError,
     inspect_service_profile_identity,
     prepare_clear_service_event_profile,
@@ -33,14 +32,14 @@ class ServiceProfileChoiceField(forms.ModelChoiceField):
 
 
 class ServiceEventAdminForm(forms.ModelForm):
-    """Admin-only FK selector that prepares the compatibility pair in memory."""
+    """Admin-only selector for the canonical ServiceProfile FK."""
 
     service_profile = ServiceProfileChoiceField(
         queryset=ServiceProfile.objects.none(),
         required=False,
         help_text=(
             "Technical Service Profile identity. Only active profiles may be "
-            "newly assigned; the compatibility key below is read-only."
+            "newly assigned."
         ),
     )
 
@@ -55,10 +54,7 @@ class ServiceEventAdminForm(forms.ModelForm):
         )
         profiles = ServiceProfile.objects.filter(is_active=True)
         identity = self._persisted_profile_identity
-        if (
-            identity.state == ServiceProfileIdentityState.EXACT
-            and identity.profile_id is not None
-        ):
+        if identity.profile_id is not None:
             profiles = ServiceProfile.objects.filter(
                 Q(is_active=True) | Q(pk=identity.profile_id)
             )
@@ -72,26 +68,11 @@ class ServiceEventAdminForm(forms.ModelForm):
             return cleaned_data
 
         identity = self._persisted_profile_identity
-        if identity.state in {
-            ServiceProfileIdentityState.FK_KEY_MISMATCH,
-            ServiceProfileIdentityState.FK_BLANK_KEY,
-            ServiceProfileIdentityState.EVENT_TYPE_MISMATCH,
-        }:
-            self.add_error(
-                "service_profile",
-                "This event has Service Profile identity drift. Use the reviewed "
-                "repair workflow before editing it in Admin.",
-            )
-            return cleaned_data
-
         selected_profile = cleaned_data["service_profile"]
         target_event_type = cleaned_data["event_type"]
         try:
             if selected_profile is None:
-                if identity.state == ServiceProfileIdentityState.EXACT:
-                    prepare_clear_service_event_profile(self.instance)
-                # A blank selector on a legacy-only row preserves its evidence;
-                # it is not an implicit clear or profile lookup.
+                prepare_clear_service_event_profile(self.instance)
             else:
                 prepare_service_event_profile(
                     self.instance,
@@ -105,10 +86,6 @@ class ServiceEventAdminForm(forms.ModelForm):
                     "submitted event type."
                 ),
                 "profile_inactive": "Only an active Service Profile may be assigned.",
-                "legacy_key_conflict": (
-                    "The selected Service Profile conflicts with the existing "
-                    "compatibility identity."
-                ),
             }
             self.add_error(
                 "service_profile",
@@ -118,13 +95,6 @@ class ServiceEventAdminForm(forms.ModelForm):
                 ),
             )
         return cleaned_data
-
-    def _update_errors(self, errors):
-        if hasattr(errors, "error_dict") and "service_profile_key" in errors.error_dict:
-            profile_errors = errors.error_dict.pop("service_profile_key")
-            errors.error_dict.setdefault("service_profile", []).extend(profile_errors)
-        return super()._update_errors(errors)
-
 
 class ServiceEventAudienceScopeInlineFormSet(BaseInlineFormSet):
     zero_message = "Select at least one audience scope unit."
@@ -296,22 +266,31 @@ class ServiceEventAdmin(admin.ModelAdmin):
         "rotation_anchor_team__name",
         "rotation_anchor_team__name_en",
     )
-    exclude = ("rotation_anchor_team",)
+    fields = (
+        "title",
+        "title_en",
+        "description",
+        "description_en",
+        "event_type",
+        "service_profile",
+        "start_datetime",
+        "end_datetime",
+        "location",
+        "meeting_link",
+        "host_language_unit",
+        "status",
+        "published_at",
+        "created_by",
+        "worship_team",
+        "created_at",
+        "updated_at",
+    )
     readonly_fields = (
-        "service_profile_key",
-        "service_profile_compatibility_note",
         "worship_team",
         "created_at",
         "updated_at",
         "published_at",
     )
-
-    @admin.display(description="Service Profile compatibility identity")
-    def service_profile_compatibility_note(self, obj):
-        return (
-            "Transitional read-only evidence only. Select or clear the Service "
-            "Profile field above to make an explicit identity change."
-        )
 
     @admin.display(description="Worship Team")
     def worship_team(self, obj):

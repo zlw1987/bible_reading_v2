@@ -214,16 +214,6 @@ class ServiceEvent(models.Model):
                 profile = None
 
         if profile is not None:
-            if not self.service_profile_key:
-                errors["service_profile_key"] = (
-                    "A Service Profile relationship requires the matching legacy "
-                    "service profile key during this transition."
-                )
-            elif self.service_profile_key != profile.key:
-                errors["service_profile_key"] = (
-                    "The legacy service profile key must exactly match the selected "
-                    "Service Profile key."
-                )
             if self.event_type != profile.event_type:
                 errors["event_type"] = (
                     "The service event type must match the selected Service Profile."
@@ -243,6 +233,19 @@ class ServiceEvent(models.Model):
 
         if errors:
             raise ValidationError(errors)
+
+    def full_clean(self, exclude=None, *args, **kwargs):
+        """Validate current event semantics without touching dead storage.
+
+        The field declaration is intentionally retained until Stage 2 so Django
+        sees no schema change.  Its old grammar validator is excluded from all
+        ordinary model saves: only the explicit read-only pre-drop audit may
+        inspect compatibility contents.
+        """
+
+        excluded = set(exclude or ())
+        excluded.add("service_profile_key")
+        return super().full_clean(exclude=excluded, *args, **kwargs)
 
     def save(self, *args, **kwargs):
         from .scheduling_revision import (

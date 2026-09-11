@@ -406,3 +406,18 @@ behavior, and any Today or My Serving behavior change.
 Do not use planning documentation as authorization to expand signup beyond the
 implemented lifecycle, add shared user surfaces, route hard-off gates,
 staff/setup extraction, or package extraction.
+
+## Service Profile compatibility-column Stage 1
+
+`GENERIC-DEPLOYMENT-CONFIG.LEGACY-SERVICE-PROFILE-KEY-RETIRE.1A` is
+**IMPLEMENTED / LOCAL VERIFIED**. `ServiceEvent.service_profile_key` still
+physically exists pending a separately approved Stage 2 migration, but current
+identity is FK-only through `ServiceProfile`. Supported writers and Admin do
+not write or show the column; only the explicit read-only pre-drop audit reads
+it. No `events/0013`, production audit, or production data mutation occurred.
+
+The pre-drop gate treats profileless blank rows, FK-only blank-key rows, and
+exact historical FK/key residue as safe for column removal. It blocks
+legacy-only identity, nonblank mismatch, malformed/noncanonical residue, and
+event/profile type mismatch; supported writers do not dual-write to influence
+those counts.

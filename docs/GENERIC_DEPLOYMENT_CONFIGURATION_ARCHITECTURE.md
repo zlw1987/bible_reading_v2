@@ -1421,14 +1421,19 @@ immediately-pre-migration audit. Reuse a simplified/versioned identity/readiness
 audit and require zero:
 
 - nonblank compatibility strings with a null FK;
-- FK plus blank compatibility string;
-- FK/key mismatch;
-- FK profile/event `event_type` mismatch;
+- nonblank FK/key mismatches;
+- FK profile/event `event_type` mismatches;
 - dangling/impossible FK integrity states; and
 - malformed/noncanonical nonblank event keys or any other unsupported
   transition state.
 
-Profileless events with null FK and blank compatibility string are allowed.
+Profileless events with null FK and blank compatibility strings are allowed,
+as are FK-linked events with blank compatibility strings (the canonical
+FK-only Stage-1 shape) and exact historical FK/key residue. The former
+transition-era condition requiring zero FK-plus-blank-key rows is superseded:
+the destructive-removal condition is that no canonical ServiceProfile identity
+exists only in the legacy column and no unexplained nonblank mismatch or
+malformed residue remains.
 Exact inactive profiles may remain valid historical references; active state is
 required only where a current workflow permanently requires it. The audit must
 be rerun read-only against the exact target database immediately before the
@@ -1477,3 +1482,37 @@ Deferred external identity mapping does not read or require
 separate adapter/mapping concept. It must not overload permanent
 `ServiceProfile.key` or resurrect the event compatibility string as speculative
 external-ID storage.
+
+## 20. `GENERIC-DEPLOYMENT-CONFIG.LEGACY-SERVICE-PROFILE-KEY-RETIRE.1A`
+
+Status: **IMPLEMENTED / LOCAL VERIFIED**.
+
+Stage 1 implements Option B without a schema migration. The physical
+`ServiceEvent.service_profile_key` column and model declaration remain only as
+temporary dead storage pending separately approved Stage 2. Current identity is
+strictly `ServiceEvent.service_profile -> ServiceProfile.key`: ordinary model
+validation, runtime resolution, Admin, 7C creation, the bounded reset, Worship
+preview/confirmation, and RequiredTeam materialization neither read nor write
+the compatibility column. Existing raw values are neither inferred, repaired,
+blanked, nor synchronized by ordinary saves.
+
+The only intentional column reader is the explicit read-only
+`audit_service_profile_identity --pre-drop-legacy-key` preflight. It reports
+all transition states needed to gate Stage 2 and states `PRE-DROP LEGACY COLUMN
+AUDIT`, `READ-ONLY`, and `NO DATA CHANGED`. Normal identity and readiness
+audits are FK/Profile-authoritative (`SERVICE_PROFILE_IDENTITY_V2` and
+`SERVICE_PROFILE_READINESS_V3`). The 4A mapping command is retired.
+
+The V2 pre-drop result distinguishes safe `profileless_blank`,
+`fk_only_blank_legacy`, and `exact_legacy_residue` rows from blocking
+legacy-only, nonblank mismatch, malformed/noncanonical, and event/type states.
+It is ready for column removal when those blockers are zero; Stage 1 never
+restores a dual writer merely to reduce the FK-only blank-key count.
+
+Affected signed contracts are versioned: Bethany reset approval is V3, Worship
+normalized preview/confirmation are V3, and RequiredTeam preview/plan are V2.
+7C `SERVICE_EVENT_PROFILE_CREATION_REVIEW_V1` remains valid because its signed
+review already bound canonical Profile facts, not the compatibility column. No
+`events/0013` exists; Stage 2 remains separately gated by a fresh target-DB
+pre-drop audit and approved destructive migration plan. No production audit,
+reset, materialization, or mutation was run for this slice.

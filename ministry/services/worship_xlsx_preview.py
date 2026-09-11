@@ -22,10 +22,7 @@ from openpyxl import load_workbook
 
 from events.models import ServiceEvent, ServiceProfile
 from events.service_profile_readiness import service_event_audience_readiness
-from events.service_profile_runtime import (
-    ServiceProfileIdentityState,
-    inspect_service_profile_identity,
-)
+from events.service_profile_runtime import inspect_service_profile_identity
 
 from ..models import MinistryTeam
 from .worship_governance import (
@@ -78,11 +75,11 @@ MAX_ZIP_MEMBER_UNCOMPRESSED_BYTES = 8 * 1024 * 1024
 SIGNING_VERSION = 2
 SIGNING_SALT = "ministry.worship-xlsx-preview.v2"
 NORMALIZED_PREVIEW_CONTRACT_REVISION = (
-    "SVCA_BETHANY_0930_2026_PREVIEW_V2"
+    "SVCA_BETHANY_0930_2026_PREVIEW_V3"
 )
-NORMALIZED_PREVIEW_SIGNING_VERSION = 2
+NORMALIZED_PREVIEW_SIGNING_VERSION = 3
 NORMALIZED_PREVIEW_SIGNING_SALT = (
-    "ministry.worship-xlsx-normalized-preview.v2"
+    "ministry.worship-xlsx-normalized-preview.v3"
 )
 SIGNING_MAX_AGE_SECONDS = 1800
 
@@ -801,7 +798,6 @@ def _event_profile_evidence(event, identity):
         "profile_id": identity.profile_id,
         "profile_key": identity.profile_key,
         "profile_event_type": identity.profile_event_type,
-        "compatibility_key": identity.compatibility_key,
         "event_type": identity.event_type,
         "identity_state": identity.state.value,
     }
@@ -851,21 +847,9 @@ def match_exact_service_event_targets(parsed):
                     exact.append(event)
                 else:
                     identity_drift.append(event)
-            elif (
-                identity.state == ServiceProfileIdentityState.LEGACY_ONLY
-                and identity.compatibility_key == target_profile.profile_key
-                and event.event_type == SUPPORTED_EVENT_TYPE
-            ):
+            elif identity.profile_id is None and event.event_type == SUPPORTED_EVENT_TYPE:
                 missing_fk.append(event)
-            elif (
-                identity.state
-                in {
-                    ServiceProfileIdentityState.FK_KEY_MISMATCH,
-                    ServiceProfileIdentityState.FK_BLANK_KEY,
-                    ServiceProfileIdentityState.EVENT_TYPE_MISMATCH,
-                }
-                and identity.compatibility_key == target_profile.profile_key
-            ):
+            elif not identity.is_exact:
                 identity_drift.append(event)
             elif identity.is_exact and event.event_type == SUPPORTED_EVENT_TYPE:
                 other_profile.append(event)
@@ -1105,7 +1089,7 @@ def build_worship_import_preview(*, parsed, mapping, user):
                 "service_profile_id": (
                     event.service_profile_id if event is not None else None
                 ),
-                "service_profile_key": (
+                "profile_key": (
                     target_profile.profile_key if event is not None else None
                 ),
                 "service_profile_event_type": (
@@ -1114,7 +1098,7 @@ def build_worship_import_preview(*, parsed, mapping, user):
                     else None
                 ),
                 "profile_identity_state": (
-                    ServiceProfileIdentityState.EXACT.value
+                    "exact"
                     if event is not None
                     else None
                 ),
@@ -1231,7 +1215,7 @@ def decode_signed_worship_import_preview(
         "target_state",
         "event_id",
         "service_profile_id",
-        "service_profile_key",
+        "profile_key",
         "service_profile_event_type",
         "profile_identity_state",
         "profile_evidence",
@@ -1253,12 +1237,12 @@ def decode_signed_worship_import_preview(
         if row["target_state"] == TargetMatchState.EXACT_TARGET_MATCHED.value:
             if (
                 row["service_profile_id"] != current_target_profile.profile_id
-                or row["service_profile_key"]
+                or row["profile_key"]
                 != current_target_profile.profile_key
                 or row["service_profile_event_type"]
                 != current_target_profile.profile_event_type
                 or row["profile_identity_state"]
-                != ServiceProfileIdentityState.EXACT.value
+                != "exact"
             ):
                 raise SignedWorkbookStateError(
                     "Signed normalized preview Service Profile state is malformed."

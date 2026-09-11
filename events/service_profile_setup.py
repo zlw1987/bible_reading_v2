@@ -59,7 +59,7 @@ DELETE_COUNT_MODEL_LABELS = {
 
 ROOT_CODE = "CHURCH"
 AUDIENCE_CODE = "CM"
-RESET_APPROVAL_CONTRACT_VERSION = "MO-S.6D-PROFILE-SETUP.1A-FU1-v2"
+RESET_APPROVAL_CONTRACT_VERSION = "MO-S.6D-PROFILE-SETUP.1A-FU1-v3"
 RESET_APPROVAL_TOKEN_LENGTH = 16
 
 
@@ -215,7 +215,6 @@ def build_existing_dataset_snapshot():
             "start_datetime",
             "status",
             "service_profile_id",
-            "service_profile_key",
             "title",
         )
     )
@@ -231,7 +230,6 @@ def build_existing_dataset_snapshot():
             "pk",
             "event_type",
             "service_profile_id",
-            "service_profile_key",
             "start_datetime",
             "end_datetime",
             "status",
@@ -442,7 +440,6 @@ def _dataset_is_canonical(*, profile, audience, today):
             or not profile_identity.is_exact
             or profile_identity.profile_id != profile.pk
             or profile_identity.profile_key != profile.key
-            or profile_identity.compatibility_key != profile.key
             or event.end_datetime is not None
             or event.location
             or event.meeting_link

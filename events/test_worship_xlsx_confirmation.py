@@ -166,7 +166,6 @@ class WorshipWorkbookConfirmationTestBase(TestCase):
                 title=f"Sunday {index}",
                 title_en=f"Sunday {index}",
                 service_profile=cls.target_profile,
-                service_profile_key="bethany_0930_cm",
                 event_type=ServiceEvent.EVENT_SUNDAY_SERVICE,
                 start_datetime=timezone.make_aware(
                     datetime.combine(row.local_date, time(9, 30)),
@@ -221,7 +220,6 @@ class WorshipWorkbookConfirmationTestBase(TestCase):
                 "scheduling_revision",
                 "rotation_anchor_team_id",
                 "service_profile_id",
-                "service_profile_key",
                 "event_type",
                 "start_datetime",
                 "status",
@@ -408,7 +406,6 @@ class WorshipWorkbookConfirmationSuccessTests(WorshipWorkbookConfirmationTestBas
             ServiceEvent.objects.order_by("id").values_list(
                 "id",
                 "service_profile_id",
-                "service_profile_key",
                 "event_type",
                 "start_datetime",
                 "end_datetime",
@@ -432,7 +429,6 @@ class WorshipWorkbookConfirmationSuccessTests(WorshipWorkbookConfirmationTestBas
                 ServiceEvent.objects.order_by("id").values_list(
                     "id",
                     "service_profile_id",
-                    "service_profile_key",
                     "event_type",
                     "start_datetime",
                     "end_datetime",
@@ -735,7 +731,6 @@ class WorshipWorkbookConfirmationCurrentTruthTests(
 
         cases = (
             ("deleted", lambda payload: ServiceEvent.objects.filter(pk=target_id(payload)).delete()),
-            ("wrong_profile", lambda payload: ServiceEvent.objects.filter(pk=target_id(payload)).update(service_profile_key="wrong")),
             ("wrong_date", change_date),
             ("wrong_time", change_time),
             ("wrong_type", lambda payload: ServiceEvent.objects.filter(pk=target_id(payload)).update(event_type=ServiceEvent.EVENT_SPECIAL_MEETING)),
@@ -767,7 +762,6 @@ class WorshipWorkbookConfirmationCurrentTruthTests(
             )
             ServiceEvent.objects.filter(pk=target_id(payload)).update(
                 service_profile=other,
-                service_profile_key=other.key,
             )
 
         cases = (
@@ -785,12 +779,6 @@ class WorshipWorkbookConfirmationCurrentTruthTests(
                 ).update(service_profile=None),
             ),
             ("event_fk_remapped", remap_event),
-            (
-                "compatibility_key_drift",
-                lambda payload: ServiceEvent.objects.filter(
-                    pk=target_id(payload)
-                ).update(service_profile_key="wrong"),
-            ),
             (
                 "event_type_drift",
                 lambda payload: ServiceEvent.objects.filter(
@@ -985,7 +973,6 @@ class WorshipWorkbookConfirmationCurrentTruthTests(
 
     def test_profile_type_and_cancelled_lifecycle_drift_fail_closed(self):
         for field, value in (
-            ("service_profile_key", "wrong_profile"),
             ("event_type", ServiceEvent.EVENT_SPECIAL_MEETING),
             ("status", ServiceEvent.STATUS_CANCELLED),
         ):
@@ -1202,7 +1189,6 @@ class FileBackedSQLiteAnnualWorshipConfirmationTests(unittest.TestCase):
             event = ServiceEvent.objects.create(
                 title=f"Sunday {index}",
                 service_profile=target_profile,
-                service_profile_key="bethany_0930_cm",
                 event_type=ServiceEvent.EVENT_SUNDAY_SERVICE,
                 start_datetime=timezone.make_aware(
                     datetime.combine(row.local_date, time(9, 30)),

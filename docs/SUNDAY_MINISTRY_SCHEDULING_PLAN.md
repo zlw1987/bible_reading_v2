@@ -2837,3 +2837,18 @@ This plan is grounded in the current implementation and canonical boundaries in:
   `ministry/services/worship_context.py`,
   `ministry/services/copy_forward_suggestions.py`, and
   `ministry/services/assignment_notifications.py`.
+
+### `GENERIC-DEPLOYMENT-CONFIG.LEGACY-SERVICE-PROFILE-KEY-RETIRE.1A`
+
+**IMPLEMENTED / LOCAL VERIFIED.** Scheduling identity is now FK-only:
+`ServiceEvent.service_profile -> ServiceProfile.key`. The retained physical
+compatibility column is not runtime authority and no creation, Admin, reset,
+Worship, readiness, or RequiredTeam operation reads or writes it. The explicit
+read-only pre-drop audit is its sole reader. Worship V3 and RequiredTeam V2
+contracts replace transition evidence; 7C review V1 remains current. No
+migration or production operation was run; Stage 2 is separately gated.
+
+Stage-2 readiness permits both FK-only events whose retained compatibility
+string is blank and exact historical dual-storage residue. It fails closed for
+legacy-only identity, nonblank mismatch, malformed/noncanonical residue, and
+event/profile type mismatch.

@@ -1718,6 +1718,22 @@ Not next:
 - Full historical import
 - Sensitive contact import
 
+### Service Profile compatibility-column retirement, Stage 1
+
+`GENERIC-DEPLOYMENT-CONFIG.LEGACY-SERVICE-PROFILE-KEY-RETIRE.1A` is
+**IMPLEMENTED / LOCAL VERIFIED**. `ServiceEvent.service_profile_key` remains a
+physical temporary column only; FK -> `ServiceProfile.key` is the sole current
+identity. No ordinary runtime, supported writer, or Admin surface reads or
+writes the column. The sole reader is the explicit read-only pre-drop audit.
+Reset, Worship normalized preview/confirmation, and RequiredTeam contracts are
+versioned; 7C review V1 is unchanged. No `events/0013` or production mutation
+occurred; Stage 2 remains separately gated.
+
+For the Stage-2 gate, blank retained strings are safe when the event is
+profileless or its canonical FK is set; exact historical FK/key residue is also
+safe. The audit blocks only legacy-only identity, nonblank FK/key mismatch,
+malformed/noncanonical nonblank residue, or permanent FK/profile type drift.
+
 Suggested docs:
 - `docs/READING_V1_QA_CHECKLIST.md`
 - `docs/BIBLE_STUDY_V1_QA_CHECKLIST.md`

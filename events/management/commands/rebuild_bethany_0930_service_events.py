@@ -114,8 +114,7 @@ class Command(BaseCommand):
             self.stdout.write(
                 f"  id={event['pk']}; local_start={local_start.isoformat()}; "
                 f"status={event['status']}; service_profile_id="
-                f"{event['service_profile_id']}; compatibility_key="
-                f"{event['service_profile_key']!r}; "
+                f"{event['service_profile_id']}; "
                 f"title={event['title']!r}"
             )
         self.stdout.write("Deletion / dependent-change scope:")

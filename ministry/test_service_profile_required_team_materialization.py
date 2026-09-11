@@ -39,11 +39,11 @@ class RequiredTeamMaterializationPreviewTests(TestCase):
         values.update(overrides)
         return MinistryTeam.objects.create(**values)
 
-    def event(self, day, *, profile=None, status=ServiceEvent.STATUS_PUBLISHED, key=None):
+    def event(self, day, *, profile=None, status=ServiceEvent.STATUS_PUBLISHED):
         profile = self.profile if profile is None else profile
         return ServiceEvent.objects.create(
             title="Neutral event", event_type=ServiceEvent.EVENT_SUNDAY_SERVICE,
-            service_profile=profile, service_profile_key=key or profile.key,
+            service_profile=profile,
             start_datetime=timezone.make_aware(datetime.combine(day, time(9))),
             status=status,
         )
@@ -65,7 +65,6 @@ class RequiredTeamMaterializationPreviewTests(TestCase):
         self.event(date(2026, 1, 3), profile=self.other_profile)
         legacy = ServiceEvent.objects.create(
             title="Legacy", event_type=ServiceEvent.EVENT_SUNDAY_SERVICE,
-            service_profile_key=self.profile.key,
             start_datetime=timezone.make_aware(datetime(2026, 1, 4, 9)),
         )
         self.event(date(2026, 2, 1))
@@ -130,14 +129,13 @@ class RequiredTeamMaterializationPreviewTests(TestCase):
         self.assertEqual(result["summary"]["inactive_default_history_rows"], 1)
         self.assertEqual(result["summary"]["manual_extra_rows"], 0)
 
-    def test_identity_drift_and_invalid_active_requirement_block(self):
+    def test_fk_identity_and_invalid_active_requirement_block(self):
         event = self.event(date(2026, 1, 2))
-        ServiceEvent.objects.filter(pk=event.pk).update(service_profile_key="wrong.key")
         self.requirement()
         MinistryTeam.objects.filter(pk=self.static.pk).update(is_active=False)
         result = self.preview()
         self.assertGreater(result["summary"]["blockers"], 0)
-        self.assertEqual(result["events"][0]["identity_state"], "fk_key_mismatch")
+        self.assertEqual(result["events"][0]["identity_state"], "exact")
 
     def test_non_assignable_explicit_row_is_invalid_evidence(self):
         event = self.event(date(2026, 1, 2))

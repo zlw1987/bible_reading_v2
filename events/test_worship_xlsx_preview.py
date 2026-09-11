@@ -429,7 +429,6 @@ class WorshipWorkbookDomainTestBase(TestCase):
         row_index=0,
         *,
         service_profile=_DEFAULT_PROFILE,
-        compatibility_key=None,
         event_type=ServiceEvent.EVENT_SUNDAY_SERVICE,
         local_time=time(9, 30),
         status=ServiceEvent.STATUS_PUBLISHED,
@@ -445,14 +444,9 @@ class WorshipWorkbookDomainTestBase(TestCase):
             if service_profile is _DEFAULT_PROFILE
             else service_profile
         )
-        if compatibility_key is None:
-            compatibility_key = (
-                selected_profile.key if selected_profile is not None else ""
-            )
         event = ServiceEvent.objects.create(
             title=f"Sunday {row_index}", title_en=f"Sunday {row_index}",
             service_profile=selected_profile,
-            service_profile_key=compatibility_key,
             event_type=event_type,
             start_datetime=timezone.make_aware(
                 local_value, timezone.get_current_timezone()
@@ -534,34 +528,11 @@ class WorshipWorkbookTargetMatchingTests(WorshipWorkbookDomainTestBase):
     def test_profile_identity_failures_and_other_profile_are_explicit(self):
         cases = (
             (
-                "legacy_only",
-                lambda: self.event_for_row(
-                    service_profile=None,
-                    compatibility_key="bethany_0930_cm",
-                ),
-                TargetMatchState.TARGET_EVENT_PROFILE_FK_MISSING,
-            ),
-            (
                 "profileless",
                 lambda: self.event_for_row(
                     service_profile=None,
-                    compatibility_key="",
                 ),
-                TargetMatchState.NO_TARGET,
-            ),
-            (
-                "fk_key_mismatch",
-                lambda: ServiceEvent.objects.filter(
-                    pk=self.event_for_row().pk
-                ).update(service_profile_key="wrong"),
-                TargetMatchState.TARGET_EVENT_PROFILE_IDENTITY_DRIFT,
-            ),
-            (
-                "fk_blank_key",
-                lambda: ServiceEvent.objects.filter(
-                    pk=self.event_for_row().pk
-                ).update(service_profile_key=""),
-                TargetMatchState.TARGET_EVENT_PROFILE_IDENTITY_DRIFT,
+                TargetMatchState.TARGET_EVENT_PROFILE_FK_MISSING,
             ),
             (
                 "fk_event_type_mismatch",
@@ -809,7 +780,8 @@ class WorshipWorkbookMappingAndGovernanceTests(WorshipWorkbookDomainTestBase):
         self.assertEqual(normalized["target_profile"], parsed_payload["target_profile"])
         matched_row = normalized["rows"][0]
         self.assertEqual(matched_row["service_profile_id"], self.target_profile.pk)
-        self.assertEqual(matched_row["service_profile_key"], self.target_profile.key)
+        self.assertEqual(matched_row["profile_key"], self.target_profile.key)
+        self.assertNotIn("service_profile_key", matched_row)
         self.assertEqual(
             matched_row["service_profile_event_type"],
             self.target_profile.event_type,
@@ -847,7 +819,7 @@ class WorshipWorkbookMappingAndGovernanceTests(WorshipWorkbookDomainTestBase):
         with self.assertRaises(SignedWorkbookStateError):
             decode_signed_worship_import_preview(v1_normalized, user=self.staff)
 
-    def test_v2_signed_shapes_reject_missing_wrong_or_extra_identity(self):
+    def test_v3_signed_shapes_reject_missing_wrong_or_extra_identity(self):
         self.event_for_row()
         parsed_token = sign_parsed_workbook(self.parsed, user=self.staff)
         parsed_base = signing.loads(parsed_token, salt=SIGNING_SALT)
@@ -972,7 +944,6 @@ class WorshipWorkbookViewTests(WorshipWorkbookDomainTestBase):
             event = ServiceEvent.objects.create(
                 title=f"Sunday {index}", title_en=f"Sunday {index}",
                 service_profile=cls.target_profile,
-                service_profile_key="bethany_0930_cm",
                 event_type=ServiceEvent.EVENT_SUNDAY_SERVICE,
                 start_datetime=timezone.make_aware(
                     local_value, timezone.get_current_timezone()
@@ -1242,7 +1213,7 @@ class WorshipWorkbookViewTests(WorshipWorkbookDomainTestBase):
         } | {
             "event_state": list(
                 ServiceEvent.objects.order_by("id").values_list(
-                    "id", "scheduling_revision", "service_profile_key",
+                    "id", "scheduling_revision",
                     "rotation_anchor_team_id",
                 )
             )

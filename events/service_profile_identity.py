@@ -1,250 +1,170 @@
-"""Generic, privacy-bounded Service Profile identity inventory."""
+"""Read-only Service Profile identity inventories.
 
-from collections import Counter, defaultdict
+The normal inventory is FK/Profile-authoritative.  The sole permitted reader
+of ``ServiceEvent.service_profile_key`` is the explicit pre-drop inventory
+below, retained only to gate the separately approved column-removal slice.
+"""
+
+from collections import Counter
 
 from django.core.exceptions import ValidationError
 
 from .models import ServiceEvent, ServiceProfile, validate_service_profile_key
 
 
-def _canonical_problem(raw_key):
-    try:
-        canonical = validate_service_profile_key(raw_key)
-    except ValidationError:
-        return "MALFORMED_LEGACY_KEY"
-    if canonical != raw_key:
-        return "NONCANONICAL_LEGACY_KEY"
-    return None
-
-
-def _event_summary(events):
-    events = list(events)
-    nonnull = [event for event in events if event.service_profile_id is not None]
-    exact = [
-        event
-        for event in nonnull
-        if event.service_profile.key == event.service_profile_key
-        and event.service_profile.event_type == event.event_type
-    ]
-    fk_blank_key = [event for event in nonnull if not event.service_profile_key]
-    fk_key_mismatch = [
-        event
-        for event in nonnull
-        if event.service_profile_key
-        and event.service_profile.key != event.service_profile_key
-    ]
-    event_profile_type_mismatch = [
-        event
-        for event in nonnull
-        if event.service_profile.event_type != event.event_type
-    ]
-    starts = [event.start_datetime for event in events]
-    status_counts = Counter(event.status for event in events)
-    return {
-        "total_event_count": len(events),
-        "fk_null_count": len(events) - len(nonnull),
-        "fk_nonnull_count": len(nonnull),
-        "exact_match_fk_count": len(exact),
-        "fk_mismatch_count": len(nonnull) - len(exact),
-        "fk_blank_key_count": len(fk_blank_key),
-        "fk_key_mismatch_count": len(fk_key_mismatch),
-        "event_profile_type_mismatch_count": len(event_profile_type_mismatch),
-        "earliest_start_datetime": min(starts) if starts else None,
-        "latest_start_datetime": max(starts) if starts else None,
-        "status_counts": {
-            value: status_counts[value]
-            for value, _label in ServiceEvent.STATUS_CHOICES
-            if status_counts[value]
-        },
-        "referenced_service_profile_ids": sorted(
-            {event.service_profile_id for event in nonnull}
-        ),
-    }
+IDENTITY_AUDIT_VERSION = "SERVICE_PROFILE_IDENTITY_V2"
+PRE_DROP_LEGACY_KEY_AUDIT_VERSION = "SERVICE_PROFILE_LEGACY_KEY_PRE_DROP_V2"
 
 
 def build_service_profile_identity_inventory(*, using="default"):
-    """Return deterministic technical evidence without writing database rows."""
+    """Return deterministic permanent FK/Profile evidence without writes."""
 
     events = list(
         ServiceEvent.objects.using(using)
         .select_related("service_profile")
-        .order_by("service_profile_key", "event_type", "pk")
+        .order_by("service_profile_id", "event_type", "pk")
     )
     profiles = list(ServiceProfile.objects.using(using).order_by("pk"))
-    profile_by_key = {profile.key: profile for profile in profiles}
-
-    grouped = defaultdict(list)
-    blank_events = []
-    for event in events:
-        if event.service_profile_key:
-            grouped[(event.service_profile_key, event.event_type)].append(event)
-        else:
-            blank_events.append(event)
-
-    types_by_key = defaultdict(set)
-    for key, event_type in grouped:
-        types_by_key[key].add(event_type)
-    conflicting_keys = sorted(
-        key for key, event_types in types_by_key.items() if len(event_types) > 1
-    )
-
-    blockers = []
-    legacy_groups = []
-    for (key, event_type), group_events in sorted(grouped.items()):
-        key_problem = _canonical_problem(key)
-        if key_problem:
-            blockers.append(f"{key_problem}: legacy_key={key!r}")
-        if key in conflicting_keys:
-            blockers.append(
-                "MULTI_TYPE_LEGACY_KEY: "
-                f"legacy_key={key!r} event_types={sorted(types_by_key[key])!r}"
-            )
-        summary = _event_summary(group_events)
-        profile = profile_by_key.get(key)
-        legacy_groups.append(
-            {
-                "legacy_key": key,
-                "event_type": event_type,
-                **summary,
-                "matching_service_profile_id": (
-                    profile.pk
-                    if profile is not None and profile.event_type == event_type
-                    else None
-                ),
-                "matching_profile_exists": bool(
-                    profile is not None and profile.event_type == event_type
-                ),
-                "legacy_key_integrity": key_problem or "OK",
-                "multi_type_conflict": key in conflicting_keys,
-            }
-        )
-
-    # A conflict is one blocker per key, even though it is visible on each group.
-    blockers = list(dict.fromkeys(blockers))
-
-    profile_rows = []
-    for profile in profiles:
-        linked_events = [
-            event for event in events if event.service_profile_id == profile.pk
-        ]
-        exact_linked = [
-            event
-            for event in linked_events
-            if event.service_profile_key == profile.key
-            and event.event_type == profile.event_type
-        ]
-        mismatched = len(linked_events) - len(exact_linked)
-        matching_group_exists = (profile.key, profile.event_type) in grouped
-        profile_problem = _canonical_problem(profile.key)
-        if profile_problem:
-            blockers.append(
-                f"{profile_problem.replace('LEGACY', 'PROFILE')}: profile_pk={profile.pk} key={profile.key!r}"
-            )
-        if mismatched:
-            blockers.append(
-                "PROFILE_LINK_DRIFT: "
-                f"profile_pk={profile.pk} mismatching_linked_events={mismatched}"
-            )
-
-        statuses = []
-        if not linked_events:
-            statuses.append("ZERO_LINKED_EVENTS")
-        if matching_group_exists:
-            statuses.append("MATCHES_LEGACY_GROUP")
-        else:
-            statuses.append("NO_MATCHING_LEGACY_GROUP")
-        if exact_linked:
-            statuses.append("EXACT_LINKED_EVENTS")
-        if mismatched:
-            statuses.append("MISMATCHED_LINKED_EVENTS")
-        profile_rows.append(
-            {
-                "pk": profile.pk,
-                "key": profile.key,
-                "event_type": profile.event_type,
-                "name": profile.name,
-                "name_en": profile.name_en,
-                "is_active": profile.is_active,
-                "linked_service_event_count": len(linked_events),
-                "exact_linked_event_count": len(exact_linked),
-                "mismatched_linked_event_count": mismatched,
-                "legacy_consistency_status": statuses,
-            }
-        )
-
-    exact_events = sum(
-        row["exact_match_fk_count"] for row in legacy_groups
-    )
-    fk_nonnull = sum(event.service_profile_id is not None for event in events)
-    drifted = fk_nonnull - exact_events
-    legacy_only = sum(
-        event.service_profile_id is None and bool(event.service_profile_key)
+    linked_by_profile = Counter(event.service_profile_id for event in events)
+    type_mismatches = [
+        event
         for event in events
-    )
-    profileless = sum(
-        event.service_profile_id is None and not event.service_profile_key
-        for event in events
-    )
-    fk_blank_key = sum(
-        event.service_profile_id is not None and not event.service_profile_key
-        for event in events
-    )
-    fk_key_mismatch = sum(
-        event.service_profile_id is not None
-        and bool(event.service_profile_key)
-        and event.service_profile.key != event.service_profile_key
-        for event in events
-    )
-    event_profile_type_mismatch = sum(
-        event.service_profile_id is not None
+        if event.service_profile_id is not None
         and event.service_profile.event_type != event.event_type
-        for event in events
-    )
-    for row in legacy_groups:
-        if row["fk_mismatch_count"]:
-            blockers.append(
-                "EVENT_FK_DRIFT: "
-                f"legacy_key={row['legacy_key']!r} event_type={row['event_type']!r} "
-                f"events={row['fk_mismatch_count']}"
-            )
-    blank_summary = _event_summary(blank_events)
-    if blank_summary["fk_nonnull_count"]:
-        blockers.append(
-            "BLANK_LEGACY_KEY_WITH_FK: "
-            f"events={blank_summary['fk_nonnull_count']}"
-        )
-    if fk_key_mismatch:
-        blockers.append(f"EVENT_FK_KEY_DRIFT: events={fk_key_mismatch}")
-    if event_profile_type_mismatch:
-        blockers.append(
-            "EVENT_PROFILE_TYPE_DRIFT: "
-            f"events={event_profile_type_mismatch}"
-        )
-    blockers = list(dict.fromkeys(blockers))
-
+    ]
+    profile_rows = [
+        {
+            "pk": profile.pk,
+            "key": profile.key,
+            "event_type": profile.event_type,
+            "name": profile.name,
+            "name_en": profile.name_en,
+            "is_active": profile.is_active,
+            "linked_service_event_count": linked_by_profile[profile.pk],
+        }
+        for profile in profiles
+    ]
+    blockers = [
+        "EVENT_PROFILE_TYPE_MISMATCH: "
+        f"event_id={event.pk} profile_id={event.service_profile_id}"
+        for event in type_mismatches
+    ]
     return {
-        "legacy_groups": legacy_groups,
-        "blank_legacy_key": blank_summary,
+        "version": IDENTITY_AUDIT_VERSION,
         "service_profiles": profile_rows,
-        "conflicting_multi_type_legacy_keys": conflicting_keys,
+        "event_profile_type_mismatches": [
+            {
+                "event_id": event.pk,
+                "profile_id": event.service_profile_id,
+                "event_type": event.event_type,
+                "profile_event_type": event.service_profile.event_type,
+            }
+            for event in type_mismatches
+        ],
         "integrity_blockers": blockers,
         "summary": {
             "service_events_total": len(events),
-            "blank_legacy_key_events": len(blank_events),
-            "nonblank_legacy_key_events": len(events) - len(blank_events),
-            "distinct_nonblank_legacy_keys": len(types_by_key),
-            "distinct_legacy_key_type_groups": len(legacy_groups),
-            "conflicting_multi_type_legacy_keys": len(conflicting_keys),
+            "profileless_events": sum(
+                event.service_profile_id is None for event in events
+            ),
+            "fk_linked_events": sum(
+                event.service_profile_id is not None for event in events
+            ),
             "service_profiles_total": len(profiles),
-            "events_fk_null": len(events) - fk_nonnull,
-            "events_fk_nonnull": fk_nonnull,
-            "profileless_events": profileless,
-            "legacy_only_events": legacy_only,
-            "exact_dual_consistent_events": exact_events,
-            "drifted_fk_events": drifted,
-            "fk_blank_key_events": fk_blank_key,
-            "fk_key_mismatch_events": fk_key_mismatch,
-            "event_profile_type_drift_events": event_profile_type_mismatch,
+            "active_service_profiles": sum(profile.is_active for profile in profiles),
+            "inactive_service_profiles": sum(
+                not profile.is_active for profile in profiles
+            ),
+            "event_profile_type_mismatch_events": len(type_mismatches),
             "integrity_blockers": len(blockers),
+        },
+    }
+
+
+def _legacy_key_problem(raw_key):
+    if not raw_key:
+        return None
+    try:
+        canonical = validate_service_profile_key(raw_key)
+    except ValidationError:
+        return "MALFORMED_LEGACY_KEY"
+    return "NONCANONICAL_LEGACY_KEY" if canonical != raw_key else None
+
+
+def build_pre_drop_legacy_key_inventory(*, using="default"):
+    """Read temporary legacy storage only for the Stage-2 pre-drop gate.
+
+    This function never repairs, infers, maps, or writes.  Do not call it from
+    normal runtime, readiness, setup, or creation paths.
+    """
+
+    events = list(
+        ServiceEvent.objects.using(using)
+        .select_related("service_profile")
+        .order_by("pk")
+    )
+    rows = []
+    counts = Counter()
+    for event in events:
+        key = event.service_profile_key
+        profile = event.service_profile if event.service_profile_id else None
+        key_problem = _legacy_key_problem(key)
+        states = []
+        if profile is None and key:
+            states.append("LEGACY_ONLY_BLOCKER")
+        if profile is None and not key:
+            states.append("PROFILELESS_BLANK")
+        if profile is not None and not key:
+            states.append("FK_ONLY_BLANK_LEGACY")
+        if profile is not None and key and profile.key != key:
+            states.append("LEGACY_MISMATCH_BLOCKER")
+        if profile is not None and profile.event_type != event.event_type:
+            states.append("EVENT_TYPE_BLOCKER")
+        if key_problem:
+            states.append("MALFORMED_LEGACY_BLOCKER")
+        if (
+            profile is not None
+            and key == profile.key
+            and profile.event_type == event.event_type
+        ):
+            states.append("EXACT_LEGACY_RESIDUE")
+        for state in states:
+            counts[state] += 1
+        rows.append(
+            {
+                "event_id": event.pk,
+                "service_profile_id": event.service_profile_id,
+                "profile_key": profile.key if profile is not None else None,
+                "event_type": event.event_type,
+                "profile_event_type": profile.event_type if profile is not None else None,
+                "legacy_key": key,
+                "states": states,
+            }
+        )
+    allowed_states = {
+        "PROFILELESS_BLANK",
+        "FK_ONLY_BLANK_LEGACY",
+        "EXACT_LEGACY_RESIDUE",
+    }
+    blockers = [
+        row
+        for row in rows
+        if any(state not in allowed_states for state in row["states"])
+    ]
+    return {
+        "version": PRE_DROP_LEGACY_KEY_AUDIT_VERSION,
+        "rows": rows,
+        "blockers": blockers,
+        "summary": {
+            "total_events": len(events),
+            "profileless_blank": counts["PROFILELESS_BLANK"],
+            "fk_only_blank_legacy": counts["FK_ONLY_BLANK_LEGACY"],
+            "exact_legacy_residue": counts["EXACT_LEGACY_RESIDUE"],
+            "legacy_only_blockers": counts["LEGACY_ONLY_BLOCKER"],
+            "legacy_mismatch_blockers": counts["LEGACY_MISMATCH_BLOCKER"],
+            "malformed_legacy_blockers": counts["MALFORMED_LEGACY_BLOCKER"],
+            "event_type_blockers": counts["EVENT_TYPE_BLOCKER"],
+            "blocker_rows": len(blockers),
+            "ready_for_column_removal": not blockers,
         },
     }

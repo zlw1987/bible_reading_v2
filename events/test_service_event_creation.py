@@ -36,6 +36,7 @@ from .service_event_creation import (
     create_recurring_service_events,
     create_single_service_event,
 )
+from .service_profile_identity import build_pre_drop_legacy_key_inventory
 
 
 User = get_user_model()
@@ -410,7 +411,10 @@ class ServiceEventCreationTests(TestCase):
     def test_single_success_writes_exact_profile_teams_audience_revision_zero(self):
         event = self.create_single(token=self.review().signed_payload).events[0]
         self.assertEqual(event.service_profile_id, self.profile.pk)
-        self.assertEqual(event.service_profile_key, self.profile.key)
+        self.assertEqual(event.service_profile_key, "")
+        pre_drop = build_pre_drop_legacy_key_inventory()
+        self.assertEqual(pre_drop["summary"]["fk_only_blank_legacy"], 1)
+        self.assertTrue(pre_drop["summary"]["ready_for_column_removal"])
         self.assertEqual(event.scheduling_revision, 0)
         self.assertEqual(
             set(ServiceEventRequiredTeam.objects.values_list("ministry_team_id", flat=True)),
@@ -484,7 +488,7 @@ class ServiceEventCreationTests(TestCase):
         self.assertEqual(len(result.events), 3)
         for event in result.events:
             self.assertEqual(event.service_profile_id, self.profile.pk)
-            self.assertEqual(event.service_profile_key, self.profile.key)
+            self.assertEqual(event.service_profile_key, "")
             self.assertEqual(event.scheduling_revision, 0)
             self.assertEqual(
                 set(event.required_teams.values_list("pk", flat=True)),

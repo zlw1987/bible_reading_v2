@@ -135,15 +135,13 @@ class EffectiveRequiredTeamsTests(WorshipGovernanceDomainTestBase):
         self.assertEqual(inspection.teams, (self.c1,))
         self.assertTrue(inspection.worship_review_required)
 
-    def test_names_tokens_and_profile_configuration_do_not_infer_a_requirement(self):
+    def test_names_and_profile_configuration_do_not_infer_a_requirement(self):
         self.event.rotation_anchor_team = None
         self.event.title = "A C1 C2 C3 Worship"
-        self.event.service_profile_key = "worship_named_profile"
         self.event.save(
             update_fields=[
                 "rotation_anchor_team",
                 "title",
-                "service_profile_key",
                 "updated_at",
             ]
         )

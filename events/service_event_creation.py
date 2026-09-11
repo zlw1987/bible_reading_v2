@@ -621,7 +621,6 @@ def _insert_event(event_kwargs, profile):
         )
     else:
         event.service_profile = None
-        event.service_profile_key = ""
     event.save(force_insert=True)
     return event
 
@@ -642,11 +641,9 @@ def _create_children(event, team_ids, audience_ids):
 def _verify_event(event, profile, team_ids, audience_ids):
     event.refresh_from_db()
     expected_profile_id = profile.pk if profile is not None else None
-    expected_key = profile.key if profile is not None else ""
     if (
         event.scheduling_revision != 0
         or event.service_profile_id != expected_profile_id
-        or event.service_profile_key != expected_key
         or set(event.required_team_links.values_list("ministry_team_id", flat=True))
         != set(team_ids)
         or set(event.audience_scope_links.values_list("unit_id", flat=True))

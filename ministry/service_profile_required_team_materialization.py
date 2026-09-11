@@ -27,7 +27,7 @@ from .service_profile_ministry_requirements import (
 from .services.worship_governance import resolve_worship_rotation_pool_for_team
 
 
-PREVIEW_VERSION = "SERVICE_PROFILE_REQUIRED_TEAM_MATERIALIZATION_PREVIEW_V1"
+PREVIEW_VERSION = "SERVICE_PROFILE_REQUIRED_TEAM_MATERIALIZATION_PREVIEW_V2"
 
 
 class MaterializationPreviewError(RuntimeError):
@@ -137,7 +137,7 @@ def inspect_service_profile_required_team_materialization(
     """Inspect one exact active profile in an inclusive local-date range.
 
     The only event identity selection is ``ServiceEvent.service_profile``.  The
-    runtime seam then separately proves each selected event's dual identity.
+    runtime seam then separately proves each selected event's FK/Profile identity.
     """
 
     if not isinstance(start_date, date) or not isinstance(end_date, date):

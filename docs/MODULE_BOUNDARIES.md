@@ -880,3 +880,18 @@ notifications, or `ServiceEvent`.
   (`MODULAR-CORE.5A`).
 * Optional: middleware/route-level gating for disabled module URLs, if a
   church-facing deployment ever needs hard-off modules.
+
+### Legacy ServiceEvent profile-key boundary
+
+`GENERIC-DEPLOYMENT-CONFIG.LEGACY-SERVICE-PROFILE-KEY-RETIRE.1A` is
+**IMPLEMENTED / LOCAL VERIFIED**: runtime ownership is the optional
+`ServiceEvent.service_profile` FK and its exact `ServiceProfile`. The retained
+compatibility column is dead storage, is absent from Admin/UI and all supported
+writers, and is read only by `audit_service_profile_identity
+--pre-drop-legacy-key`. The physical field remains until separately approved
+Stage 2; no migration or production data operation occurred.
+
+Its removal gate permits profileless blank rows, FK-only blank-key rows, and
+exact historical FK/key residue. Legacy-only identity, nonblank mismatch,
+malformed/noncanonical residue, and event/profile type mismatch fail closed;
+no dual writer is restored to make retained strings blank.

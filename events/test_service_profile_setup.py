@@ -36,6 +36,7 @@ from .models import (
     ServiceProfile,
 )
 from .service_profile_readiness import build_expected_sundays
+from .service_profile_identity import build_pre_drop_legacy_key_inventory
 from .service_profile_setup import (
     PROFILE_KEY,
     RESET_APPROVAL_CONTRACT_VERSION,
@@ -214,7 +215,7 @@ class BethanyServiceEventResetTests(TestCase):
         )
         self.assertEqual(ServiceEvent.objects.count(), 1)
 
-    def test_v2_preview_requires_active_correct_type_service_profile(self):
+    def test_v3_preview_requires_active_correct_type_service_profile(self):
         event = self.make_event()
         cases = (
             ("missing", {"delete": True}),
@@ -240,8 +241,8 @@ class BethanyServiceEventResetTests(TestCase):
                     event_type=ServiceEvent.EVENT_SUNDAY_SERVICE,
                 )
 
-    def test_v2_fingerprint_and_approval_bind_fk_and_profile_identity(self):
-        event = self.make_event(service_profile_key=PROFILE_KEY)
+    def test_v3_fingerprint_and_approval_bind_fk_and_profile_identity(self):
+        event = self.make_event()
         before = build_reset_preview()
 
         ServiceEvent.objects.filter(pk=event.pk).update(service_profile=self.profile)
@@ -253,13 +254,13 @@ class BethanyServiceEventResetTests(TestCase):
             after_fk["before"]["event_rows"][0]["service_profile_id"],
             self.profile.pk,
         )
-        self.assertEqual(RESET_APPROVAL_CONTRACT_VERSION, "MO-S.6D-PROFILE-SETUP.1A-FU1-v2")
+        self.assertEqual(RESET_APPROVAL_CONTRACT_VERSION, "MO-S.6D-PROFILE-SETUP.1A-FU1-v3")
 
-    def test_v1_approval_token_cannot_authorize_v2_apply(self):
+    def test_v2_approval_token_cannot_authorize_v3_apply(self):
         event = self.make_event()
         with patch(
             "events.service_profile_setup.RESET_APPROVAL_CONTRACT_VERSION",
-            "MO-S.6D-PROFILE-SETUP.1A-FU1-v1",
+            "MO-S.6D-PROFILE-SETUP.1A-FU1-v2",
         ):
             old_token = build_reset_preview()["approval"]["token"]
 
@@ -492,10 +493,13 @@ class BethanyServiceEventResetTests(TestCase):
             timezone.localtime(march.start_datetime).utcoffset(),
             timezone.localtime(november.start_datetime).utcoffset(),
         )
-        self.assertTrue(all(event.service_profile_key == PROFILE_KEY for event in events))
+        self.assertTrue(all(event.service_profile_key == "" for event in events))
         self.assertTrue(
             all(event.service_profile_id == self.profile.pk for event in events)
         )
+        pre_drop = build_pre_drop_legacy_key_inventory()
+        self.assertEqual(pre_drop["summary"]["fk_only_blank_legacy"], 52)
+        self.assertTrue(pre_drop["summary"]["ready_for_column_removal"])
         self.assertTrue(all(event.host_language_unit_id == self.cm.pk for event in events))
         self.assertTrue(all(event.rotation_anchor_team_id is None for event in events))
         self.assertTrue(all(event.scheduling_revision == 0 for event in events))
@@ -610,7 +614,7 @@ class BethanyServiceEventResetTests(TestCase):
             event_ids,
         )
 
-    def test_v2_canonical_postcondition_rejects_legacy_only_and_drift(self):
+    def test_v3_canonical_postcondition_uses_fk_and_ignores_legacy_storage(self):
         self.apply_reviewed_reset(today=date(2026, 6, 1))
         first = ServiceEvent.objects.order_by("pk").first()
         ServiceEvent.objects.filter(pk=first.pk).update(service_profile=None)
@@ -622,11 +626,9 @@ class BethanyServiceEventResetTests(TestCase):
             )
         )
 
-        ServiceEvent.objects.filter(pk=first.pk).update(
-            service_profile=self.profile,
-            service_profile_key="other.profile",
-        )
-        self.assertFalse(
+        ServiceEvent.objects.filter(pk=first.pk).update(service_profile=self.profile)
+        ServiceEvent.objects.filter(pk=first.pk).update(service_profile_key="other.profile")
+        self.assertTrue(
             _dataset_is_canonical(
                 profile=self.profile,
                 audience=self.cm,

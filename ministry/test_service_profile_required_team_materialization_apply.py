@@ -95,7 +95,6 @@ class MaterializationApplyTestBase:
             title=title,
             event_type=ServiceEvent.EVENT_SUNDAY_SERVICE,
             service_profile=profile,
-            service_profile_key=profile.key,
             start_datetime=timezone.make_aware(datetime.combine(day, time(9))),
             status=status,
         )
@@ -201,7 +200,7 @@ class RequiredTeamMaterializationPlanApplyTests(MaterializationApplyTestBase, Te
 
         self.assertEqual(self.snapshot(), before)
         self.assertEqual(plan["materialization_plan_version"], PLAN_VERSION)
-        self.assertEqual(plan["source_preview_version"], "SERVICE_PROFILE_REQUIRED_TEAM_MATERIALIZATION_PREVIEW_V1")
+        self.assertEqual(plan["source_preview_version"], "SERVICE_PROFILE_REQUIRED_TEAM_MATERIALIZATION_PREVIEW_V2")
         self.assertEqual(plan["readiness"], "READY_TO_APPLY")
         self.assertRegex(plan["confirmation_token"], r"^[0-9a-f]{64}$")
         self.assertEqual(
@@ -405,16 +404,16 @@ class RequiredTeamMaterializationPlanApplyTests(MaterializationApplyTestBase, Te
             finally:
                 transaction.set_rollback(True)
 
-    def test_changed_date_scope_and_profile_identity_reject_old_token(self):
+    def test_changed_date_scope_rejects_old_token_but_legacy_storage_is_ignored(self):
         self.requirement()
         event = self.event(date(2026, 1, 2))
         plan = self.plan()
         with self.assertRaises(MaterializationStale):
             self.apply(plan, end_date=date(2026, 1, 2))
         ServiceEvent.objects.filter(pk=event.pk).update(service_profile_key="profile.other")
-        with self.assertRaises(MaterializationStale):
-            self.apply(plan)
-        self.assertEqual(ServiceEventRequiredTeam.objects.count(), 0)
+        result = self.apply(plan)
+        self.assertTrue(result["data_mutated"])
+        self.assertEqual(ServiceEventRequiredTeam.objects.count(), 1)
 
     def test_7a_fingerprint_is_not_a_7b_confirmation_token(self):
         self.requirement()

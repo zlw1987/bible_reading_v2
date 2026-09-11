@@ -35,7 +35,7 @@ from .service_profile_required_team_materialization import (
 )
 
 
-PLAN_VERSION = "SERVICE_PROFILE_REQUIRED_TEAM_MATERIALIZATION_PLAN_V1"
+PLAN_VERSION = "SERVICE_PROFILE_REQUIRED_TEAM_MATERIALIZATION_PLAN_V2"
 OPERATION_TYPE = "service_profile_required_team_materialization"
 _TOKEN_PATTERN = re.compile(r"[0-9a-f]{64}")
 

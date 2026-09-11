@@ -1,273 +1,92 @@
-from io import StringIO
+from datetime import timedelta
 
 from django.core.management import call_command
 from django.test import TestCase
 from django.utils import timezone
 
-from .models import ServiceEvent, ServiceProfile
-from .service_profile_identity import build_service_profile_identity_inventory
+from events.models import ServiceEvent, ServiceProfile
+from events.service_profile_identity import (
+    IDENTITY_AUDIT_VERSION,
+    PRE_DROP_LEGACY_KEY_AUDIT_VERSION,
+    build_pre_drop_legacy_key_inventory,
+    build_service_profile_identity_inventory,
+)
 
 
 def event_values(**overrides):
     values = {
-        "title": "Private event title",
-        "description": "PRIVATE EVENT DESCRIPTION",
-        "event_type": ServiceEvent.EVENT_SUNDAY_SERVICE,
-        "start_datetime": timezone.now() + timezone.timedelta(days=7),
-        "status": ServiceEvent.STATUS_PUBLISHED,
-        "service_profile_key": "local.sunday",
+        "title": "Audit event", "event_type": ServiceEvent.EVENT_SUNDAY_SERVICE,
+        "start_datetime": timezone.now() + timedelta(days=1),
     }
     values.update(overrides)
     return values
 
 
-def profile_values(**overrides):
-    values = {
-        "key": "local.sunday",
-        "name": "Local Sunday",
-        "name_en": "Sunday",
-        "event_type": ServiceEvent.EVENT_SUNDAY_SERVICE,
-    }
-    values.update(overrides)
-    return values
-
-
-class ServiceProfileIdentityInventoryTests(TestCase):
-    def test_empty_and_blank_only_deployments(self):
-        empty = build_service_profile_identity_inventory()
-        self.assertEqual(
-            empty["summary"],
-            {
-                "service_events_total": 0,
-                "blank_legacy_key_events": 0,
-                "nonblank_legacy_key_events": 0,
-                "distinct_nonblank_legacy_keys": 0,
-                "distinct_legacy_key_type_groups": 0,
-                "conflicting_multi_type_legacy_keys": 0,
-                "service_profiles_total": 0,
-                "events_fk_null": 0,
-                "events_fk_nonnull": 0,
-                "profileless_events": 0,
-                "legacy_only_events": 0,
-                "exact_dual_consistent_events": 0,
-                "drifted_fk_events": 0,
-                "fk_blank_key_events": 0,
-                "fk_key_mismatch_events": 0,
-                "event_profile_type_drift_events": 0,
-                "integrity_blockers": 0,
-            },
+class ServiceProfileIdentityAuditTests(TestCase):
+    def setUp(self):
+        self.profile = ServiceProfile.objects.create(
+            key="local.sunday", name="Local Sunday",
+            event_type=ServiceEvent.EVENT_SUNDAY_SERVICE,
         )
 
-        ServiceEvent.objects.create(**event_values(service_profile_key=""))
-        blank_only = build_service_profile_identity_inventory()
-        self.assertEqual(blank_only["legacy_groups"], [])
-        self.assertEqual(blank_only["blank_legacy_key"]["total_event_count"], 1)
-        self.assertEqual(blank_only["summary"]["blank_legacy_key_events"], 1)
-        self.assertEqual(blank_only["summary"]["integrity_blockers"], 0)
-
-    def test_clean_multiple_groups_have_deterministic_key_then_type_order(self):
-        ServiceEvent.objects.create(
-            **event_values(
-                service_profile_key="zeta.study",
-                event_type=ServiceEvent.EVENT_BIBLE_STUDY,
-            )
-        )
-        ServiceEvent.objects.create(
-            **event_values(service_profile_key="alpha.sunday")
-        )
-        ServiceEvent.objects.create(
-            **event_values(
-                service_profile_key="zeta.other",
-                event_type=ServiceEvent.EVENT_OTHER,
-            )
-        )
-
-        first = build_service_profile_identity_inventory()
-        second = build_service_profile_identity_inventory()
-        order = [
-            (row["legacy_key"], row["event_type"])
-            for row in first["legacy_groups"]
-        ]
-        self.assertEqual(
-            order,
-            [
-                ("alpha.sunday", ServiceEvent.EVENT_SUNDAY_SERVICE),
-                ("zeta.other", ServiceEvent.EVENT_OTHER),
-                ("zeta.study", ServiceEvent.EVENT_BIBLE_STUDY),
-            ],
-        )
-        self.assertEqual(first, second)
-        self.assertEqual(first["summary"]["distinct_nonblank_legacy_keys"], 3)
-
-    def test_same_key_across_event_types_is_one_automatic_mapping_blocker(self):
-        ServiceEvent.objects.create(**event_values())
-        ServiceEvent.objects.create(
-            **event_values(event_type=ServiceEvent.EVENT_SPECIAL_MEETING)
-        )
-
+    def test_normal_inventory_is_fk_authoritative(self):
+        ServiceEvent.objects.create(**event_values(service_profile=self.profile))
         inventory = build_service_profile_identity_inventory()
+        self.assertEqual(inventory["version"], IDENTITY_AUDIT_VERSION)
+        self.assertEqual(inventory["summary"]["fk_linked_events"], 1)
+        self.assertNotIn("legacy_groups", inventory)
 
-        self.assertEqual(
-            inventory["conflicting_multi_type_legacy_keys"], ["local.sunday"]
-        )
-        self.assertEqual(
-            inventory["summary"]["conflicting_multi_type_legacy_keys"], 1
-        )
-        self.assertEqual(
-            sum("MULTI_TYPE_LEGACY_KEY" in value for value in inventory["integrity_blockers"]),
-            1,
-        )
-
-    def test_profile_unlinked_and_legacy_group_without_profile_are_visible(self):
-        ServiceEvent.objects.create(**event_values())
-        profile = ServiceProfile.objects.create(
-            **profile_values()
-        )
+    def test_pre_drop_safe_states_are_ready_and_zero_write(self):
+        ServiceEvent.objects.create(**event_values(title="profileless"))
         ServiceEvent.objects.create(
-            **event_values(
-                service_profile_key="without.profile",
-                start_datetime=timezone.now() + timezone.timedelta(days=14),
-            )
+            **event_values(title="fk only", service_profile=self.profile)
         )
+        residue = ServiceEvent.objects.create(
+            **event_values(title="residue", service_profile=self.profile)
+        )
+        ServiceEvent.objects.filter(pk=residue.pk).update(
+            service_profile_key=self.profile.key
+        )
+        before = list(ServiceEvent.objects.values_list("pk", "service_profile_key"))
+        audit = build_pre_drop_legacy_key_inventory()
+        self.assertEqual(audit["version"], PRE_DROP_LEGACY_KEY_AUDIT_VERSION)
+        self.assertEqual(audit["summary"]["profileless_blank"], 1)
+        self.assertEqual(audit["summary"]["fk_only_blank_legacy"], 1)
+        self.assertEqual(audit["summary"]["exact_legacy_residue"], 1)
+        self.assertEqual(audit["summary"]["blocker_rows"], 0)
+        self.assertTrue(audit["summary"]["ready_for_column_removal"])
+        self.assertEqual(before, list(ServiceEvent.objects.values_list("pk", "service_profile_key")))
 
-        inventory = build_service_profile_identity_inventory()
-        group = next(
-            row
-            for row in inventory["legacy_groups"]
-            if row["legacy_key"] == "without.profile"
-        )
-        profile_row = inventory["service_profiles"][0]
-
-        self.assertFalse(group["matching_profile_exists"])
-        self.assertIsNone(group["matching_service_profile_id"])
-        self.assertEqual(profile_row["pk"], profile.pk)
-        self.assertIn("ZERO_LINKED_EVENTS", profile_row["legacy_consistency_status"])
-        self.assertIn("MATCHES_LEGACY_GROUP", profile_row["legacy_consistency_status"])
-
-    def test_exact_dual_state_and_mixed_null_state_are_counted(self):
-        profile = ServiceProfile.objects.create(**profile_values())
-        exact = ServiceEvent.objects.create(
-            **event_values(service_profile=profile)
-        )
-        ServiceEvent.objects.create(
-            **event_values(
-                start_datetime=exact.start_datetime + timezone.timedelta(days=7)
-            )
-        )
-
-        inventory = build_service_profile_identity_inventory()
-        row = inventory["legacy_groups"][0]
-
-        self.assertEqual(row["total_event_count"], 2)
-        self.assertEqual(row["fk_null_count"], 1)
-        self.assertEqual(row["fk_nonnull_count"], 1)
-        self.assertEqual(row["exact_match_fk_count"], 1)
-        self.assertEqual(row["fk_mismatch_count"], 0)
-        self.assertEqual(row["fk_blank_key_count"], 0)
-        self.assertEqual(row["fk_key_mismatch_count"], 0)
-        self.assertEqual(row["event_profile_type_mismatch_count"], 0)
-        self.assertEqual(row["referenced_service_profile_ids"], [profile.pk])
-        self.assertEqual(inventory["summary"]["exact_dual_consistent_events"], 1)
-        self.assertEqual(inventory["summary"]["legacy_only_events"], 1)
-
-    def test_fk_profile_key_and_event_type_drift_are_reported(self):
-        key_mismatch_profile = ServiceProfile.objects.create(
-            **profile_values(key="other.profile", name="Other")
-        )
-        type_mismatch_profile = ServiceProfile.objects.create(
-            **profile_values(key="typed.profile", name="Typed")
-        )
-        key_drift = ServiceEvent.objects.create(**event_values())
-        type_drift = ServiceEvent.objects.create(
-            **event_values(
-                service_profile_key="typed.profile",
-                start_datetime=timezone.now() + timezone.timedelta(days=14),
-            )
-        )
-        ServiceEvent.objects.filter(pk=key_drift.pk).update(
-            service_profile_id=key_mismatch_profile.pk
-        )
+    def test_pre_drop_reports_each_blocker_without_repair_or_inference(self):
+        null_fk = ServiceEvent.objects.create(**event_values(title="null fk"))
+        blank_fk = ServiceEvent.objects.create(**event_values(title="blank fk", service_profile=self.profile))
+        mismatch = ServiceEvent.objects.create(**event_values(title="mismatch", service_profile=self.profile))
+        malformed = ServiceEvent.objects.create(**event_values(title="malformed"))
+        type_drift = ServiceEvent.objects.create(**event_values(title="type", service_profile=self.profile))
+        ServiceEvent.objects.filter(pk=null_fk.pk).update(service_profile_key="legacy.key")
+        ServiceEvent.objects.filter(pk=mismatch.pk).update(service_profile_key="other.key")
+        ServiceEvent.objects.filter(pk=malformed.pk).update(service_profile_key="bad key")
         ServiceEvent.objects.filter(pk=type_drift.pk).update(
-            service_profile_id=type_mismatch_profile.pk,
-            event_type=ServiceEvent.EVENT_OTHER,
+            event_type=ServiceEvent.EVENT_BIBLE_STUDY
         )
+        before = list(ServiceEvent.objects.order_by("pk").values_list("pk", "service_profile_id", "service_profile_key", "event_type"))
+        audit = build_pre_drop_legacy_key_inventory()
+        summary = audit["summary"]
+        self.assertEqual(summary["legacy_only_blockers"], 2)
+        self.assertEqual(summary["fk_only_blank_legacy"], 2)
+        self.assertEqual(summary["legacy_mismatch_blockers"], 1)
+        self.assertEqual(summary["malformed_legacy_blockers"], 1)
+        self.assertEqual(summary["event_type_blockers"], 1)
+        self.assertFalse(summary["ready_for_column_removal"])
+        self.assertEqual(before, list(ServiceEvent.objects.order_by("pk").values_list("pk", "service_profile_id", "service_profile_key", "event_type")))
 
-        inventory = build_service_profile_identity_inventory()
+    def test_pre_drop_command_is_explicit_read_only_mode(self):
+        from io import StringIO
 
-        self.assertEqual(inventory["summary"]["events_fk_nonnull"], 2)
-        self.assertEqual(inventory["summary"]["exact_dual_consistent_events"], 0)
-        self.assertEqual(inventory["summary"]["drifted_fk_events"], 2)
-        self.assertEqual(inventory["summary"]["fk_blank_key_events"], 0)
-        self.assertEqual(inventory["summary"]["fk_key_mismatch_events"], 1)
-        self.assertEqual(
-            inventory["summary"]["event_profile_type_drift_events"], 1
-        )
-        self.assertTrue(
-            any(
-                "EVENT_FK_KEY_DRIFT" in value
-                for value in inventory["integrity_blockers"]
-            )
-        )
-        self.assertTrue(
-            any(
-                "EVENT_PROFILE_TYPE_DRIFT" in value
-                for value in inventory["integrity_blockers"]
-            )
-        )
-        self.assertTrue(
-            any("PROFILE_LINK_DRIFT" in value for value in inventory["integrity_blockers"])
-        )
-        self.assertTrue(
-            all(
-                "MISMATCHED_LINKED_EVENTS" in row["legacy_consistency_status"]
-                for row in inventory["service_profiles"]
-            )
-        )
-
-    def test_fk_blank_key_drift_is_reported_separately(self):
-        profile = ServiceProfile.objects.create(**profile_values())
-        event = ServiceEvent.objects.create(
-            **event_values(service_profile=profile)
-        )
-        ServiceEvent.objects.filter(pk=event.pk).update(service_profile_key="")
-
-        inventory = build_service_profile_identity_inventory()
-
-        self.assertEqual(inventory["summary"]["events_fk_nonnull"], 1)
-        self.assertEqual(inventory["summary"]["exact_dual_consistent_events"], 0)
-        self.assertEqual(inventory["summary"]["drifted_fk_events"], 1)
-        self.assertEqual(inventory["summary"]["fk_blank_key_events"], 1)
-        self.assertEqual(inventory["summary"]["fk_key_mismatch_events"], 0)
-        self.assertEqual(
-            inventory["summary"]["event_profile_type_drift_events"], 0
-        )
-        self.assertEqual(
-            inventory["blank_legacy_key"]["fk_blank_key_count"], 1
-        )
-        self.assertTrue(
-            any(
-                "BLANK_LEGACY_KEY_WITH_FK" in value
-                for value in inventory["integrity_blockers"]
-            )
-        )
-
-    def test_command_output_is_private_and_writes_zero_rows(self):
-        event = ServiceEvent.objects.create(**event_values())
-        before = ServiceEvent.objects.values().get(pk=event.pk)
         output = StringIO()
-
-        call_command("audit_service_profile_identity", stdout=output)
-
-        after = ServiceEvent.objects.values().get(pk=event.pk)
-        value = output.getvalue()
-        self.assertEqual(before, after)
-        self.assertEqual(ServiceProfile.objects.count(), 0)
-        self.assertNotIn(event.title, value)
-        self.assertNotIn(event.description, value)
-        self.assertIn("mode: read-only", value)
-        self.assertIn("service_profiles_total: 0", value)
-        self.assertIn("events_fk_null: 1", value)
-        self.assertIn("legacy_only_events: 1", value)
-        self.assertIn("fk_blank_key_events: 0", value)
-        self.assertIn("fk_key_mismatch_events: 0", value)
-        self.assertIn("event_profile_type_drift_events: 0", value)
+        call_command("audit_service_profile_identity", "--pre-drop-legacy-key", stdout=output)
+        rendered = output.getvalue()
+        self.assertIn("PRE-DROP LEGACY COLUMN AUDIT", rendered)
+        self.assertIn("READ-ONLY", rendered)
+        self.assertIn("NO DATA CHANGED", rendered)
+        self.assertIn("READINESS: READY FOR COLUMN REMOVAL", rendered)

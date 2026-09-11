@@ -50,23 +50,30 @@ and reviewed profile metadata; apply uses the existing SQLite scheduling CAS
 boundary, advances every mapped event revision exactly once, and rolls back all
 profile/event writes on stale, busy, or write failure. The implementation task
 itself applied no normal-local or production mapping; the product owner later
-completed and independently audited the reviewed SVCA production apply. The
-deployment now has one reviewed profile and 52 exact dual-consistent mapped
-events with zero identity drift; every target scheduling revision advanced
-`1 -> 2` exactly once, and a repeat dry-run advanced none to `3`. This is
-deployment-specific evidence only. The apply reported
-`runtime_consumer_switched: false`. 5B implements integration gating, 5C the
-canonical FK-authoritative seam, 5D the readiness/reset/Admin switch, and 5E
-the Worship XLSX consumer/signing switch.
-Readiness and the retained bounded reset now use resolved ServiceProfile/FK
-identity, while ServiceEvent Admin selects the FK and renders the compatibility
-key read-only through one normal save/revision. Workbook matching and post-CAS
-confirmation are now FK/Profile-authoritative; strict V2 parsed, normalized,
-and confirmation artifacts bind the integration plus exact profile PK/key/type,
-and reject V1. All known profile-aware runtime consumers are switched, and 5F
-now proves local repository/runtime closure with Class A legacy authority at
-zero. Production deployment/config/data and fresh-workbook rendered closeout
-are now verified, so `runtime_consumer_switched` is formally true.
+completed and independently audited the reviewed SVCA production apply. At the
+4A mapping milestone, production had one reviewed profile and 52 exact
+dual-consistent mapped events with zero identity drift; every target scheduling
+revision advanced `1 -> 2` exactly once, and a repeat dry-run advanced none to
+`3`. This is deployment-specific historical evidence. The apply reported
+`runtime_consumer_switched: false`. 5B implemented integration gating and 5C
+the canonical FK-authoritative seam.
+
+During the 5D/5E transition, readiness and the retained bounded reset used
+resolved ServiceProfile/FK identity, while ServiceEvent Admin selected the FK
+and rendered the compatibility key read-only through one normal save/revision.
+Workbook matching and post-CAS confirmation were FK/Profile-authoritative, but
+compatibility storage still existed as transition/drift evidence. The strict V2
+parsed, normalized, and confirmation artifacts are historical 5E evidence, not
+the current contract. At the 5F closeout, all known profile-aware runtime
+consumers were switched and production deployment/configuration/data plus
+fresh-workbook rendered closeout were verified.
+
+Current Stage-2 architecture has no `ServiceEvent.service_profile_key` field or
+Admin presentation: event authority is FK/Profile only, and
+`ServiceProfile.key` remains permanent. Current contracts are
+`SERVICE_PROFILE_READINESS_V3`, Bethany reset V3, the existing Worship parser
+contract, Worship normalized preview/confirmation V3, RequiredTeam preview and
+materialization plan V2, and 7C review V1.
 `GENERIC-DEPLOYMENT-CONFIG.6A` is **IMPLEMENTED / LOCAL VERIFIED**: the
 ministry-owned `ServiceProfileMinistryRequirement` foundation now stores
 reviewed static-team defaults with active-profile/active-assignable-team
@@ -149,9 +156,10 @@ selection remain unchanged. 7C itself did not implement MO-S.REQUIRED runtime;
 the later 1A read/runtime slice leaves this creation contract unchanged.
 
 Historically, `MO-S.6D-PROFILE.1A` introduced the optional validated
-`ServiceEvent.service_profile_key` identity foundation. After 5F it is
-transitional compatibility/drift storage only; permanent runtime identity is
-the `ServiceEvent.service_profile` FK to `ServiceProfile`. Neither identity
+`ServiceEvent.service_profile_key` identity foundation. At 5F it was
+transitional compatibility/drift storage only; the later Stage-2 migration
+removed it, leaving permanent runtime identity at the
+`ServiceEvent.service_profile` FK to `ServiceProfile`. Neither identity
 grants audience, permission, serving, recurrence, location, Host / Language,
 or scheduling-source semantics. Existing rows originally defaulted empty; the
 first approved workbook setup value was `bethany_0930_cm`, and no event was
@@ -221,15 +229,15 @@ requirement was persisted and the verification made no production write. The
 current `selected_unscheduled` states are legitimate operational scheduling
 gaps pending matching Worship assignments, not configuration drift or invalid
 state.
-`GENERIC-DEPLOYMENT-CONFIG.LEGACY-SERVICE-PROFILE-KEY-RETIRE.0A` completes a
-docs-only retirement-readiness audit for the transitional
-`ServiceEvent.service_profile_key` column. Class-A legacy-string runtime
-authority remains zero; permanent identity is the FK to `ServiceProfile` and
-its stable `ServiceProfile.key`. Retirement is not implemented. The recommended
-two-stage contract first removes and versions active compatibility dependencies
-while retaining a pre-drop audit, then performs a separately approved SQLite
-migration only after fresh production zero-state evidence and a validated
-backup. See the canonical generic deployment architecture.
+`GENERIC-DEPLOYMENT-CONFIG.LEGACY-SERVICE-PROFILE-KEY-RETIRE.0A` is the
+historical **AUDIT / ARCHITECTURE COMPLETE** planning milestone;
+`RETIRE.1A` is **PRODUCTION VERIFIED**; and `RETIRE.2A` is **PRODUCTION APPLIED
+/ VERIFIED**. `events/0013_remove_serviceevent_service_profile_key` removed
+`ServiceEvent.service_profile_key`. Canonical event identity is the optional
+`ServiceEvent.service_profile -> ServiceProfile` relation, while
+`ServiceProfile.key` remains the permanent deployment-local machine identity.
+No compatibility-key retirement work remains. See the detailed production
+closeout in the canonical generic deployment architecture.
 For the 52 canonical 2026 `bethany_0930_cm` events, the approved future static
 rows are Lighting, Projection, Sound, and Video only; Digital Ministry and
 Worship containers are not required, and A/C1/C2/C3 remain derived per event.
@@ -849,8 +857,10 @@ Future pieces include:
   scheduling-concurrency decision. Runtime scheduling-revision foundation
   `1B-A1`, optimistic confirmation/shared audit `1B-B`, and bounded direct-
   notification runtime `NOTIFY.1G` are implemented. The separate
-  `MO-S.6D-PROFILE.1A` stable ServiceEvent profile-key foundation is also
-  implemented, without automatically tagging existing events;
+  `MO-S.6D-PROFILE.1A` historically introduced the transitional ServiceEvent
+  profile-key field without automatically tagging existing events; RETIRE.2A
+  later removed that field through production-applied `events/0013`, leaving
+  current event identity at `ServiceEvent.service_profile -> ServiceProfile.key`;
   `MO-S.6D-SLICE8.1A/FU1/UX1` implements the separately scoped strict dependency/
   parser, bounded archive preflight, and staff/superuser-only partial zero-write
   upload/preview with its wider operational matrix; production read-only smoke
@@ -1577,11 +1587,15 @@ docs-only `1B-A0` now closes the one-event scheduling-revision, SQLite writer-
 barrier, supported-write, CAS, and A1/B split decisions. Runtime `1B-A1` is
 implemented with target-like file-backed SQLite concurrency coverage;
 separately approved `1B-B` confirmation/shared audit is implemented.
-`NOTIFY.1G` notification runtime and the separate
-`MO-S.6D-PROFILE.1A` stable ServiceEvent profile-key foundation are
-implemented. The committed `MO-S.6D-PROFILE-SETUP.0A` zero-write target-event
-audit and `MO-S.6D-PROFILE-SETUP.1A` bounded TEST-data rebuild command are
-implemented too; the normal local DB is schema-not-ready through `events/0011`.
+`NOTIFY.1G` notification runtime is implemented. The separate
+`MO-S.6D-PROFILE.1A` historically introduced the transitional ServiceEvent
+profile-key field; RETIRE.2A later removed it through production-applied
+`events/0013`, leaving current event identity at
+`ServiceEvent.service_profile -> ServiceProfile.key`. The committed
+`MO-S.6D-PROFILE-SETUP.0A` zero-write target-event audit and
+`MO-S.6D-PROFILE-SETUP.1A` bounded TEST-data rebuild command are implemented.
+The old PROFILE-SETUP.0A local schema probe is historical evidence, superseded
+by later FK/Profile and Stage-2 verification.
 Production is schema-ready, and the product-owner-reviewed production reset and
 post-reset audit are complete. Exactly 52 canonical 2026 Bethany 09:30
 `bethany_0930_cm` events have exact CM audience; the audit returned 52/52 ready
@@ -1727,15 +1741,20 @@ recorded 52 exact historical residues, zero blockers, and `READY FOR COLUMN
 REMOVAL`.
 
 `GENERIC-DEPLOYMENT-CONFIG.LEGACY-SERVICE-PROFILE-KEY-RETIRE.2A` is
-**IMPLEMENTED / LOCAL VERIFIED; NOT PRODUCTION APPLIED**. Local
-`events/0013_remove_serviceevent_service_profile_key` removes the physical
-compatibility column and retires its pre-drop command mode. Runtime identity is
-only `ServiceEvent.service_profile -> ServiceProfile.key`; no signed business
-contract was versioned. Production apply remains separately gated by a fresh
-Stage-1 pre-drop audit, verified SQLite backup, maintenance-window migration,
-restart/reload, and post-migration FK/schema verification. A schema reverse
-cannot recover dropped strings, so production rollback requires that backup and
-pre-Stage-2 code.
+**PRODUCTION APPLIED / VERIFIED**. Production applied
+`events/0013_remove_serviceevent_service_profile_key`; the compatibility column
+is gone, the retired pre-drop option is unsupported, and runtime identity is
+only `ServiceEvent.service_profile -> ServiceProfile.key`. Pre-removal evidence
+was 52 FK-linked events, 52 exact historical residues, and zero blockers
+(`READINESS: READY FOR COLUMN REMOVAL`); post-migration evidence remains 52/52
+FK-linked with zero type mismatches/integrity blockers, passing `manage.py
+check`, no compatibility column, and the protected canonical FK present. No
+signed business contract was versioned. The planned immediately pre-migration
+manual SQLite backup was not performed because deployment automatically applied
+the migration; this is an operational sequencing deviation, not a data-integrity
+failure. The local 0012-to-0013 preservation test and post-migration production
+proof support closeout; no unverified hosting snapshot is claimed. Historical
+schema reversal still cannot reconstruct dropped strings.
 
 Suggested docs:
 - `docs/READING_V1_QA_CHECKLIST.md`

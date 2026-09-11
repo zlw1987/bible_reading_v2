@@ -53,14 +53,17 @@ production write, and `selected_unscheduled` is a valid operational gap, not
 configuration drift.
 
 `MO-S.6D-PROFILE.1A` historically introduced the optional stable
-`ServiceEvent.service_profile_key` identity foundation. After generic
-deployment configuration 5F it remains transitional compatibility/drift
-storage; permanent runtime identity is the `ServiceEvent.service_profile` FK.
+`ServiceEvent.service_profile_key` identity foundation. At generic deployment
+configuration 5F it remained transitional compatibility/drift storage; the
+later Stage-2 migration removed it, leaving permanent runtime identity at the
+`ServiceEvent.service_profile` FK.
 `GENERIC-DEPLOYMENT-CONFIG.LEGACY-SERVICE-PROFILE-KEY-RETIRE.0A` confirms that
 Class-A legacy-string runtime authority remains zero and proposes a two-stage
 retirement contract. No field, runtime, test, migration, or data retirement is
-implemented by that audit; permanent `ServiceProfile.key` is not in scope. The
-canonical inventory and sequence live in the generic deployment architecture.
+implemented by that audit itself. That read-only 0A plan was subsequently
+completed by 1A and production-applied 2A: the event compatibility field is now
+removed. Permanent `ServiceProfile.key` was never in retirement scope. The
+canonical inventory and chronology live in the generic deployment architecture.
 `MO-S.6D-SLICE8.1A/FU1/UX1` separately implements the strict Excel
 dependency/parser, bounded OOXML ZIP resource preflight, and staff/superuser-
 only zero-write preview, including blocked partial-mapping preview and the
@@ -1324,10 +1327,11 @@ tests and limited-trial review pass.
 - Status: **IMPLEMENTED HISTORICAL EXPANSION MILESTONE** as one additive,
   optional ServiceEvent field and migration. Its runtime-authority wording is
   superseded by generic deployment configuration 5C-5F.
-- `ServiceEvent.service_profile_key` is now non-unique transitional
-  compatibility/drift storage for the recurring service profile represented by
-  one exact event. Existing rows safely default to an empty key; permanent
-  runtime identity is the `ServiceEvent.service_profile` FK.
+- At that historical milestone, `ServiceEvent.service_profile_key` was
+  non-unique transitional compatibility/drift storage for the recurring service
+  profile represented by one exact event. Existing rows safely defaulted to an
+  empty key; permanent runtime identity is the `ServiceEvent.service_profile`
+  FK. The later Stage-2 migration removed the field.
 - Non-empty keys accept only lowercase ASCII letters, digits, underscore,
   hyphen, and period. The field is deliberately absent from ordinary
   ServiceEvent and recurring-event forms; Django Admin is the narrow technical
@@ -1368,10 +1372,10 @@ tests and limited-trial review pass.
   `sunday_service`. The expected set is independently constructed as every
   seven days from `2026-01-04` through `2026-12-27` (52 Sundays); UTC clock
   time is never used as service-profile identity.
-- Current Readiness V2 resolves `ServiceProfile.key == "bethany_0930_cm"` and
-  selects canonical rows by `ServiceEvent.service_profile` FK. A legacy-only
-  compatibility-key row is a blocker, never canonical identity. Untagged
-  exact-09:30 events are printed only as
+- Current `SERVICE_PROFILE_READINESS_V3` resolves
+  `ServiceProfile.key == "bethany_0930_cm"` and selects canonical rows by the
+  `ServiceEvent.service_profile` FK. No compatibility key participates.
+  Untagged exact-09:30 events are printed only as
   `UNTAGGED CANDIDATE / HUMAN REVIEW REQUIRED`; multiple candidates require
   human selection, and title, location, Host / Language, audience, or selected
   Worship Team resemblance never selects or ranks a target.
@@ -1380,7 +1384,7 @@ tests and limited-trial review pass.
   longer than the persisted field's 64-character maximum is rejected.
 - Each expected Sunday reports four distinct requested-type categories:
   canonical requested-profile rows; untagged exact-time candidates; exact-time
-  events already owned by another non-empty profile key; and same-day events at
+  events already owned by another ServiceProfile; and same-day events at
   different times. Other-profile exact-time rows are informational parallel-
   service evidence only, labeled not a candidate, never counted or ranked as a
   target, and never make the requested profile ready.
@@ -1390,7 +1394,8 @@ tests and limited-trial review pass.
   ancestor/descendant-overlapping audience evidence blocks readiness but is
   never repaired.
 - Before querying ServiceEvent data, the audit separately reports migration
-  recorder plus physical-schema evidence for `events/0009`, `0010`, and `0011`.
+  recorder plus physical-schema evidence through `events/0012` (including
+  `events/0009`, `0010`, `0011`, and `0012`).
   Missing schema stops cleanly before ORM event queries, avoiding a raw missing-
   column traceback. Optional `--json` prints the same deterministic,
   privacy-bounded facts to stdout only.
@@ -1783,11 +1788,14 @@ applicability/candidate/consistency foundation, governed `1D-B`
 authorization/mutation enforcement, and `1D-C` operational reachability are now
 implemented; all other prerequisites remain documentation decisions only.
 
-`MO-S.6D-PROFILE.1A` supplies the stable field and approves
-`bethany_0930_cm` as the first setup value. `PROFILE-SETUP.0A` is committed,
-and `PROFILE-SETUP.1A` completed its product-owner-reviewed production apply and
-post-reset audit. The canonical target-event setup prerequisite is closed with
-52/52 ready exact matches and `PROFILE SETUP READY`.
+`MO-S.6D-PROFILE.1A` historically supplied the transitional profile-key field
+and approved `bethany_0930_cm` as the first reviewed setup value. Current
+matching identity is `ServiceEvent.service_profile` FK plus permanent
+`ServiceProfile.key`; production-applied `events/0013` removed the transitional
+event field. `PROFILE-SETUP.0A` is committed, and `PROFILE-SETUP.1A` completed
+its product-owner-reviewed production apply and post-reset audit. The canonical
+target-event setup prerequisite is closed with 52/52 ready exact matches and
+`PROFILE SETUP READY`.
 
 `MO-S.6D-SLICE8.1A/FU1` implements the strict known-workbook parser and
 staff/superuser-only read-only upload/preview with exact persisted-profile event
@@ -2846,10 +2854,11 @@ REMOVAL`. Scheduling identity remained FK-only:
 `ServiceEvent.service_profile -> ServiceProfile.key`.
 
 `GENERIC-DEPLOYMENT-CONFIG.LEGACY-SERVICE-PROFILE-KEY-RETIRE.2A` is
-**IMPLEMENTED / LOCAL VERIFIED; NOT PRODUCTION APPLIED**. Local `events/0013`
-removes the transitional column and retires the pre-drop reader; Worship V3,
-RequiredTeam V2, 7C V1, reset V3, and MO-S.REQUIRED are unchanged. Production
-apply remains a separately approved SQLite maintenance-window operation with a
-fresh Stage-1 pre-drop audit, verified backup, migration/restart, and
-post-migration FK/schema check. Schema reversal cannot restore dropped residue;
-backup plus pre-Stage-2 code is required for rollback.
+**PRODUCTION APPLIED / VERIFIED**. Production `events/0013` removed the
+transitional column and retired the pre-drop reader; post-migration identity is
+still 52/52 FK-linked with zero type/integrity blockers, and SQLite confirms the
+canonical FK remains. Worship V3, RequiredTeam V2, 7C V1, reset V3, and
+MO-S.REQUIRED are unchanged. The planned immediately pre-migration manual
+SQLite backup was not performed because deployment automatically ran the
+migration; this sequencing deviation is documented without claiming a hosting
+snapshot. Schema reversal cannot reconstruct dropped residue.

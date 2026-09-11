@@ -425,14 +425,13 @@ workflows were checked. No workbook confirmation or other workbook write was
 performed. The current URL-encoded filename display is minor presentation debt
 outside this closeout.
 
-Class A runtime legacy-string authority is therefore zero, and all known
+At the 5F transition closeout, Class A runtime legacy-string authority was zero, and all known
 profile-aware runtime consumers resolve through
 `ServiceEvent.service_profile -> ServiceProfile -> ServiceProfile.key`.
-`service_profile_key` remains transitional compatibility, drift evidence,
+`service_profile_key` remained transitional compatibility, drift evidence,
 supported pair-storage evidence, and bounded setup/history tooling only. Its
-field retirement remains a later separately approved, potentially destructive
-cleanup slice; direct ORM/raw database drift remains possible while both fields
-exist, so the identity audit remains useful.
+later Stage-2 removal is recorded below; this transition-closeout paragraph is
+historical.
 
 ## 1. Product Deployment Model
 
@@ -568,11 +567,11 @@ no runtime consumer and applied no normal-local or production key data.
 repeated `ServiceEvent.service_profile_key`, readiness/setup, and annual
 workbook matching. The `events` app owns it.
 
-Current repository truth includes the
-first-class profile table below plus a nullable protected
-`ServiceEvent.service_profile` FK. The optional non-unique
-`ServiceEvent.service_profile_key` string (`max_length=64`, blank/default empty)
-remains stored for compatibility and drift evidence. 5D switches readiness,
+Current repository truth includes the first-class profile table below plus a
+nullable protected `ServiceEvent.service_profile` FK. At the former transition
+stage, the optional non-unique `ServiceEvent.service_profile_key` string
+(`max_length=64`, blank/default empty) remained stored for compatibility and
+drift evidence. 5D switches readiness,
 the retained reset/setup service, and ServiceEvent Admin to FK/Profile
 authority; 5E switches strict workbook preview/confirmation to the same
 authority with V2 signed identity contracts. No consumer switched in 3A, and
@@ -660,11 +659,11 @@ ServiceEvent `PROTECT` retains history. Referenced teams are protected.
 The initial surface is Admin/staff setup, not an ordinary member or scheduler
 form. It uses keys for identity and human names for confirmation.
 
-## 5. ServiceEvent/Profile Transition
+## 5. Historical ServiceEvent/Profile Transition
 
-The current optional, repeated, non-unique `service_profile_key` is not
-permanently retained. The target is one FK; permanent dual identity would
-create drift. Removal is a later contract phase, never initial expansion.
+At the transition, the optional, repeated, non-unique `service_profile_key`
+was not permanently retained. The target was one FK; permanent dual identity
+would create drift. The later Stage-2 removal completed that contract phase.
 
 Use expand/migrate/switch/contract:
 
@@ -1241,7 +1240,10 @@ allowed.
 
 ## 19. `GENERIC-DEPLOYMENT-CONFIG.LEGACY-SERVICE-PROFILE-KEY-RETIRE.0A`
 
-Status: **RETIREMENT-READINESS AUDIT COMPLETE; RETIREMENT NOT IMPLEMENTED**.
+Status: **AUDIT / ARCHITECTURE COMPLETE** (historical readiness milestone;
+implemented by the later 1A and 2A slices). The remainder of this section
+preserves the then-current audit and plan; it is superseded by Sections 20 and
+21 for current architecture.
 
 `ServiceEvent.service_profile_key` is transitional compatibility/drift storage.
 It is not canonical identity and must not be confused with the permanent,
@@ -1403,16 +1405,16 @@ Future test disposition is:
   tests for their versioned FK-only facts while retaining create-only and
   rollback contracts; and
 - preserve `test_service_profile_migration.py` as historical 0011-to-0012
-  coverage and add future 0012-to-0013 removal coverage. The effective-required
+  coverage and add then-future 0012-to-0013 removal coverage. The effective-required
   test that currently supplies a compatibility fixture should retain its
   no-inference assertion using canonical Profile/default state.
 
 Historical migrations `events/0011_serviceevent_service_profile_key.py` and
 `events/0012_serviceprofile_serviceevent_service_profile.py` remain immutable.
-The current `events` migration tip is `0012`; the future contract migration is
-conceptually `0013_remove_serviceevent_service_profile_key`, dependent on
-`0012`. Historical documentation may retain the old name when its milestone
-context is explicit.
+At the audit time, the `events` migration tip was `0012` and the then-future
+contract migration was conceptually `0013_remove_serviceevent_service_profile_key`,
+dependent on `0012`. It was later implemented and applied. Historical
+documentation may retain the old name when its milestone context is explicit.
 
 ### Fresh production precondition and SQLite contract
 
@@ -1487,16 +1489,16 @@ external-ID storage.
 
 Status: **PRODUCTION VERIFIED**.
 
-Stage 1 implements Option B without a schema migration. The physical
-`ServiceEvent.service_profile_key` column and model declaration remain only as
-temporary dead storage pending separately approved Stage 2. Current identity is
-strictly `ServiceEvent.service_profile -> ServiceProfile.key`: ordinary model
-validation, runtime resolution, Admin, 7C creation, the bounded reset, Worship
-preview/confirmation, and RequiredTeam materialization neither read nor write
-the compatibility column. Existing raw values are neither inferred, repaired,
-blanked, nor synchronized by ordinary saves.
+Stage 1 implemented Option B without a schema migration. At that point the
+physical `ServiceEvent.service_profile_key` column and model declaration
+remained only as temporary dead storage pending Stage 2. Runtime identity had
+already become strictly `ServiceEvent.service_profile -> ServiceProfile.key`:
+ordinary model validation, runtime resolution, Admin, 7C creation, the bounded
+reset, Worship preview/confirmation, and RequiredTeam materialization neither
+read nor wrote the compatibility column. Existing raw values were neither
+inferred, repaired, blanked, nor synchronized by ordinary saves.
 
-The only intentional column reader is the explicit read-only
+The only intentional column reader during Stage 1 was the explicit read-only
 `audit_service_profile_identity --pre-drop-legacy-key` preflight. It reports
 all transition states needed to gate Stage 2 and states `PRE-DROP LEGACY COLUMN
 AUDIT`, `READ-ONLY`, and `NO DATA CHANGED`. Normal identity and readiness
@@ -1523,27 +1525,75 @@ historical residue; they require no cleanup write before removal.
 
 ## 21. `GENERIC-DEPLOYMENT-CONFIG.LEGACY-SERVICE-PROFILE-KEY-RETIRE.2A`
 
-Status: **IMPLEMENTED / LOCAL VERIFIED; NOT PRODUCTION APPLIED**.
+Status: **PRODUCTION APPLIED / VERIFIED**.
 
-`events/0013_remove_serviceevent_service_profile_key` removes only the
+Production deployment applied
+`events/0013_remove_serviceevent_service_profile_key`, removing only the
 physical `ServiceEvent.service_profile_key` column. Current model/runtime,
 Admin, creation, reset, readiness, Worship, and RequiredTeam code have no
 event compatibility field. The Stage-1 pre-drop mode is retired with the
-column; the normal `SERVICE_PROFILE_IDENTITY_V2` audit remains supported and
-`ServiceProfile.key` remains the permanent canonical identity.
+column and `--pre-drop-legacy-key` is no longer supported; the normal
+`SERVICE_PROFILE_IDENTITY_V2` audit remains supported. `ServiceProfile.key`
+remains the permanent deployment-local machine identity.
 
-The local SQLite migration and 0012-to-0013 preservation test prove that exact
+Final production evidence, recorded before the removal while the Stage-1
+reader still existed, was `SERVICE_PROFILE_IDENTITY_V2`: `service_events_total
+= 52`, `profileless_events = 0`, `fk_linked_events = 52`,
+`service_profiles_total = 1`, `active_service_profiles = 1`,
+`inactive_service_profiles = 0`, `event_profile_type_mismatch_events = 0`, and
+`integrity_blockers = 0`. Its
+`SERVICE_PROFILE_LEGACY_KEY_PRE_DROP_V2` result was `total_events = 52`,
+`profileless_blank = 0`, `fk_only_blank_legacy = 0`,
+`exact_legacy_residue = 52`, `legacy_only_blockers = 0`,
+`legacy_mismatch_blockers = 0`, `malformed_legacy_blockers = 0`,
+`event_type_blockers = 0`, `blocker_rows = 0`, and
+`ready_for_column_removal = True`: `READINESS: READY FOR COLUMN REMOVAL`.
+The 52 exact strings were safe historical residue, not cleanup work.
+
+After `events.0013_remove_serviceevent_service_profile_key` applied in
+production, `SERVICE_PROFILE_IDENTITY_V2` again recorded 52 total/FK-linked
+events, zero profileless events, one active ServiceProfile, zero inactive
+profiles, zero event/profile type mismatches, and zero integrity blockers.
+`manage.py check` reported `System check identified no issues (0 silenced).`
+The physical SQLite schema confirms `service_profile_key_present = False`,
+`service_profile_id_present = True`, and the ServiceEvent FK to
+`events_serviceprofile(id)` remains present.
+
+The local SQLite migration and 0012-to-0013 preservation test proved that exact
 historical residue, FK-only, and profileless rows retain their event IDs, FK,
 event type, scheduling revision, and ordinary data while the removed column is
 absent. A schema reverse may recreate an empty column but cannot reconstruct
-dropped strings. Production rollback therefore requires the immediately
-pre-migration SQLite backup together with pre-Stage-2 application code; running
-`migrate events 0012` alone is not a complete rollback.
+dropped strings. A schema reverse remains insufficient to reconstruct them.
 
-The separately approved production operation remains: while Stage-1 code is
-still deployed, rerun the pre-drop audit and require `READY FOR COLUMN
-REMOVAL`; create and verify a SQLite backup; deploy approved Stage-2 code; run
-the migration in a maintenance window; restart/reload the application as the
-hosting deployment requires; run post-migration FK identity/schema checks; and
-retain the backup through production closeout. SQLite `RemoveField` may rebuild
-the table or take a schema/write lock and is not an online migration.
+The planned explicit manual SQLite backup immediately before `0013` was not
+performed: production deployment automatically ran the migration. This is an
+operational sequencing deviation, not a data-integrity failure. Production
+closeout remains supported by the fresh pre-drop proof of 52 exact residues and
+zero blockers, the local 0012-to-0013 preservation test, the post-migration
+52/52 FK identity proof with zero type/integrity blockers, and the physical
+schema confirmation that only the compatibility column disappeared. No hosting
+or deployment snapshot is asserted or relied upon here.
+
+The completed operation remains a useful historical deployment sequence:
+while Stage-1 code still existed, a fresh pre-drop audit required `READY FOR
+COLUMN REMOVAL`; approved Stage-2 code deployed; the hosting deployment applied
+the migration; and post-migration FK identity/schema checks completed. SQLite
+`RemoveField` may rebuild the table or take a schema/write lock and is not an
+online migration.
+
+Permanent final state: `ServiceEvent.service_profile_key` is removed;
+`ServiceEvent.service_profile` is the canonical optional event-to-profile FK;
+and `ServiceProfile.key` is permanent. There is no legacy fallback, dual
+writer, or compatibility string. Profileless generic events remain allowed;
+profile-required workflows fail closed without the FK; event/profile types must
+match; new assignment requires an active profile; exact inactive historical
+references remain valid; referenced ServiceProfile key/event type are
+immutable; and the FK remains `PROTECT`. The former 4A mapper and pre-drop
+audit are retired historical transition tooling, while historical migrations
+remain immutable. No further compatibility-key retirement slice remains.
+
+Stage 2 did not alter `SERVICE_EVENT_PROFILE_CREATION_REVIEW_V1`,
+`SERVICE_PROFILE_READINESS_V3`, Bethany reset V3, Worship normalized
+preview/confirmation V3, RequiredTeam preview V2, RequiredTeam materialization
+plan V2, MO-S.REQUIRED, Ministry defaults, assignments, members, or
+Notifications.

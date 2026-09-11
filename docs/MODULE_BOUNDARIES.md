@@ -96,23 +96,20 @@ eligible derived Worship requirements (80 effective pairs) across 16 future
 reviewed events, all with `review_required = 0`; no derived row was persisted
 and no production write occurred. Their `selected_unscheduled` states are valid
 operational gaps pending matching Worship assignments, not configuration drift.
-5D has
- switched readiness, the retained bounded reset, and ServiceEvent Admin to
- FK/Profile authority. `GENERIC-DEPLOYMENT-CONFIG.5E` is IMPLEMENTED / LOCAL
- VERIFIED: Worship XLSX matching/confirmation is FK/Profile-authoritative,
- strict V2 parsed/preview/confirmation artifacts bind the enabled integration
- and exact profile identity, and V1 artifacts fail closed. All known
- profile-aware runtime consumers are switched. `GENERIC-DEPLOYMENT-CONFIG.5F`
- now provides the local repository/runtime closure proof with Class A legacy
- authority at zero; its completed production closeout verifies deployment
- configuration/data and fresh-workbook rendered evidence, so the global status
- is formally closed.
-`GENERIC-DEPLOYMENT-CONFIG.LEGACY-SERVICE-PROFILE-KEY-RETIRE.0A` now records the
-docs-only retirement-readiness audit for the transitional event compatibility
-column. Class-A authority remains zero; `ServiceProfile.key` remains permanent,
-and retirement is not implemented. The recommended staged pre-contract cleanup
-and later SQLite `RemoveField` contract are owned by the canonical generic
-deployment architecture.
+During the 5D/5E transition, readiness, the retained bounded reset, ServiceEvent
+Admin, and Worship XLSX matching/confirmation switched to FK/Profile authority
+while compatibility storage still existed as drift evidence. The strict V2
+parsed/preview/confirmation artifacts and the 5F Class-A closure proof are
+historical transition evidence. Current Stage-2 contract/version status is
+recorded in the final retirement boundary below: no compatibility field exists,
+and current identity/contracts are FK/Profile-authoritative.
+`GENERIC-DEPLOYMENT-CONFIG.LEGACY-SERVICE-PROFILE-KEY-RETIRE.0A` is the
+historical retirement-readiness audit. The compatibility field is fully retired:
+production applied `events/0013_remove_serviceevent_service_profile_key`, and
+canonical event identity is the optional `ServiceEvent.service_profile` FK.
+`ServiceProfile.key` remains the permanent deployment-local machine key. The
+former mapper and pre-drop mode are retired; no dual writer or legacy fallback
+remains.
 `GENERIC-DEPLOYMENT-CONFIG.1A` now implements the additive nullable
 `MinistryTeam.team_key` identity foundation, bounded staff/Admin setup, and a
 read-only inventory, and `GENERIC-DEPLOYMENT-CONFIG.2A` implements the generic
@@ -134,22 +131,26 @@ profile, maps the complete exact legacy-key event set, and advances every
 target scheduling revision exactly once under the existing SQLite CAS/write
 boundary with all-or-nothing rollback. The implementation task itself applied
 no normal-local or production mapping; the product owner later completed and
-independently audited the reviewed SVCA production apply. Production now has
-one reviewed profile, 52 exact dual-consistent mapped events, zero identity
-drift, and exact `1 -> 2` once-only scheduling-revision advances. This is
-deployment-specific evidence only. 5D switches readiness, the retained bounded
-reset, and ServiceEvent Admin to FK/Profile authority while keeping the
-compatibility key as read-only drift evidence. 5E switches workbook matching,
-signed artifacts, and post-CAS confirmation to FK/Profile authority while
-keeping that key as drift evidence. 5F proves the local consumer boundary,
-and the verified production read-only closeout formally establishes
-`runtime_consumer_switched` as true. The current SVCA deployment explicitly
-enables only `svca_bethany_2026_worship_xlsx`, passed the identity audit and
-52-row Readiness V2, and completed a fresh V2 52-no-op workbook preview with
-English/Chinese rendered verification and no confirmation write. The Lighting
-pilot is now fully retired from active code; its former key is unknown rather
-than a disabled/deprecated alias. The production Worship XLSX integration
-remains the sole registered deployment adapter and its contracts are unchanged.
+independently audited the reviewed SVCA production apply. At the 4A mapping
+milestone, production had one reviewed profile, 52 exact dual-consistent mapped
+events, zero identity drift, and exact `1 -> 2` once-only scheduling-revision
+advances. This is deployment-specific historical evidence only. During the
+5D/5E transition, readiness, the retained bounded reset, and ServiceEvent Admin
+used FK/Profile authority while the compatibility key remained read-only drift
+evidence; workbook matching, signed artifacts, and post-CAS confirmation
+likewise used FK/Profile authority while that storage still existed. At the 5F
+closeout, the local consumer boundary and verified production read-only closeout
+established `runtime_consumer_switched` as true. The 52-row Readiness V2 result
+and V2 52-no-op workbook preview are historical 5F evidence, not current
+contracts. The Lighting pilot is fully retired from active code; its former key
+is unknown rather than a disabled/deprecated alias.
+
+Current Stage-2 truth is that `events/0013` is production-applied, the
+compatibility field no longer exists, and runtime, Admin, readiness, and
+workbook authority are FK/Profile only. `ServiceProfile.key` remains permanent.
+Current versions are `SERVICE_PROFILE_READINESS_V3`, Bethany reset V3, the
+existing Worship parser contract, Worship normalized preview/confirmation V3,
+RequiredTeam preview/materialization plan V2, and 7C review V1.
 
 This project is becoming a lightweight modular church management system.
 Churches should eventually be able to enable only the modules they need, and
@@ -889,9 +890,12 @@ had zero blockers and `READY FOR COLUMN REMOVAL`. That evidence remains
 historical Stage-1 proof, not a cleanup instruction.
 
 `GENERIC-DEPLOYMENT-CONFIG.LEGACY-SERVICE-PROFILE-KEY-RETIRE.2A` is
-**IMPLEMENTED / LOCAL VERIFIED; NOT PRODUCTION APPLIED**. `events/0013` removes
-the compatibility field from current model/runtime and retires the pre-drop
-audit mode. `ServiceProfile.key`, the optional protected FK, and all permanent
-consumer contracts remain. The destructive production migration is separately
-gated by a fresh pre-drop audit and verified SQLite backup; backup plus
-pre-Stage-2 code, not schema reversal alone, is the complete rollback path.
+**PRODUCTION APPLIED / VERIFIED**. Production applied `events/0013`, so the
+compatibility field and pre-drop audit mode are retired. The pre-removal audit
+proved 52 exact historical residues and zero blockers; post-migration identity
+remains 52/52 FK-linked with zero integrity/type blockers, and SQLite confirms
+the compatibility column is absent while the canonical FK remains. The planned
+immediately pre-migration manual SQLite backup was not performed because the
+deployment automatically migrated; this sequencing deviation is recorded
+without claiming a hosting snapshot. `ServiceProfile.key`, the optional
+protected FK, and all permanent consumer contracts remain.

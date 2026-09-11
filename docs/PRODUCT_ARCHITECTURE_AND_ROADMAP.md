@@ -221,6 +221,15 @@ requirement was persisted and the verification made no production write. The
 current `selected_unscheduled` states are legitimate operational scheduling
 gaps pending matching Worship assignments, not configuration drift or invalid
 state.
+`GENERIC-DEPLOYMENT-CONFIG.LEGACY-SERVICE-PROFILE-KEY-RETIRE.0A` completes a
+docs-only retirement-readiness audit for the transitional
+`ServiceEvent.service_profile_key` column. Class-A legacy-string runtime
+authority remains zero; permanent identity is the FK to `ServiceProfile` and
+its stable `ServiceProfile.key`. Retirement is not implemented. The recommended
+two-stage contract first removes and versions active compatibility dependencies
+while retaining a pre-drop audit, then performs a separately approved SQLite
+migration only after fresh production zero-state evidence and a validated
+backup. See the canonical generic deployment architecture.
 For the 52 canonical 2026 `bethany_0930_cm` events, the approved future static
 rows are Lighting, Projection, Sound, and Video only; Digital Ministry and
 Worship containers are not required, and A/C1/C2/C3 remain derived per event.

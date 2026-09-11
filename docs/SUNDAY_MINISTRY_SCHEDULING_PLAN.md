@@ -56,6 +56,11 @@ configuration drift.
 `ServiceEvent.service_profile_key` identity foundation. After generic
 deployment configuration 5F it remains transitional compatibility/drift
 storage; permanent runtime identity is the `ServiceEvent.service_profile` FK.
+`GENERIC-DEPLOYMENT-CONFIG.LEGACY-SERVICE-PROFILE-KEY-RETIRE.0A` confirms that
+Class-A legacy-string runtime authority remains zero and proposes a two-stage
+retirement contract. No field, runtime, test, migration, or data retirement is
+implemented by that audit; permanent `ServiceProfile.key` is not in scope. The
+canonical inventory and sequence live in the generic deployment architecture.
 `MO-S.6D-SLICE8.1A/FU1/UX1` separately implements the strict Excel
 dependency/parser, bounded OOXML ZIP resource preflight, and staff/superuser-
 only zero-write preview, including blocked partial-mapping preview and the

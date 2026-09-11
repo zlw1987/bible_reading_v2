@@ -107,6 +107,12 @@ operational gaps pending matching Worship assignments, not configuration drift.
  authority at zero; its completed production closeout verifies deployment
  configuration/data and fresh-workbook rendered evidence, so the global status
  is formally closed.
+`GENERIC-DEPLOYMENT-CONFIG.LEGACY-SERVICE-PROFILE-KEY-RETIRE.0A` now records the
+docs-only retirement-readiness audit for the transitional event compatibility
+column. Class-A authority remains zero; `ServiceProfile.key` remains permanent,
+and retirement is not implemented. The recommended staged pre-contract cleanup
+and later SQLite `RemoveField` contract are owned by the canonical generic
+deployment architecture.
 `GENERIC-DEPLOYMENT-CONFIG.1A` now implements the additive nullable
 `MinistryTeam.team_key` identity foundation, bounded staff/Admin setup, and a
 read-only inventory, and `GENERIC-DEPLOYMENT-CONFIG.2A` implements the generic

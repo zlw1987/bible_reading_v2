@@ -1238,3 +1238,242 @@ name/type, identity scope, ownership, delete rule, materialization semantic,
 Worship boundary, integration default, or external authority requires an
 explicit architecture revision and product-owner review. Silent drift is not
 allowed.
+
+## 19. `GENERIC-DEPLOYMENT-CONFIG.LEGACY-SERVICE-PROFILE-KEY-RETIRE.0A`
+
+Status: **RETIREMENT-READINESS AUDIT COMPLETE; RETIREMENT NOT IMPLEMENTED**.
+
+`ServiceEvent.service_profile_key` is transitional compatibility/drift storage.
+It is not canonical identity and must not be confused with the permanent,
+deployment-local `ServiceProfile.key`. Current runtime identity is the
+`ServiceEvent.service_profile` FK and Class-A legacy-string runtime authority
+remains zero after 6A/6B, 7A/7B/7C, and MO-S.REQUIRED.1A.
+
+### Exhaustive active-reference inventory and disposition
+
+The table classifies current executable references. Historical migrations and
+clearly historical documentation remain valid evidence and are listed
+separately. A name such as `service_profile_key` is not necessarily the event
+compatibility field: ministry default DTOs and command output obtain that value
+from canonical `ServiceProfile.key` and therefore survive unchanged.
+
+| File / symbol | Class | Current purpose | Event-field retirement disposition |
+|---|---|---|---|
+| `events/models.py` — `ServiceEvent.service_profile_key`, `ServiceEvent.clean()` | B | Stores and validates exact/blank/mismatch compatibility evidence beside the authoritative FK | DELETE the field and dual-pair checks; retain permanent FK/profile event-type, active-selection, PROTECT, revision, and `ServiceProfile.key` rules |
+| `events/service_profile_runtime.py` — `inspect_service_event_profile()`, `require_service_profile()` | B | Resolves from the FK and reports legacy-only, blank-key, mismatch, and event-type drift; never resolves a profile from the string | REWRITE to FK/profile semantics; retain profileless, event-type, and active-profile checks |
+| `events/service_profile_runtime.py` — `prepare_…`, `set_…`, `clear_…`, `_save_identity_pair()` | C | Keeps both columns synchronized as a transition invariant | REPLACE WITH FK-only assignment/clear helpers and preserve existing revision/transaction behavior |
+| `events/admin.py` — `ServiceEventAdminForm`, `ServiceEventAdmin` | B, C, F | Uses the inspector, pair helpers, active/current FK selector, compatibility error mapping, read-only key, and compatibility note | REWRITE to FK-only form semantics; remove compatibility presentation while retaining authorized Admin selection and permanent validation |
+| `events/service_event_creation.py` — `_insert_event()`, `_verify_event()` | C | 7C writes the selected FK and matching string atomically, then verifies both | REPLACE WITH FK-only insert/postcondition; retain profileless creation and review/atomic/revision-zero contract |
+| `events/service_profile_identity.py` and `audit_service_profile_identity` | D | Reports complete identity state, profileless events, type drift, legacy groups, legacy-only rows, blank keys, and mismatches | SIMPLIFY IN PLACE: preserve permanent FK/profile/profileless/type integrity; remove transition-only fields after the final pre-drop audit |
+| `events/service_profile_readiness.py` and `audit_service_profile_readiness` | D | Selects canonical targets through the FK and separately reports compatibility blockers/evidence | VERSION and simplify in place; retain target/date/time/lifecycle/audience/duplicate/profileless/FK checks and remove transition-only schema/counters/evidence |
+| `events/service_profile_mapping.py` and `configure_service_profile_mapping` | C, D, J | Explicit legacy-key group discovery and guarded mapping; command success text still says the string is authoritative | RETIRE before DROP after supported deployments are mapped; current obsolete authority wording must disappear with the command |
+| `events/service_profile_setup.py`, `rebuild_bethany_0930_service_events` | C, E | Bounded reset resolves the canonical profile but snapshots, fingerprints, validates, creates, and reports the dual pair | REWRITE FK-only and bump the reset approval contract/fingerprint version |
+| `ministry/services/worship_xlsx_preview.py` and confirmation recomputation | B, E | Matches by FK/Profile; normalized rows use canonical `ServiceProfile.key`, but signed profile evidence also includes the event compatibility value and drift states | Adapter identity does not block retirement; remove compatibility evidence and bump normalized preview/confirmation contracts because signed current truth changes |
+| `ministry/service_profile_required_team_materialization.py` and 7B apply plan | B, E | Selects events by FK but includes inspector identity state in the signed 7A preview inherited by 7B | REWRITE the inspector dependency and bump 7A preview/7B plan contracts while preserving create-only materialization semantics |
+| `ministry/admin.py`, `ministry/service_profile_ministry_requirements.py`, setup provider, and ministry audit command | NO EVENT-FIELD CLASS | Their similarly named DTO/output value comes from `requirement.service_profile.key` | NO CHANGE; this is permanent canonical Profile identity |
+| `events/forms.py`, `events/views.py`, `events/scheduling_revision.py` | — | Forms/views select the FK and delegate creation; scheduling revision is identity-agnostic | NO CHANGE except consequences of the FK-only service boundary |
+| templates, settings, configuration | — | No active event compatibility-field reference was found | NO CHANGE |
+
+The exact repository-search ledger is:
+
+- direct active event-field source: `events/models.py`, `events/admin.py`,
+  `events/service_event_creation.py`, `events/service_profile_identity.py`,
+  `events/service_profile_mapping.py`, `events/service_profile_readiness.py`,
+  `events/service_profile_runtime.py`, `events/service_profile_setup.py`,
+  `events/management/commands/audit_service_profile_readiness.py`,
+  `events/management/commands/configure_service_profile_mapping.py`,
+  `events/management/commands/rebuild_bethany_0930_service_events.py`, and
+  `ministry/services/worship_xlsx_preview.py`;
+- indirect active callers/contracts: `events/forms.py`, `events/views.py`,
+  `events/scheduling_revision.py`,
+  `ministry/service_profile_required_team_materialization.py`,
+  `ministry/service_profile_required_team_materialization_apply.py`,
+  `ministry/management/commands/audit_service_profile_required_team_materialization.py`,
+  `ministry/management/commands/materialize_service_profile_required_teams.py`,
+  and `ministry/services/worship_xlsx_confirmation.py`;
+- permanent canonical-Profile references whose local DTO/output name happens to
+  be `service_profile_key`: `ministry/admin.py`,
+  `ministry/service_profile_ministry_requirements.py`,
+  `ministry/setup_readiness_provider.py`, and
+  `ministry/management/commands/audit_service_profile_ministry_requirements.py`;
+- tests: `events/test_service_event_creation.py`,
+  `events/test_service_profile.py`, `events/test_service_profile_identity.py`,
+  `events/test_service_profile_key.py`, `events/test_service_profile_mapping.py`,
+  `events/test_service_profile_migration.py`,
+  `events/test_service_profile_readiness.py`,
+  `events/test_service_profile_runtime.py`,
+  `events/test_service_profile_setup.py`,
+  `events/test_worship_xlsx_preview.py`,
+  `events/test_worship_xlsx_confirmation.py`,
+  `ministry/test_effective_required_teams.py`,
+  `ministry/test_service_profile_ministry_requirements.py`,
+  `ministry/test_service_profile_ministry_requirement_configuration.py`,
+  `ministry/test_service_profile_required_team_materialization.py`, and
+  `ministry/test_service_profile_required_team_materialization_apply.py`;
+- immutable migrations: `events/0011` and `events/0012`; and
+- documentation: this document,
+  `GENERIC_DEPLOYMENT_CONFIGURATION_SLICE5_PLAN.md`, `MODULE_BOUNDARIES.md`,
+  `PRODUCT_ARCHITECTURE_AND_ROADMAP.md`, `SUNDAY_MINISTRY_SCHEDULING_PLAN.md`,
+  and `WORSHIP_ROTATION_GOVERNANCE_PLAN.md`. Current-state references must track
+  the FK-authoritative transition; clearly labeled milestone chronology is
+  preserved historically. No template, settings, or configuration occurrence
+  survives.
+
+No active lookup equivalent to
+`ServiceProfile.objects.get(key=event.service_profile_key)` exists. The 4A
+mapping workflow is guarded transition tooling, not runtime identity authority;
+filtering by `ServiceProfile.key` through `ServiceEvent.service_profile` is
+canonical and is not a blocker.
+
+### Supported writers and validation contract
+
+Current supported writers are:
+
+- 7C single/recurring creation: create-only; canonical identity comes from the
+  reviewed selected `ServiceProfile`; the central atomic creation service writes
+  both columns at revision zero.
+- ServiceEvent Admin: existing-event edit; canonical selection is the FK; the
+  Admin form prepares an exact pair and the model save barrier advances
+  `scheduling_revision` once.
+- bounded Bethany reset: create-only replacement dataset; canonical profile is
+  resolved from an explicitly approved key, and the reset owns the transaction,
+  exact pair, fingerprint, and revision-zero creation.
+- 4A mapping: existing-event transition only; the reviewed legacy-key group and
+  current-state token choose the bounded set, then the command writes the FK
+  while preserving the already matching string under its SQLite CAS transaction.
+- the public pair set/clear helpers: shared transition primitives (with direct
+  production use currently limited to the reset); they update both columns and
+  preserve the caller's revision/transaction contract.
+
+No supported writer fundamentally needs duplicate identity storage. Each writer
+maintains only the transition invariant. Before `DROP COLUMN`, all must become
+FK-only or be retired. Direct `ServiceEvent.save()` is a validation barrier, not
+a supported identity-selection workflow.
+
+Transition-only model/runtime rules that disappear are event-key grammar,
+legacy-only state, FK-with-blank-key state, FK/key equality, mismatch state, and
+pair preparation/save/clear postconditions. Permanent rules that remain are
+`ServiceProfile.key` grammar, FK/profile event-type compatibility, rejection of
+new inactive-profile selection while preserving historical references,
+referenced-profile identity immutability, FK `PROTECT`, and existing
+`scheduling_revision` behavior.
+
+### Tooling, signed contracts, and tests
+
+The identity and readiness audits remain useful after retirement and should be
+simplified/versioned, not wholly deleted. Permanent checks include the FK,
+profileless events, event/profile type agreement, expected target-event
+identity, workflow-required active state, and referenced-profile integrity.
+Legacy-only groups, FK/blank-key, FK/key mismatch, multi-type legacy grouping,
+and migration-0011-as-current-schema checks are transition-only.
+
+`configure_service_profile_mapping` should remain available only until every
+supported deployment has passed the pre-contract audit. It should then be
+retired in the pre-contract cleanup slice. New installations have no need for
+the legacy group workflow because 7C creates FK/Profile-aware events directly;
+historical migration and milestone tests/docs remain as history.
+
+The bounded reset's current V2 approval snapshot includes the compatibility
+string, so its FK-only rewrite requires an explicit V3 approval-contract and
+token/fingerprint bump. The 7C V1 signed review payload already binds canonical
+`ServiceProfile` ID/key/type/activity/timestamp and does not encode the event
+compatibility column; V1 may remain while its unsigned insert/postcondition
+becomes FK-only. The Worship parser itself also does not depend on the event
+field. Its normalized preview and confirmation do: signed profile evidence
+includes compatibility truth, so retirement requires a V3 normalized preview
+and matching V3 confirmation contract. The 7A preview/7B plan should likewise
+advance versions when transition identity state leaves their signed facts.
+
+Future test disposition is:
+
+- preserve permanent `ServiceProfile` key, FK, event-type, active-selection,
+  immutability, PROTECT, permissions, revision, atomicity, concurrency,
+  profileless, audience, and zero-write coverage;
+- replace pair assertions in `test_service_profile.py`,
+  `test_service_profile_runtime.py`, `test_service_profile_identity.py`,
+  `test_service_profile_readiness.py`, `test_service_profile_setup.py`, and
+  `test_service_event_creation.py` with FK/permanent-integrity assertions;
+- retire transition schema/grammar/Admin drift coverage in
+  `test_service_profile_key.py` and the active 4A mapping suite in
+  `test_service_profile_mapping.py`, while preserving historical evidence;
+- update `test_worship_xlsx_preview.py` and
+  `test_worship_xlsx_confirmation.py` for V3 FK/Profile evidence without
+  weakening matching, governance, CAS, audit, or all-or-nothing behavior;
+- update the ServiceProfile RequiredTeam materialization preview/apply/config
+  tests for their versioned FK-only facts while retaining create-only and
+  rollback contracts; and
+- preserve `test_service_profile_migration.py` as historical 0011-to-0012
+  coverage and add future 0012-to-0013 removal coverage. The effective-required
+  test that currently supplies a compatibility fixture should retain its
+  no-inference assertion using canonical Profile/default state.
+
+Historical migrations `events/0011_serviceevent_service_profile_key.py` and
+`events/0012_serviceprofile_serviceevent_service_profile.py` remain immutable.
+The current `events` migration tip is `0012`; the future contract migration is
+conceptually `0013_remove_serviceevent_service_profile_key`, dependent on
+`0012`. Historical documentation may retain the old name when its milestone
+context is explicit.
+
+### Fresh production precondition and SQLite contract
+
+The prior 5F result is evidence, not a permanent substitute for a fresh
+immediately-pre-migration audit. Reuse a simplified/versioned identity/readiness
+audit and require zero:
+
+- nonblank compatibility strings with a null FK;
+- FK plus blank compatibility string;
+- FK/key mismatch;
+- FK profile/event `event_type` mismatch;
+- dangling/impossible FK integrity states; and
+- malformed/noncanonical nonblank event keys or any other unsupported
+  transition state.
+
+Profileless events with null FK and blank compatibility string are allowed.
+Exact inactive profiles may remain valid historical references; active state is
+required only where a current workflow permanently requires it. The audit must
+be rerun read-only against the exact target database immediately before the
+future migration.
+
+Production uses SQLite. The field is not a PK, unique field, index, or FK, so a
+Django/SQLite combination with native `DROP COLUMN` support may use it;
+otherwise Django can rebuild the table. The deployed SQLite version and chosen
+migration SQL must be verified on the target rather than inferred from local
+code. Either path may take a schema/write lock and is not an online-migration
+guarantee. Column deletion loses compatibility values: a reverse migration can
+re-add an empty column but cannot reconstruct them.
+
+The future production sequence is therefore: deploy the pre-contract code;
+run the fresh read-only audit; stop event writers for a maintenance window;
+take and validate a recoverable database backup; inspect the target migration
+plan/SQL; migrate; run post-migration Django/schema/identity and bounded product
+smoke checks; then reopen writes. Production execution remains a separately
+approved task.
+
+### Retirement sequence decision
+
+- Option A (code and column together) is small in slice count but couples many
+  signed-contract/tooling changes to an immediately destructive SQLite schema
+  operation.
+- **Option B is selected**: Stage 1 removes all active event-field
+  reads/writes/guards/presentation and versions affected contracts while the
+  physical column remains; it retains one explicit read-only pre-drop audit.
+  After repository zero-reference and fresh production FK-integrity proof,
+  Stage 2 adds the new removal migration and deletes the final preflight/model
+  reference.
+- Option C avoids immediate migration risk but preserves redundant identity and
+  continuing drift indefinitely, so it is not the recommended steady state.
+
+The exact next slice should be
+`GENERIC-DEPLOYMENT-CONFIG.LEGACY-SERVICE-PROFILE-KEY-RETIRE.1A`: FK-only
+runtime/Admin/writers; retirement of 4A mapping; simplified/versioned
+identity/readiness audit with an explicit pre-drop mode; version bumps for the
+reset, 7A/7B, and Worship normalized preview/confirmation contracts; and focused
+test/doc updates. It leaves the column and migration history untouched. A later
+separately approved `.1B` owns fresh production zero-state evidence, backup and
+maintenance planning, `events/0013`, and final post-migration cleanup.
+
+Deferred external identity mapping does not read or require
+`ServiceEvent.service_profile_key`, does not block retirement, and must remain a
+separate adapter/mapping concept. It must not overload permanent
+`ServiceProfile.key` or resurrect the event compatibility string as speculative
+external-ID storage.

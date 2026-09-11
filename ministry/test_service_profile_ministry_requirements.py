@@ -353,7 +353,6 @@ class ServiceProfileMinistryRequirementModelTests(
         event = ServiceEvent.objects.create(
             title="No materialization event",
             event_type=ServiceEvent.EVENT_SUNDAY_SERVICE,
-            service_profile_key=self.profile.key,
             service_profile=self.profile,
             start_datetime=timezone.now() + timezone.timedelta(days=4),
             status=ServiceEvent.STATUS_PUBLISHED,

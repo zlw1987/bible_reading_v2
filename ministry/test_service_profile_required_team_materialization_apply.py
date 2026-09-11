@@ -404,13 +404,12 @@ class RequiredTeamMaterializationPlanApplyTests(MaterializationApplyTestBase, Te
             finally:
                 transaction.set_rollback(True)
 
-    def test_changed_date_scope_rejects_old_token_but_legacy_storage_is_ignored(self):
+    def test_changed_date_scope_rejects_old_token(self):
         self.requirement()
         event = self.event(date(2026, 1, 2))
         plan = self.plan()
         with self.assertRaises(MaterializationStale):
             self.apply(plan, end_date=date(2026, 1, 2))
-        ServiceEvent.objects.filter(pk=event.pk).update(service_profile_key="profile.other")
         result = self.apply(plan)
         self.assertTrue(result["data_mutated"])
         self.assertEqual(ServiceEventRequiredTeam.objects.count(), 1)

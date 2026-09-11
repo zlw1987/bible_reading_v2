@@ -107,26 +107,6 @@ class ServiceEvent(models.Model):
     description = models.TextField(blank=True, default="")
     description_en = models.TextField(blank=True, default="")
     event_type = models.CharField(max_length=40, choices=EVENT_TYPE_CHOICES)
-    service_profile_key = models.CharField(
-        max_length=64,
-        blank=True,
-        default="",
-        validators=[
-            RegexValidator(
-                regex=r"^[a-z0-9_.-]+$",
-                message=(
-                    "Use only lowercase ASCII letters, digits, underscores, "
-                    "hyphens, and periods."
-                ),
-                code="invalid_service_profile_key",
-            )
-        ],
-        help_text=(
-            "Stable integration/profile key for this exact service event. "
-            "It does not control audience, location, recurrence, serving, or "
-            "permissions."
-        ),
-    )
     service_profile = models.ForeignKey(
         "events.ServiceProfile",
         null=True,
@@ -233,19 +213,6 @@ class ServiceEvent(models.Model):
 
         if errors:
             raise ValidationError(errors)
-
-    def full_clean(self, exclude=None, *args, **kwargs):
-        """Validate current event semantics without touching dead storage.
-
-        The field declaration is intentionally retained until Stage 2 so Django
-        sees no schema change.  Its old grammar validator is excluded from all
-        ordinary model saves: only the explicit read-only pre-drop audit may
-        inspect compatibility contents.
-        """
-
-        excluded = set(exclude or ())
-        excluded.add("service_profile_key")
-        return super().full_clean(exclude=excluded, *args, **kwargs)
 
     def save(self, *args, **kwargs):
         from .scheduling_revision import (

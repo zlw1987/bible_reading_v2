@@ -47,10 +47,8 @@ class ServiceProfileRuntimeTests(TestCase):
         with self.assertRaises(ServiceProfileResolutionError):
             require_service_profile(event)
 
-    def test_fk_identity_ignores_stale_physical_compatibility_value(self):
+    def test_fk_identity_uses_the_exact_referenced_profile(self):
         event = ServiceEvent.objects.create(**event_values(service_profile=self.active))
-        ServiceEvent.objects.filter(pk=event.pk).update(service_profile_key="stale value")
-        event.refresh_from_db()
         identity = inspect_service_profile_identity(event)
         self.assertEqual(identity.state, ServiceProfileIdentityState.EXACT)
         self.assertEqual(require_service_profile(event), self.active)
@@ -68,26 +66,22 @@ class ServiceProfileRuntimeTests(TestCase):
         with self.assertRaises(ServiceProfileResolutionError):
             require_service_profile(event)
 
-    def test_fk_change_advances_once_and_does_not_rewrite_compatibility_storage(self):
+    def test_fk_change_advances_once(self):
         event = ServiceEvent.objects.create(**event_values(service_profile=self.active))
-        ServiceEvent.objects.filter(pk=event.pk).update(service_profile_key="raw.history")
         self.assertTrue(set_service_event_profile(event, self.other))
         event.refresh_from_db()
         self.assertEqual(event.service_profile_id, self.other.pk)
         self.assertEqual(event.scheduling_revision, 1)
-        self.assertEqual(event.service_profile_key, "raw.history")
         self.assertFalse(set_service_event_profile(event, self.other))
         event.refresh_from_db()
         self.assertEqual(event.scheduling_revision, 1)
 
-    def test_clear_advances_once_and_preserves_physical_storage(self):
+    def test_clear_advances_once(self):
         event = ServiceEvent.objects.create(**event_values(service_profile=self.active))
-        ServiceEvent.objects.filter(pk=event.pk).update(service_profile_key="raw.history")
         self.assertTrue(clear_service_event_profile(event))
         event.refresh_from_db()
         self.assertIsNone(event.service_profile_id)
         self.assertEqual(event.scheduling_revision, 1)
-        self.assertEqual(event.service_profile_key, "raw.history")
 
     def test_inactive_profile_cannot_be_newly_assigned_but_history_resolves(self):
         event = ServiceEvent.objects.create(**event_values())

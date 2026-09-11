@@ -88,16 +88,6 @@ class ServiceProfileModelTests(TestCase):
             )
         self.assertIn("event_type", raised.exception.error_dict)
 
-    def test_stale_physical_value_is_ignored_by_ordinary_save(self):
-        event = ServiceEvent.objects.create(**event_values(service_profile=self.profile))
-        ServiceEvent.objects.filter(pk=event.pk).update(service_profile_key="invalid text")
-        event.refresh_from_db()
-        event.title = "Changed without compatibility normalization"
-        event.save()
-        event.refresh_from_db()
-        self.assertEqual(event.service_profile_id, self.profile.pk)
-        self.assertEqual(event.service_profile_key, "invalid text")
-
     def test_referenced_profile_key_and_type_are_immutable(self):
         ServiceEvent.objects.create(**event_values(service_profile=self.profile))
         self.profile.key = "changed"
@@ -156,7 +146,7 @@ class ServiceProfileAdminTests(TestCase):
             instance=event,
         )
 
-    def test_admin_hides_compatibility_field(self):
+    def test_admin_has_no_removed_compatibility_field(self):
         model_admin = ServiceEventAdmin(ServiceEvent, admin.site)
         form_class = model_admin.get_form(self.request)
         self.assertNotIn("service_profile_key", form_class.base_fields)
@@ -210,7 +200,6 @@ class ServiceProfileAdminTests(TestCase):
         saved = selected.save()
         saved.refresh_from_db()
         self.assertEqual(saved.service_profile_id, profile.pk)
-        self.assertEqual(saved.service_profile_key, "")
         self.assertEqual(saved.scheduling_revision, 1)
 
         cleared = self.admin_event_form(saved, profile=None)
@@ -218,5 +207,4 @@ class ServiceProfileAdminTests(TestCase):
         saved = cleared.save()
         saved.refresh_from_db()
         self.assertIsNone(saved.service_profile_id)
-        self.assertEqual(saved.service_profile_key, "")
         self.assertEqual(saved.scheduling_revision, 2)

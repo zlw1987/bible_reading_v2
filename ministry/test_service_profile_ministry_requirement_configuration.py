@@ -609,7 +609,6 @@ class RequirementConfigurationApplyTests(
             title="Existing service",
             event_type=ServiceEvent.EVENT_SUNDAY_SERVICE,
             service_profile=self.profile,
-            service_profile_key=self.profile.key,
             start_datetime=timezone.now() + timezone.timedelta(days=7),
             status=ServiceEvent.STATUS_PUBLISHED,
         )

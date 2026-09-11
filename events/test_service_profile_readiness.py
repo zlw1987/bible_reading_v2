@@ -66,7 +66,6 @@ class ServiceProfileReadinessTests(TestCase):
             service_profile=self.profile,
         )
         ServiceEventAudienceScope.objects.create(service_event=event, unit=self.unit)
-        ServiceEvent.objects.filter(pk=event.pk).update(service_profile_key="wrong.key")
         audit = build_audit(
             profile_key=self.profile.key, year=2026, target_time=time(9, 30),
             event_type=ServiceEvent.EVENT_SUNDAY_SERVICE,

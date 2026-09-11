@@ -884,14 +884,14 @@ notifications, or `ServiceEvent`.
 ### Legacy ServiceEvent profile-key boundary
 
 `GENERIC-DEPLOYMENT-CONFIG.LEGACY-SERVICE-PROFILE-KEY-RETIRE.1A` is
-**IMPLEMENTED / LOCAL VERIFIED**: runtime ownership is the optional
-`ServiceEvent.service_profile` FK and its exact `ServiceProfile`. The retained
-compatibility column is dead storage, is absent from Admin/UI and all supported
-writers, and is read only by `audit_service_profile_identity
---pre-drop-legacy-key`. The physical field remains until separately approved
-Stage 2; no migration or production data operation occurred.
+**PRODUCTION VERIFIED**: 52 FK-linked events and 52 exact historical residues
+had zero blockers and `READY FOR COLUMN REMOVAL`. That evidence remains
+historical Stage-1 proof, not a cleanup instruction.
 
-Its removal gate permits profileless blank rows, FK-only blank-key rows, and
-exact historical FK/key residue. Legacy-only identity, nonblank mismatch,
-malformed/noncanonical residue, and event/profile type mismatch fail closed;
-no dual writer is restored to make retained strings blank.
+`GENERIC-DEPLOYMENT-CONFIG.LEGACY-SERVICE-PROFILE-KEY-RETIRE.2A` is
+**IMPLEMENTED / LOCAL VERIFIED; NOT PRODUCTION APPLIED**. `events/0013` removes
+the compatibility field from current model/runtime and retires the pre-drop
+audit mode. `ServiceProfile.key`, the optional protected FK, and all permanent
+consumer contracts remain. The destructive production migration is separately
+gated by a fresh pre-drop audit and verified SQLite backup; backup plus
+pre-Stage-2 code, not schema reversal alone, is the complete rollback path.

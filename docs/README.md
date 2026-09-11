@@ -410,14 +410,15 @@ staff/setup extraction, or package extraction.
 ## Service Profile compatibility-column Stage 1
 
 `GENERIC-DEPLOYMENT-CONFIG.LEGACY-SERVICE-PROFILE-KEY-RETIRE.1A` is
-**IMPLEMENTED / LOCAL VERIFIED**. `ServiceEvent.service_profile_key` still
-physically exists pending a separately approved Stage 2 migration, but current
-identity is FK-only through `ServiceProfile`. Supported writers and Admin do
-not write or show the column; only the explicit read-only pre-drop audit reads
-it. No `events/0013`, production audit, or production data mutation occurred.
+**PRODUCTION VERIFIED**: 52 FK-linked events and 52 exact historical residues
+produced zero blockers and `READY FOR COLUMN REMOVAL`.
 
-The pre-drop gate treats profileless blank rows, FK-only blank-key rows, and
-exact historical FK/key residue as safe for column removal. It blocks
-legacy-only identity, nonblank mismatch, malformed/noncanonical residue, and
-event/profile type mismatch; supported writers do not dual-write to influence
-those counts.
+`GENERIC-DEPLOYMENT-CONFIG.LEGACY-SERVICE-PROFILE-KEY-RETIRE.2A` is
+**IMPLEMENTED / LOCAL VERIFIED; NOT PRODUCTION APPLIED**. Local `events/0013`
+removes `ServiceEvent.service_profile_key`; current identity remains the
+optional FK to permanent `ServiceProfile.key`, and the Stage-1 pre-drop command
+mode is retired. No production migration ran. Production apply remains
+separately gated by fresh Stage-1 audit evidence, a verified SQLite backup,
+maintenance-window migration/restart, and post-migration FK/schema checks. The
+backup plus pre-Stage-2 code is required for rollback because schema reversal
+cannot reconstruct dropped legacy values.

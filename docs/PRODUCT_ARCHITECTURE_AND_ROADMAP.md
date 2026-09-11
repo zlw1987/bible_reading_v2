@@ -1721,18 +1721,21 @@ Not next:
 ### Service Profile compatibility-column retirement, Stage 1
 
 `GENERIC-DEPLOYMENT-CONFIG.LEGACY-SERVICE-PROFILE-KEY-RETIRE.1A` is
-**IMPLEMENTED / LOCAL VERIFIED**. `ServiceEvent.service_profile_key` remains a
-physical temporary column only; FK -> `ServiceProfile.key` is the sole current
-identity. No ordinary runtime, supported writer, or Admin surface reads or
-writes the column. The sole reader is the explicit read-only pre-drop audit.
-Reset, Worship normalized preview/confirmation, and RequiredTeam contracts are
-versioned; 7C review V1 is unchanged. No `events/0013` or production mutation
-occurred; Stage 2 remains separately gated.
+**PRODUCTION VERIFIED**: production identity evidence recorded 52 FK-linked
+events, one active profile, and zero integrity blockers; pre-drop evidence
+recorded 52 exact historical residues, zero blockers, and `READY FOR COLUMN
+REMOVAL`.
 
-For the Stage-2 gate, blank retained strings are safe when the event is
-profileless or its canonical FK is set; exact historical FK/key residue is also
-safe. The audit blocks only legacy-only identity, nonblank FK/key mismatch,
-malformed/noncanonical nonblank residue, or permanent FK/profile type drift.
+`GENERIC-DEPLOYMENT-CONFIG.LEGACY-SERVICE-PROFILE-KEY-RETIRE.2A` is
+**IMPLEMENTED / LOCAL VERIFIED; NOT PRODUCTION APPLIED**. Local
+`events/0013_remove_serviceevent_service_profile_key` removes the physical
+compatibility column and retires its pre-drop command mode. Runtime identity is
+only `ServiceEvent.service_profile -> ServiceProfile.key`; no signed business
+contract was versioned. Production apply remains separately gated by a fresh
+Stage-1 pre-drop audit, verified SQLite backup, maintenance-window migration,
+restart/reload, and post-migration FK/schema verification. A schema reverse
+cannot recover dropped strings, so production rollback requires that backup and
+pre-Stage-2 code.
 
 Suggested docs:
 - `docs/READING_V1_QA_CHECKLIST.md`

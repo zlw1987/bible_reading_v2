@@ -36,7 +36,6 @@ from .service_event_creation import (
     create_recurring_service_events,
     create_single_service_event,
 )
-from .service_profile_identity import build_pre_drop_legacy_key_inventory
 
 
 User = get_user_model()
@@ -214,7 +213,7 @@ class ServiceEventCreationTests(TestCase):
             audience_ids=[self.audience.pk],
         )
 
-    def test_create_only_profile_selector_and_compatibility_key_boundary(self):
+    def test_create_only_profile_selector_has_no_removed_field(self):
         create_form = ServiceEventForm(
             language="en", include_profile_selection=True
         )
@@ -321,11 +320,10 @@ class ServiceEventCreationTests(TestCase):
             CreationReviewFailure.PROFILE_TYPE_MISMATCH,
         )
 
-    def test_profileless_creation_needs_no_review_and_keeps_blank_identity(self):
+    def test_profileless_creation_needs_no_review(self):
         result = self.create_single(token="", profile=False, team_ids=[self.team_b.pk])
         event = result.events[0]
         self.assertIsNone(event.service_profile_id)
-        self.assertEqual(event.service_profile_key, "")
         self.assertEqual(event.scheduling_revision, 0)
 
     def test_selected_profile_final_create_requires_review(self):
@@ -411,10 +409,6 @@ class ServiceEventCreationTests(TestCase):
     def test_single_success_writes_exact_profile_teams_audience_revision_zero(self):
         event = self.create_single(token=self.review().signed_payload).events[0]
         self.assertEqual(event.service_profile_id, self.profile.pk)
-        self.assertEqual(event.service_profile_key, "")
-        pre_drop = build_pre_drop_legacy_key_inventory()
-        self.assertEqual(pre_drop["summary"]["fk_only_blank_legacy"], 1)
-        self.assertTrue(pre_drop["summary"]["ready_for_column_removal"])
         self.assertEqual(event.scheduling_revision, 0)
         self.assertEqual(
             set(ServiceEventRequiredTeam.objects.values_list("ministry_team_id", flat=True)),
@@ -488,7 +482,6 @@ class ServiceEventCreationTests(TestCase):
         self.assertEqual(len(result.events), 3)
         for event in result.events:
             self.assertEqual(event.service_profile_id, self.profile.pk)
-            self.assertEqual(event.service_profile_key, "")
             self.assertEqual(event.scheduling_revision, 0)
             self.assertEqual(
                 set(event.required_teams.values_list("pk", flat=True)),
@@ -582,7 +575,7 @@ class ServiceEventCreationTests(TestCase):
             set(ServiceEvent.objects.values_list("pk", flat=True)), before_ids
         )
 
-    def test_signed_payload_does_not_expose_compatibility_key_in_form(self):
+    def test_signed_payload_keeps_profile_identity_out_of_ordinary_forms(self):
         review = self.review()
         payload = signing.loads(
             review.signed_payload,
@@ -684,14 +677,12 @@ class ServiceEventCreationTests(TestCase):
             reverse("edit_service_event", args=[event.pk]),
             self.single_post_data(
                 service_profile=str(self.profile.pk),
-                service_profile_key="forged",
                 required_teams=[str(self.inactive_team.pk)],
             ),
         )
         self.assertEqual(response.status_code, 302)
         event.refresh_from_db()
         self.assertIsNone(event.service_profile_id)
-        self.assertEqual(event.service_profile_key, "")
         self.assertEqual(
             set(event.required_teams.values_list("pk", flat=True)),
             {self.inactive_team.pk},

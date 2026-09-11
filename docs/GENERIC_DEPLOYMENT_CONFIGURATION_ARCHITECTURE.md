@@ -1485,7 +1485,7 @@ external-ID storage.
 
 ## 20. `GENERIC-DEPLOYMENT-CONFIG.LEGACY-SERVICE-PROFILE-KEY-RETIRE.1A`
 
-Status: **IMPLEMENTED / LOCAL VERIFIED**.
+Status: **PRODUCTION VERIFIED**.
 
 Stage 1 implements Option B without a schema migration. The physical
 `ServiceEvent.service_profile_key` column and model declaration remain only as
@@ -1512,7 +1512,38 @@ restores a dual writer merely to reduce the FK-only blank-key count.
 Affected signed contracts are versioned: Bethany reset approval is V3, Worship
 normalized preview/confirmation are V3, and RequiredTeam preview/plan are V2.
 7C `SERVICE_EVENT_PROFILE_CREATION_REVIEW_V1` remains valid because its signed
-review already bound canonical Profile facts, not the compatibility column. No
-`events/0013` exists; Stage 2 remains separately gated by a fresh target-DB
-pre-drop audit and approved destructive migration plan. No production audit,
-reset, materialization, or mutation was run for this slice.
+review already bound canonical Profile facts, not the compatibility column.
+
+Production Stage-1 verification recorded `SERVICE_PROFILE_IDENTITY_V2` with 52
+events, 52 FK-linked rows, one active profile, and zero integrity blockers. Its
+`SERVICE_PROFILE_LEGACY_KEY_PRE_DROP_V2` evidence recorded 52 exact historical
+residue rows, zero legacy-only/mismatch/malformed/event-type blockers, and
+`READINESS: READY FOR COLUMN REMOVAL`. Those retained exact strings are safe
+historical residue; they require no cleanup write before removal.
+
+## 21. `GENERIC-DEPLOYMENT-CONFIG.LEGACY-SERVICE-PROFILE-KEY-RETIRE.2A`
+
+Status: **IMPLEMENTED / LOCAL VERIFIED; NOT PRODUCTION APPLIED**.
+
+`events/0013_remove_serviceevent_service_profile_key` removes only the
+physical `ServiceEvent.service_profile_key` column. Current model/runtime,
+Admin, creation, reset, readiness, Worship, and RequiredTeam code have no
+event compatibility field. The Stage-1 pre-drop mode is retired with the
+column; the normal `SERVICE_PROFILE_IDENTITY_V2` audit remains supported and
+`ServiceProfile.key` remains the permanent canonical identity.
+
+The local SQLite migration and 0012-to-0013 preservation test prove that exact
+historical residue, FK-only, and profileless rows retain their event IDs, FK,
+event type, scheduling revision, and ordinary data while the removed column is
+absent. A schema reverse may recreate an empty column but cannot reconstruct
+dropped strings. Production rollback therefore requires the immediately
+pre-migration SQLite backup together with pre-Stage-2 application code; running
+`migrate events 0012` alone is not a complete rollback.
+
+The separately approved production operation remains: while Stage-1 code is
+still deployed, rerun the pre-drop audit and require `READY FOR COLUMN
+REMOVAL`; create and verify a SQLite backup; deploy approved Stage-2 code; run
+the migration in a maintenance window; restart/reload the application as the
+hosting deployment requires; run post-migration FK identity/schema checks; and
+retain the backup through production closeout. SQLite `RemoveField` may rebuild
+the table or take a schema/write lock and is not an online migration.

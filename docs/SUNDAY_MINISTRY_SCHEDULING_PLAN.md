@@ -2840,15 +2840,16 @@ This plan is grounded in the current implementation and canonical boundaries in:
 
 ### `GENERIC-DEPLOYMENT-CONFIG.LEGACY-SERVICE-PROFILE-KEY-RETIRE.1A`
 
-**IMPLEMENTED / LOCAL VERIFIED.** Scheduling identity is now FK-only:
-`ServiceEvent.service_profile -> ServiceProfile.key`. The retained physical
-compatibility column is not runtime authority and no creation, Admin, reset,
-Worship, readiness, or RequiredTeam operation reads or writes it. The explicit
-read-only pre-drop audit is its sole reader. Worship V3 and RequiredTeam V2
-contracts replace transition evidence; 7C review V1 remains current. No
-migration or production operation was run; Stage 2 is separately gated.
+**PRODUCTION VERIFIED.** Stage-1 production evidence recorded 52 FK-linked
+events, 52 exact historical residues, zero blockers, and `READY FOR COLUMN
+REMOVAL`. Scheduling identity remained FK-only:
+`ServiceEvent.service_profile -> ServiceProfile.key`.
 
-Stage-2 readiness permits both FK-only events whose retained compatibility
-string is blank and exact historical dual-storage residue. It fails closed for
-legacy-only identity, nonblank mismatch, malformed/noncanonical residue, and
-event/profile type mismatch.
+`GENERIC-DEPLOYMENT-CONFIG.LEGACY-SERVICE-PROFILE-KEY-RETIRE.2A` is
+**IMPLEMENTED / LOCAL VERIFIED; NOT PRODUCTION APPLIED**. Local `events/0013`
+removes the transitional column and retires the pre-drop reader; Worship V3,
+RequiredTeam V2, 7C V1, reset V3, and MO-S.REQUIRED are unchanged. Production
+apply remains a separately approved SQLite maintenance-window operation with a
+fresh Stage-1 pre-drop audit, verified backup, migration/restart, and
+post-migration FK/schema check. Schema reversal cannot restore dropped residue;
+backup plus pre-Stage-2 code is required for rollback.

@@ -96,6 +96,12 @@ Docs-only `MO-S.6E.0A-FU1` closes two contract gaps without implementing that
 runtime: unlinked/display-name-only roster identity participates through a
 privacy-safe display-identity digest, and acknowledgement is bound to the exact
 canonical context rendered to the reviewer.
+Docs/read-only `MO-S.6F.0A` now completes the assignment-import identity,
+authority, workbook-source, mutation, and concurrency audit. It freezes a
+no-schema, exact-`TeamMembership`-identity, staff/superuser-only, zero-write
+preview direction, but leaves the first source column and existing-roster
+mutation policy as explicit product-owner gates. Assignment import runtime
+remains unimplemented.
 
 ## 1. Purpose
 
@@ -2298,20 +2304,398 @@ re-upload of the same workbook produced 52 no-op rows, 0 proposed changes,
 
 ### MO-S.6F — Excel Assignment Import
 
-- Goal: import selected Worship/AVL assignments only after identity safety is
-  proven.
-- Scope: exact/canonical or explicit alias mapping, preview-blocked unresolved
-  and ambiguous identities, team-owned authorization, explicit confirmation.
-- Out of scope: fuzzy auto-assignment, User creation, bulk permission bypass,
-  full annual history, formula-driven behavior.
-- Likely components: importer identity resolver, admin-managed mappings if
-  approved, preview UI, generic assignment writes.
-- Schema impact: possible future alias model only after an ADR/evidence review.
-- Tests: bilingual names, aliases, punctuation, initials, multiple names,
-  unresolved/ambiguous blocking, team ownership, idempotency, no User creation.
-- Acceptance: no real user is assigned without a safe match and human-visible
-  confirmation.
-- Dependency: MO-S.6D, MO-S.6C, and proven permission/identity rules.
+#### MO-S.6F.0A — Assignment Import Identity / Authority Audit
+
+Status: **ASSIGNMENT IMPORT IDENTITY / AUTHORITY AUDIT COMPLETE — RUNTIME
+UNIMPLEMENTED**.
+
+This is a docs/read-only architecture decision. It implements no parser,
+resolver, preview route, confirmation route, assignment/member writer,
+notification producer, model, migration, dependency, or data operation.
+
+##### Persisted identity and current write-path truth
+
+The importer must preserve the existing domain split:
+
+| Meaning | Persisted object | Import consequence |
+| --- | --- | --- |
+| Candidate membership on one exact team | `TeamMembership` | A candidate is team-scoped and may be linked to a Django `User` or be display-name-only. Membership is not weekly serving. |
+| Weekly event/team schedule | `TeamAssignment` | One current row is a row in `scheduled`, `confirmed`, or `prepared` state. `completed` and `cancelled` are history/non-current evidence. |
+| Weekly serving person | `TeamAssignmentMember` | This row points to the exact `TeamMembership`, stores confirmation state, and drives My Serving for linked users. |
+| Long-term team authority | `MinistryTeamRoleAssignment` | Active date-valid exact-team Lead/Coordinator rows grant normal exact-team management; they are not serving rows. |
+
+The final serving-person identifier is therefore an exact existing
+`TeamMembership.id` under the exact destination `MinistryTeam`, not merely a
+global `User.id` or a display name. `TeamAssignmentMember.clean()` rejects a
+membership from another team and an inactive membership, and its unique
+constraint prevents the same membership from appearing twice on one
+assignment.
+
+`TeamMembership.user` is optional. An unlinked row must have a nonblank stored
+`display_name`; a linked row may also have a stored display name that overrides
+the linked user's current full name/username for canonical display. The current
+model allows inactive history and allows the same user to have memberships on
+multiple teams. Model validation prevents two active memberships for the same
+user on the same team, but there is no database `UniqueConstraint` for that
+rule. Unlinked duplicate display names are unrestricted, including within one
+team. Display names are mutable. These facts make global-user derivation and
+name-only authority unsafe.
+
+The normal Team Schedule and generic create/edit views save the parent and
+members in one transaction. Their shared `sync_assignment_members()` is an
+exact set replacement: it deletes omitted `TeamAssignmentMember` rows, retains
+matching rows and their `confirmed_at`/`confirmation_note`, and creates newly
+selected rows unconfirmed. It does not itself reset parent status or advance
+`ServiceEvent.scheduling_revision`. This helper may be reused only after a
+separate reviewed replacement contract exists; it is not safe as the implicit
+MO-S.6F V1 policy.
+
+There is no database uniqueness constraint for current event/team
+`TeamAssignment` rows. `TeamAssignmentForm` blocks another non-cancelled row,
+while Team Schedule reasons over current rows and may create around historical
+completed/cancelled rows. Duplicate current rows remain representable and must
+block import. This form/history difference is a product-policy gate, not a
+license for the importer to select one row.
+
+My Serving queries the linked user's own active `TeamAssignmentMember` through
+an active membership/team and excludes cancelled assignments and draft/
+cancelled events. Display-name-only memberships can be scheduled but cannot
+self-confirm or create a personal My Serving item. Member confirmation is
+POST-only for the exact linked user/member row; the last active member to
+confirm may transition the parent assignment to `confirmed`.
+
+##### Real workbook assignment-source evidence
+
+The external workbook with SHA-256
+`186735DC723979AA49D209C92D4155BE533D6AFE9253CDB5D8B809A77C8B07AA` was
+re-inspected read-only for this audit; it is still not stored in the
+repository. The existing Slice 8 parser intentionally consumes only `All 930`
+columns A:B and signs no ignored person text. MO-S.6F must use a new, separately
+versioned assignment-source contract rather than silently widening the Slice 8
+parser contract.
+
+For the 52 supported Sunday rows (4 and 6:56), the observed source is:
+
+| Column | Header / apparent semantic | Observed value shape | MO-S.6F conclusion |
+| --- | --- | --- | --- |
+| B | `Worship/AV @Bethany` | 52 literal strings; A/C1/C2/C3 prefix plus leader/free text; 26 distinct values; parenthetical annotations, one slash-combined case, one `TBD`, and one mixed Chinese/English value occur | Proven rotation input, but not proven to be a complete Worship roster. Do not import a Worship roster from B in V1. |
+| C | `BB & Offering` | 32 populated literal strings and 20 blanks; populated cells use slash-oriented slot text | Not an approved Worship/AVL destination in this slice. |
+| D | `Speaker @Bethany` | 44 populated literal strings and 8 blanks; includes multi-name punctuation | Speaker scheduling is outside MO-S.6F. |
+| E | `projector` | 52 populated literal strings; 17 distinct values; 19 cells contain slash-combined values; English, Chinese, and mixed-script values occur | Plausible Projection assignment source, but requires a column-specific one-or-two-token slash grammar and product confirmation that the cell is the complete roster. |
+| F | `Sound` | 26 populated literal strings and 26 blanks; four distinct single Latin-script values; no observed separator | Narrowest syntactic downstream candidate, but blank/completeness semantics and the first V1 scope still require product-owner approval. |
+| G | `Recording` | 24 populated literal strings and 28 blanks; four distinct single Latin-script values; no observed separator | The workbook semantic exists, but the reviewed deployment has no separate `recording` team key. Mapping it to Video or another team would be an unsupported inference. |
+| H | `Video` | 39 populated literal strings and 13 blanks; 29 distinct values; every populated cell has three slash-separated segments; English, Chinese, and mixed/bilingual combinations occur | Plausible Video source, but only under an exact three-nonblank-token column contract and product confirmation that all three segments are serving people. |
+| I | `Light` | all 52 source cells are formulas; 50 cached strings and 2 cached blanks; four distinct cached identities derived from column B token text | Formula-driven identity is excluded from V1. Cached names are evidence only and must not schedule a person. |
+
+Repeated values occur across Sundays. The workbook contains English, Chinese,
+and mixed/bilingual identity forms, but it supplies no stable person ID. Short
+strings cannot safely be classified as initials versus canonical names without
+human confirmation. The observed punctuation does not prove a general name
+grammar. No comma, ampersand, parentheses, Chinese punctuation, hyphen, or free
+text may become a generic splitter merely because it appears somewhere in the
+workbook.
+
+The remaining semantic questions are not obtainable from cell syntax alone:
+whether B names one Worship leader or the complete Worship roster; whether a
+blank F/G/H/I cell means no server, not yet planned, inherited/paired service,
+or intentionally omitted; whether E/H slash segments are always independent
+people; and whether `Recording` belongs to the configured Video team. These are
+**REAL WORKBOOK EVIDENCE REQUIRED plus product-owner confirmation** before the
+corresponding column is enabled.
+
+The checkout's local operational SQLite file is not current enough to prove
+membership mappings: read-only ORM inspection stops because its
+`ministry_ministryteam` table predates `team_key`. This audit did not migrate or
+write that database. Before 1A is approved, a schema-current target-like or
+separately supplied read-only dataset must prove the active exact-team
+`TeamMembership` candidates, duplicate-visible-identity cases, linked/unlinked
+coverage, and every proposed source-token mapping. Local stale data is neither
+production proof nor permission to infer identities.
+
+##### Identity-resolution decision
+
+| Option | Correctness and team identity | Bilingual/duplicates/unlinked | Cost and stale risk | V1 verdict |
+| --- | --- | --- | --- | --- |
+| A. Exact source text to exact active canonical membership display identity | Safe only when exactly one active membership under the exact mapped team matches the frozen normalization | Exact Unicode can handle any script but not aliases; duplicate visible identities block; linked and unlinked rows both participate | No schema; mutable display identity requires confirmation-time revalidation | Allowed only as a unique-exact preview classification, never as a fallback when zero or multiple rows match |
+| B. Explicit reviewed source token to exact existing membership ID in each preview | Strongest current identity; directly produces the FK required by `TeamAssignmentMember` | Handles bilingual/alias/duplicate display safely because the reviewer selects one exact team membership; supports unlinked rows | Repeated mappings create operational burden; signed proposal and current-truth revalidation bound staleness | **Selected no-schema V1 authority** |
+| C. Persistent administrator-managed alias mapping | Can make repeated imports efficient if keyed by integration revision + column/team semantic + exact alias -> membership | Handles bilingual aliases and duplicates but stores person-identifying aliases and becomes stale when membership/team/display identity changes | New schema, admin lifecycle, privacy/retention, collision, reassignment, and deactivation rules | Deferred until repeated preview evidence proves the burden; not justified for V1 |
+| D. Global User match then derive membership | `User` is not the serving FK and may have zero/multiple relevant team memberships | Excludes unlinked members and can choose the wrong team-specific row | Hidden derivation and stale membership risk | Rejected as authority; at most future reviewer-only context |
+| E. Fuzzy/similarity/substring matching | Cannot prove person or team identity | Unsafe for abbreviations, bilingual names, initials, punctuation, aliases, and duplicates | High false-positive/privacy risk | Rejected for automatic or preselected assignment; a fuzzy result must never silently schedule a person |
+
+One request-scoped mapping should be keyed by the exact adapter revision,
+source column semantic/destination team, and exact normalized source token.
+Repeated occurrences of that token in the same reviewed workbook may reuse the
+chosen membership ID. The confirmation proposal stores canonical membership
+IDs and privacy-safe token digests/source coordinates, not raw workbook free
+text in durable audit. It creates neither a `User` nor a `TeamMembership`.
+
+##### Fail-closed source tokenization
+
+There is no approved general-purpose name parser. V1 accepts only a
+column-specific grammar that has been separately enabled in the code-owned
+adapter:
+
+1. Normalize Unicode to NFC and trim only outer whitespace. Do not case-fold,
+   transliterate, strip punctuation, reorder names, or infer an English/Chinese
+   equivalent.
+2. A proven single-person literal column accepts one complete nonblank cell as
+   one source token. `TBD`, placeholder text, annotations, replacement/
+   substitute notation, and unexpected free text are blockers.
+3. A multi-person column may split only on the one exact delimiter and exact
+   segment-count/blank rules frozen for that column. E and H do not establish a
+   cross-column slash rule. Empty segments, extra delimiters, duplicate tokens,
+   or unexpected punctuation block the event/team proposal.
+4. Blank cells produce no assignment proposal only after the product owner
+   confirms that blank means no scheduled person for that exact column. Blank
+   never means remove an existing CMS member by default.
+5. A formula in an assignment-source cell blocks V1. Cached formula output is
+   not canonical identity.
+6. A token resolving to zero active exact-team memberships is `unresolved`; a
+   token resolving to more than one is `ambiguous`. Neither may confirm without
+   an explicit per-preview membership choice.
+
+##### Team, event, and governance authority
+
+`MinistryTeam.team_key` is the correct stable deployment-local destination
+identity. It is unique, normalized, independent of mutable bilingual names,
+and grants no behavior. The code-owned deployment adapter maps an enabled
+workbook column semantic to one configured exact `team_key`; generic CMS code
+must not branch on key text or infer a team from a header/name. Confirmation
+re-resolves and binds both the current team PK and key, activity, and
+assignability. No hard-coded database PK is configuration.
+
+The reviewed adapter mapping plus `team_key` is sufficient authority for the
+destination selection; a second arbitrary per-upload team picker would weaken
+the contract. Preview must nevertheless show the source column and resolved
+localized destination team, and the final staff confirmation reviews that
+mapping. Column G/Recording has no approved mapping and remains blocked.
+
+Target events reuse the Slice 8/9 identity contract without copying its
+version: exact `ServiceEvent.service_profile` FK to the permanent configured
+`ServiceProfile.key`, exact supported local date/09:30/type, canonical
+published/completed lifecycle and audience readiness, and exact current event
+ID. The retired `ServiceEvent.service_profile_key` field has no role. MO-S.6F
+creates no event and must mint a distinct assignment-import parser/preview/
+confirmation version even when it reuses Slice 8 normalized dates and Slice 9
+target matching helpers.
+
+For a Worship destination, the row is valid only for the exact canonically
+eligible selected Worship Team and current ownership must be non-conflicting.
+For a downstream destination, exact team ownership remains independent of
+Worship-pool/planner authority. Required, additional, and selected-Worship
+provenance are preview facts only; import creates no RequiredTeam row and never
+retargets an assignment.
+
+##### Narrow V1 target-assignment policy
+
+The smallest safe follow-on is one explicitly enabled literal downstream
+column, not Worship plus all AVL columns. Column F/Sound is the narrowest
+syntactic candidate, but it is not approved until the owner confirms complete
+roster and blank semantics. The adapter architecture may later add E/H and a
+separately justified Worship source without changing generic assignment
+identity.
+
+The recommended initial write policy is **create-current-only**:
+
+| Current event/team state | V1 result |
+| --- | --- |
+| No current assignment and no blocking history policy | Propose one new `scheduled` assignment with blank notes and the exact reviewed membership set; new member rows are unconfirmed |
+| One current assignment whose exact canonical membership IDs already equal the workbook proposal | `roster_already_matches` no-op; preserve status, notes, review fingerprint, member IDs, confirmations, and timestamps |
+| One current assignment with no members, additions, omissions, or any different member set | Block as `existing_roster_differs`; V1 does not add, remove, or replace |
+| Completed or cancelled historical assignment(s), with no current row | Preserve every historical row; whether history permits a new current row is a product-owner decision because current UI paths differ |
+| More than one current assignment for the exact pair | Block as `duplicate_target_assignment`; never choose one |
+| Inactive/nonassignable team, wrong-team/inactive membership, event/profile/audience/governance conflict | Block with no write |
+
+This contract has no destructive omission semantics, no confirmation reset
+rule, and no existing-roster update. A later replacement slice may reuse
+`sync_assignment_members()` only after preview shows exact additions/removals,
+the owner approves omitted-member semantics, retained confirmations are
+preserved, newly added rows remain unconfirmed, removed confirmations are
+visibly acknowledged, and parent `confirmed` status behavior is explicitly
+resolved. Import never silently retargets an existing assignment.
+
+A Worship roster change changes the canonical MO-S.6E context fingerprint.
+MO-S.6F must not write any downstream
+`reviewed_worship_context_fingerprint`; existing downstream fingerprints then
+naturally compare different and become `REVIEW_RECOMMENDED` when appropriate.
+New downstream assignments remain `UNKNOWN` until the owning team actually
+reviews through the existing acknowledgement workflow.
+
+##### Zero-write preview contract
+
+Preview is authenticated active staff/superuser only and writes nothing. It
+must classify, at minimum:
+
+- source: `exact_source_token`, `unsupported_source_token`, blank/no proposal,
+  formula blocked, explicit mapping required;
+- identity: exact resolved membership, unresolved, ambiguous, inactive
+  membership, wrong-team membership, stale mapped membership;
+- target assignment: missing assignment, existing exact current assignment,
+  roster already matches/no-op, additions/removals/replacement detected but
+  blocked in create-only V1, duplicate current assignment, completed/cancelled
+  history present;
+- target validity: invalid/ineligible team, event blocker, assignment/governance
+  blocker; and
+- proposal: create scheduled assignment, no-op, or blocked.
+
+The staff review shows source sheet/cell/date, raw source token only within the
+bounded staff page, source column semantic, resolved localized team, and the
+chosen membership's canonical display identity plus linked/unlinked state.
+Where duplicate visible identities need disambiguation, a bounded internal
+membership record identifier may be shown; email, notes, contact/profile data,
+confirmation notes, unrelated memberships/users, and other private fields are
+excluded.
+
+No preview action writes `TeamAssignment`, `TeamAssignmentMember`, confirmation
+state, `TeamMembership`, `User`, Notification, reviewed Worship-context
+fingerprint, RequiredTeam, audience, ServiceEvent, or scheduling revision.
+
+##### Confirmation, concurrency, notifications, audit, and idempotency
+
+Annual bulk authority remains active staff/superuser only at upload, preview,
+proposal mint, and inside confirmation. Global assignment manager, exact-team
+Lead/Coordinator, Worship-pool Lead/Coordinator, event planner/coordinator,
+audience, belonging, and serving do not imply annual bulk authority. A future
+single-team import is a separate product use case.
+
+MO-S.6F may reuse the Slice 9 pattern: a distinct signed, expiring, user-bound
+normalized proposal; exact event IDs; expected scheduling revisions; one
+operation UUID; current-truth recomputation; deterministic ordering; one outer
+transaction; SQLite first-write/database-wide writer exclusion; stale/busy/
+audit/postcondition rollback; and `LogEntry`. It may not claim SQLite row locks.
+
+Event revision alone is insufficient because pure roster/member changes do not
+advance it. The confirmation service therefore needs a new no-schema
+**assignment/member baseline primitive**. The signed state must bind:
+
+- exact event ID and expected scheduling revision;
+- exact team ID/key and enabled column semantic;
+- expected absence or exact current assignment ID, event/team/status,
+  `updated_at`, and reviewed-fingerprint baseline;
+- sorted `TeamAssignmentMember.id`/`TeamMembership.id` roster identities and
+  confirmation-presence baseline where removal could matter; and
+- each proposed membership's current team, active state, linked `user_id` or
+  unlinked privacy-safe display-identity digest, and `updated_at`.
+
+Confirmation first claims each distinct changed event revision in ascending ID
+order, establishing the target SQLite writer boundary, then reloads and
+recomputes every event/team/assignment/member/source mapping fact before any
+assignment write. Multiple team proposals for one event claim that event once.
+Create paths must recheck that no current assignment appeared, save validated
+parents/members in deterministic order, and verify exact postconditions.
+File-backed two-connection SQLite tests are mandatory. A future non-SQLite
+backend requires a separately verified locking/conditional-write contract.
+
+The existing NOTIFY.1C producer is invoked only by approved interactive views;
+Admin/import/direct ORM writes do not emit it automatically. MO-S.6F V1 must
+not call that producer and must emit no per-assignment notification burst. A
+future bounded summary is a separate notification-product decision.
+
+One `LogEntry` per created assignment, sharing the operation UUID, is enough
+for V1; no `ImportRun` model is justified. The privacy-bounded message includes
+actor (from LogEntry), operation UUID, workbook SHA-256, parser/import contract
+versions, event ID, team ID, added membership IDs, and an empty removed-ID set.
+It excludes raw workbook text, names, email/contact data, profile data, notes,
+and confirmation notes. Any audit failure rolls back the whole confirmation.
+
+Idempotency is canonical-ID based: the same source/current membership set is a
+no-op; a changed workbook hash/token digest is a different source; changed
+assignment/member/membership truth makes the proposal stale; and a successful
+POST advances claimed revisions/creates the row so replay or double POST is
+stale. Matching display text alone is never idempotency proof.
+
+##### Decision matrix
+
+Classification: **A** repository truth resolves; **B** real workbook evidence
+required; **C** product-owner decision required; **D** future/deferred.
+
+| Decision | Class | 0A disposition |
+| --- | --- | --- |
+| First V1 team/column scope | C | Recommend one literal downstream column; F/Sound is the narrowest syntactic candidate, not approved automatically |
+| Identity token grammar | B | Column-specific only; semantic completeness, blank meaning, and allowed segments must be confirmed against the real operational workbook |
+| Explicit mapping UX | A | Per-preview exact source token -> exact active destination-team `TeamMembership.id`; unique exact match may classify resolved, zero/multiple requires explicit choice/block |
+| Alias persistence | D | No alias schema until repeated preview evidence proves operational burden |
+| Create versus update `TeamAssignment` | C | Recommend create-current-only; product owner must resolve completed/cancelled history treatment before confirmation runtime |
+| Additions-only versus replacement | C | Neither in initial V1; any existing different roster blocks. Later mutation policy requires separate approval |
+| Omitted workbook member semantics | C | Never remove by default; blank/no-proposal meaning must be approved per column |
+| Confirmation preservation/reset | A | Create-only/no-op preserves all existing confirmations; new rows are unconfirmed. Changed-roster reset policy is deferred |
+| Status on creation | A | Existing model/Team Schedule default is `scheduled`; preserve blank notes |
+| Bulk authority | A | Active staff/superuser only, rechecked in confirmation transaction |
+| Notification policy | A | Suppress in V1; future bounded summary is D/deferred |
+| Audit shape | A | Shared-operation per-created-assignment `LogEntry`, privacy-bounded IDs/hash/versions; no `ImportRun` |
+| Concurrency primitive | A | Reuse event CAS as SQLite first-write barrier plus new assignment/member baseline fingerprint and full post-barrier recomputation; event CAS alone is insufficient |
+| Schema required | A | No schema for preview/create-only V1; alias or ImportRun schema is not justified |
+
+##### Recommended separately approved implementation sequence
+
+**MO-S.6F.1A — Assignment-source contract + zero-write identity preview**
+
+- Scope: one owner-approved literal downstream column; separately versioned
+  parser extension; exact team-key mapping; column-specific tokenization;
+  exact-team membership resolution/mapping; full target/current-roster
+  classifications; signed request-scoped proposal.
+- Non-goals: confirmation/write, existing-roster mutation, aliases, User or
+  membership creation, notifications, Worship-context acknowledgement, new
+  events, additional columns.
+- Likely components: new ministry-owned assignment-import service beside the
+  existing XLSX adapter; gate-first events view/form/template extension; focused
+  fixtures/tests. Existing Slice 8 date/target helpers may be reused without
+  changing its V2/V3 contracts.
+- Schema/permission/write: no schema; staff/superuser only; zero writes.
+- Concurrency: signed current assignment/member/membership baselines for later
+  confirmation; no write/lock claim in preview.
+- Tests: real-workbook acceptance behind supplied path; literal/formula/blank/
+  delimiter/annotation/TBD cases; English/Chinese/mixed identity; linked/
+  unlinked/duplicate/wrong-team/inactive membership; every assignment state;
+  permission/privacy; exhaustive zero-write proof.
+- QA/gate: English desktop and Chinese mobile rendered preview/mapping QA;
+  product owner approves column grammar, blank/completeness meaning, and
+  destination team mapping before 1B.
+
+**MO-S.6F.1B — Create-only atomic confirmation and audit**
+
+- Scope: only missing-current assignments from a fully reviewed 1A proposal;
+  one `scheduled` parent with exact reviewed unconfirmed membership rows;
+  exact-roster no-op; all other current roster differences block; shared
+  operation audit.
+- Non-goals: update/add/remove/replace, confirmation reset, history deletion,
+  retarget, notification, aliases/ImportRun, User/membership/event/RequiredTeam/
+  audience/review-fingerprint writes.
+- Likely components: distinct confirmation service/decoder, POST-only result
+  view/template, `LogEntry` audit helper, focused file-backed concurrency tests.
+- Schema/permission/write: no schema; active staff/superuser only; one atomic
+  create-only assignment/member batch and audit.
+- Concurrency: distinct event revision claims plus assignment/member/membership
+  baseline recomputation after the SQLite first-write barrier; deterministic
+  parent/member order; exact postconditions; full rollback on stale/busy/
+  duplicate/audit failure.
+- Tests: authorization drift, signature/expiry/tamper/replay, current-assignment
+  race, pure-member race that does not bump event revision, membership identity/
+  activity race, multiple teams on one event, duplicate-current rows,
+  historical-state decision, governance, no-op, rollback, no notification, no
+  cross-domain writes.
+- QA/gate: rendered confirm/result/stale/replay QA; product-owner-reviewed
+  local or staging dry run first; production apply is a separate exact reviewed
+  authorization and must be followed by a fresh no-op preview.
+
+**MO-S.6F.1C — Optional existing-roster change contract (deferred)**
+
+- Scope only if real trial evidence requires it: choose additions-only or exact
+  reviewed replacement; show canonical additions/removals and confirmation/
+  parent-status effects.
+- Non-goals: automatic fuzzy resolution, silent omission removal, retargeting,
+  User/membership creation, alias persistence unless separately approved.
+- Schema: none expected for exact reviewed changes; an alias model remains its
+  own ADR/migration.
+- Permission/write/concurrency: staff/superuser bulk boundary; explicit
+  destructive confirmation; reuse the 1B baseline primitive and revalidate all
+  removed/retained member confirmation state.
+- Tests/QA/gate: removal and confirmation preservation/reset matrix,
+  `confirmed` parent behavior, notification decision, two-connection races,
+  rollback, bilingual rendered difference review, and a new production gate.
+
+Until the matrix's B/C gates are closed, only 1A zero-write preview work is a
+safe implementation candidate. MO-S.6F.0A itself changes no runtime behavior.
 
 ### MO-S.6G — Operational Board Polish
 

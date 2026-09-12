@@ -199,6 +199,15 @@ produced 52 no-op rows, 0 proposed changes, 0 blocked rows, and no confirmation
 action, confirming that production matches the reviewed annual Worship Team
 selection set.
 
+Docs/read-only `MO-S.6F.0A` now completes the assignment-import identity,
+authority, real-workbook source, mutation, and concurrency audit. It approves
+no importer runtime. The no-schema direction uses exact existing destination-
+team `TeamMembership` identity, an active staff/superuser-only zero-write
+preview, stable adapter-to-`MinistryTeam.team_key` mapping, and a separately
+versioned confirmation contract. The first enabled assignment column, blank/
+token semantics, and any existing-roster mutation remain explicit gates in the
+canonical Sunday Ministry Scheduling plan.
+
 `MO-S.REQUIRED.0A` is **EFFECTIVE REQUIRED-TEAM SEMANTICS / EVENT WORSHIP
 ENTRY AUDIT COMPLETE**. `MO-S.REQUIRED.1A` is **IMPLEMENTED / LOCAL VERIFIED /
 PRODUCTION RUNTIME VERIFIED**.
@@ -1687,9 +1696,13 @@ and bounded presentation. It adds no MO-S.6E Notification producer.
 Short next-candidate list:
 
 - MO-S.6D annual Worship Team workbook confirmation is production-applied and
-  product-owner verified through `MO-S.6D-SLICE9.1A`; assignment/member import,
-  annual-import notifications, arbitrary workbooks, and durable import history
-  remain separately unapproved;
+  product-owner verified through `MO-S.6D-SLICE9.1A`; docs/read-only
+  `MO-S.6F.0A` has completed the separate assignment-import authority audit,
+  but importer runtime, first-column/token/blank approval, existing-roster
+  mutation, annual-import notifications, arbitrary workbooks, and durable
+  import history remain separately unapproved. Only a one-column, staff/
+  superuser-only, zero-write identity preview is the next safe candidate after
+  its documented product/evidence gates close;
 - MO-S.6E.1A Worship-context staleness review is implemented, local verified,
   and production runtime verified, including the one-field SQLite concurrency
   hard gate and bilingual rendered QA; production `ministry.0005` is applied,

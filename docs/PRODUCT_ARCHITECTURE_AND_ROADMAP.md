@@ -10,7 +10,7 @@ producer after `REPOSITORY-AUDIT-CLOSEOUT.1A`), plus the docs-only
 producer. Docs/read-only `MO-S.6E.0A` now completes the Worship-context
 staleness repository audit and freezes the V1 nullable downstream-reviewed
 canonical-fingerprint contract; `MO-S.6E.1A` now implements that one-field
-advisory runtime with local acceptance complete.
+advisory runtime and is local verified and production runtime verified.
 Docs-only `MO-S.6E.0A-FU1` closes unlinked/display-name-only identity through a
 privacy-safe display digest and requires acknowledgement to match the protected
 canonical context actually rendered to the reviewer; `1A` preserves that bound.
@@ -1279,8 +1279,13 @@ acknowledgement; historically it authorized no runtime, migration, UI,
 notification, or data write.
 Docs-only `MO-S.6E.0A-FU1` further closes the display-name-only false-current
 case and the render-to-POST review binding. The separately approved
-`MO-S.6E.1A` now implements the contract; its additive migration has not been
-applied to normal-local or production data by this slice.
+`MO-S.6E.1A` now implements the contract. At that implementation milestone, the
+slice itself had not applied its additive migration to normal-local or production
+data. The 2026-09-11 production closeout now verifies additive `ministry.0005`
+applied, the physical fingerprint column present, and the read-only canonical
+projection of the two then-current eligible downstream assignments as 2 CURRENT
+/ 0 UNKNOWN / 0 REVIEW_RECOMMENDED, with no malformed persisted fingerprints.
+Those counts are a bounded production observation, not a product invariant.
 
 Still deferred unless separately approved and supported by real use:
 - Availability
@@ -1685,10 +1690,11 @@ Short next-candidate list:
   product-owner verified through `MO-S.6D-SLICE9.1A`; assignment/member import,
   annual-import notifications, arbitrary workbooks, and durable import history
   remain separately unapproved;
-- MO-S.6E.1A Worship-context staleness review is implemented and locally
-  accepted, including the one-field SQLite concurrency hard gate and bilingual
-  rendered QA; product-owner review/commit and any target migration application
-  remain separate next steps;
+- MO-S.6E.1A Worship-context staleness review is implemented, local verified,
+  and production runtime verified, including the one-field SQLite concurrency
+  hard gate and bilingual rendered QA; production `ministry.0005` is applied,
+  and the bounded read-only production projection observed 2 CURRENT / 0
+  UNKNOWN / 0 REVIEW_RECOMMENDED with no malformed fingerprints;
 - review Church Calendar limited-trial feedback before separately approving any
   broader calendar behavior such as notifications, external sync, attendance,
   authoring/management, staff dashboards, or CommunityActivity-to-ServiceEvent

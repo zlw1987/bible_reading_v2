@@ -36,8 +36,9 @@ event-planner, governed exact-event selection, operational reachability,
 rotation-planner confirmation/shared audit, bounded NOTIFY.1G, stable
 ServiceEvent profile identity, production-smoke-passed XLSX preview, and
 production-verified atomic annual Worship Team workbook confirmation through
-MO-S.6D-SLICE9.1A. Assignment/member import and MO-S.6E roster-change staleness
-remain separately deferred. |
+MO-S.6D-SLICE9.1A, plus the implemented/local-verified/production-runtime-
+verified MO-S.6E.1A Worship-context review warning and acknowledgement runtime.
+Assignment/member import remains separately deferred. |
 | Worship Rotation Governance | [`WORSHIP_ROTATION_GOVERNANCE_PLAN.md`](WORSHIP_ROTATION_GOVERNANCE_PLAN.md) | Canonical multi-campus Worship invariants through governed selection,
 operational reachability, planner confirmation/shared audit, bounded NOTIFY.1G,
 stable profile identity, and production-verified annual workbook confirmation.

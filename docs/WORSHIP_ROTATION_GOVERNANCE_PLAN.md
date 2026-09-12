@@ -927,8 +927,15 @@ display-identity fingerprinting and binds acknowledgement to the protected
 rendered context rather than silently accepting newer truth. `MO-S.6E.1A` now
 implements the additive nullable schema, shared canonical signature, bounded
 Team Schedule/Board UI, POST-only acknowledgement, and real SQLite first-write/
-current-truth hard gate. Existing member-facing assignment notifications do not
-solve that cross-team warning, and MO-S.6E V1 adds no notification producer.
+current-truth hard gate. Its status is **IMPLEMENTED / LOCAL VERIFIED /
+PRODUCTION RUNTIME VERIFIED**: production `ministry.0005` is applied, the
+fingerprint column exists, and the 2026-09-11 read-only canonical projection
+observed 2 CURRENT / 0 UNKNOWN / 0 REVIEW_RECOMMENDED across the two then-current
+eligible downstream assignments, with no malformed fingerprints. Those counts
+are bounded production evidence, not an invariant; UNKNOWN and
+REVIEW_RECOMMENDED remain supported. Existing member-facing assignment
+notifications do not solve that cross-team warning, and MO-S.6E V1 adds no
+notification producer.
 
 Scheduler-facing copy should say **Worship Team** / **敬拜团队**, for example
 "Current Worship Team" and "Change Worship Team." Reserve
@@ -941,10 +948,11 @@ The strict MO-S.6D-0A workbook decisions remain:
 
 - known code-owned `.xlsx` contract; only `All 930` A:B for the Bethany 9:30
   profile in the first importer;
-- exact `ServiceEvent.service_profile` FK / `ServiceProfile.key` matching, with
-  the transitional `ServiceEvent.service_profile_key` retained only as
-  compatibility/drift evidence and the first approved workbook setup value
-  `bethany_0930_cm`;
+- exact ServiceEvent.service_profile FK / ServiceProfile.key matching;
+- ServiceEvent.service_profile_key was transitional historical compatibility
+  storage and was removed by production-applied events/0013;
+- it no longer participates in current workbook matching, drift evidence, or
+  runtime identity.
 - exact local date/time/type/profile identity;
 - no fuzzy event or team matching, no hard-coded PKs, and no user/team creation;
 - no formula evaluation; cached date results only under the recorded structural
@@ -1066,7 +1074,7 @@ Each slice is separately approvable and must verify repository truth again.
 | 5 | **Worship Team operational reachability — IMPLEMENTED (`MO-S.6D-1D-C`; projection corrections `MO-S.6D-1D-C-FU1/FU2`)** | Team Schedule/Board queryset and projection change only; exact-team assignment permission unchanged; canonical eligibility fails closed; invalid raw selection never suppresses independent generic required/assignment participation; canonical ownership conflicts/ambiguity are review-only and non-actionable; no migration | selected-team-only rows, empty-coverage presentation, valid-selection de-dup, invalid required/assignment projection, off-team/out-of-scope conflict, multiple/duplicate ambiguity, global/exact-team behavior, planner/pool-Lead boundary, change/removal, privacy, no coverage/assignment/required-team writes | Rendered English desktop and Chinese mobile Team Schedule/Board QA completed in the implementation slice; FU1/FU2 are focused projection-only and test-verified |
 | 6 | **Worship Rotation Planner — IMPLEMENTED THROUGH `1B-B`** | Existing selector retains one-Sunday changes; `1A/FU1` remain side-effect-free; `1B-A1` owns the event revision/barriers/fingerprint-v3 foundation; `1B-B` adds POST-only signed confirmation and shared audit; no rule engine, roster mutation, notification, or BatchRun schema | expected-revision CAS first, full recomputation, stale/all-or-nothing rollback, all-selected revision advance, changed-only shared-operation LogEntry audit, replay/tail/privacy/zero-cross-domain-write coverage, and target-like file-backed SQLite proof | Rendered English desktop and Chinese mobile confirmable/blocked/success/replay/narrow-authority QA completed; deployment QA remains separate |
 | 7 | **Direct Worship Team change notification producer — IMPLEMENTED (`NOTIFY.1G`)** | Ministry-owned post-commit producer through Core port; no notification permission/schema inference; recipient-specific summarized batch delivery | exact role/date recipients, current-operational required/additional downstream bounds, Worship exclusion, dedupe, subset privacy, language/snapshot safety, disabled-module no-op, rollback/no-emission | Focused source/persistence tests complete; deployment QA remains separate |
-| 7A | **Stable ServiceEvent profile identity — IMPLEMENTED historical expansion (`MO-S.6D-PROFILE.1A`), superseded for runtime authority by generic configuration 5C-5F** | One optional, non-unique, validated `service_profile_key` now retained as compatibility/drift storage; the FK is the technical selector; grants no audience/permission/serving/recurrence meaning | lexical validation, duplicate profile reuse, ordinary-form exclusion, scheduling-revision advance/rollback, zero cross-domain side effects | No browser QA; no non-Admin surface changed |
+| 7A | **Stable ServiceEvent profile identity — IMPLEMENTED historical expansion (`MO-S.6D-PROFILE.1A`), superseded for runtime authority by generic configuration 5C-5F** | One optional,  the FK is the technical selector; grants no audience/permission/serving/recurrence meaning | lexical validation, duplicate profile reuse, ordinary-form exclusion, scheduling-revision advance/rollback, zero cross-domain side effects | No browser QA; no non-Admin surface changed |
 | 7B | **Profile target-event readiness audit — IMPLEMENTED, COMMITTED, AND HISTORICALLY RUN ON PRODUCTION (`MO-S.6D-PROFILE-SETUP.0A`, READ-ONLY); upgraded to FK-owned Readiness V2 by 5D** | Independent 52-Sunday local-date contract; resolved `ServiceProfile.key` and FK-selected canonical identity; legacy-only/drift blockers; requested-event-type candidate discovery; migration/schema gate; tagged-row, audience, untagged candidate, other-profile exact-time, and different-time parallel-service evidence; deterministic text/JSON stdout | exact/invalid/duplicate/out-of-contract tagged rows, untagged none/single/multiple review cases, other-profile non-candidate separation, different-time service isolation, profile-key length bound, schema-not-ready stop, privacy, full zero-write model/callback proof | Historical post-reset audit was setup-ready: 52 expected, 52 canonical, 52 ready exact matches, and zero missing/duplicate/invalid/ambiguous target rows; the later post-5F deployed read-only closeout is complete and verified |
 | 7C | **Canonical Bethany 09:30 TEST-data rebuild — PRODUCTION APPLY COMPLETE / VERIFIED (`MO-S.6D-PROFILE-SETUP.1A/FU1`)** | Dry-run default; three-part destructive gate including reviewed-state token; all-ServiceEvent/event-owned reset only; exact active `CHURCH -> campus -> CM`; atomic 52-Sunday setup; audit postcondition; no importer or Worship selection | deletion/cascade/preservation inventory, deterministic token, missing/malformed/wrong/stale rejection, exact local/DST contract, lifecycle-date/path binding, rollback, no-op repeat, post-reset `PROFILE SETUP READY` | Product-owner-reviewed production reset created 52 canonical events plus 52 exact CM audience rows; final audit returned 52/52 ready and `PROFILE SETUP READY` |
 | 8 | **Excel dependency/parser + preview — IMPLEMENTED / PRODUCTION READ-ONLY SMOKE PASSED (`MO-S.6D-SLICE8.1A/FU1/UX1`)** | `openpyxl==3.1.5`; strict known-workbook parser; fixed A/C1/C2/C3 vocabulary with counts and mapping controls derived from present tokens; blocked partial-mapping preview; exact persisted-profile target classification; signed user-bound normalized state; pre-openpyxl 5 MiB upload, 128-member, 20 MiB total-uncompressed, and 8 MiB single-member OOXML limits plus encrypted-member rejection; staff/superuser-only read-only upload/preview; wider compact operational matrix with sticky review context; no confirm route, data write, or migration | contract/header/geometry/date/formula/cache/token/profile/identity classification, altered/absent-token distributions, archive member/count/resource/encryption boundaries, signed semantic tamper, target-before-mapping precedence, incomplete/no-candidate/per-destination mapping blockers, lifecycle/audience/parallel evidence, roster/downstream impact, privacy/expiry, permission, zero-write tests, and desktop/mobile rendered QA | Real workbook SHA-256 `186735DC723979AA49D209C92D4155BE533D6AFE9253CDB5D8B809A77C8B07AA` accepted on local Python 3.14.7: 257,609 bytes, 46 members, 2,291,811 declared uncompressed bytes, 631,391-byte largest member, and observed A/C1/C2/C3 counts 12/13/13/14 (evidence, not an invariant). Production smoke on GoDaddy Python 3.11.15 imported openpyxl 3.1.5 and produced 52 supported Sundays, 52 exact targets, 0 no-op, 52 proposed changes, 0 blocked, and Complete mapping; preview stayed read-only. This is not Slice 9 readiness proof. |
@@ -1083,10 +1091,13 @@ read-only ownership facts; 4B enforces them for supported writes. Implemented
 slice 5 now ensures an imported Worship Team can be operationally reachable
 without false required coverage before slice 9. Implemented slice 6 precedes
 using annual import as a batch rotation tool. Slice 7 follows a proven change
-path. PROFILE.1A supplies Slice 8's stable field, PROFILE-SETUP.0A supplies the
-committed zero-write evidence tool, and PROFILE-SETUP.1A supplies the separately
-gated canonical TEST-data setup command. Production migrations/schema through
-`events/0011` are ready. The product-owner-reviewed production reset and post-
+path. PROFILE.1A historically introduced the transitional ServiceEvent profile-key
+field used during the early Slice 8 setup path; current Slice 8 target identity
+uses ServiceEvent.service_profile FK plus permanent ServiceProfile.key.
+PROFILE-SETUP.0A supplies the committed zero-write evidence tool, and
+PROFILE-SETUP.1A supplies the separately gated canonical TEST-data setup
+command. Production schema is current through events/0013, which removed the
+transitional ServiceEvent.service_profile_key field. The product-owner-reviewed production reset and post-
 apply audit are complete: 52/52 canonical targets are ready and the result is
 `PROFILE SETUP READY`. The target-event setup prerequisite is therefore closed.
 Slice 8/FU1/UX1 dependency, parser, bounded archive preflight, partial zero-

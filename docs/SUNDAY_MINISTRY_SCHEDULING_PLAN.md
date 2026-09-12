@@ -90,7 +90,8 @@ Docs/read-only `MO-S.6E.0A` now completes the Worship-context staleness
 repository audit and freezes a nullable downstream-reviewed canonical
 fingerprint contract. `MO-S.6E.1A` now implements that approved V1 runtime with
 one additive nullable field, centralized fingerprinting, Team Schedule review,
-POST-only **Mark Reviewed**, and Sunday Board review state.
+POST-only **Mark Reviewed**, and Sunday Board review state. Its current status is
+**IMPLEMENTED / LOCAL VERIFIED / PRODUCTION RUNTIME VERIFIED**.
 Docs-only `MO-S.6E.0A-FU1` closes two contract gaps without implementing that
 runtime: unlinked/display-name-only roster identity participates through a
 privacy-safe display-identity digest, and acknowledgement is bound to the exact
@@ -460,8 +461,7 @@ context but is now rejected by repository evidence.
 
 `MO-S.6E.1A` implements the approved V1 contract. It adds nullable, non-editable
 `TeamAssignment.reviewed_worship_context_fingerprint` through additive
-`ministry.0005` with no data migration or backfill, so every pre-existing row
-remains null / review-status-unknown. `worship_context.py` now produces one
+`ministry.0005` migration itself left pre-existing rows null/unknown until a later explicit review-capable workflow stored a fingerprint. `worship_context.py` now produces one
 typed canonical semantic consumed by both the existing narrow presentation and
 the versioned privacy-safe SHA-256 signature in `worship_context_review.py`.
 Team Schedule Save and the POST-only exact-team **Mark Reviewed** action accept
@@ -481,12 +481,36 @@ recommended; and the Team Schedule write plus acknowledgement commits as one
 atomic unit. Render A followed by Worship B therefore never silently
 acknowledges B, and a stale Team Schedule save rolls back all downstream edits.
 
-Local acceptance also verifies English desktop and Chinese 390x844 Team
-Schedule/Sunday Board rendering, independent conflict-warning visibility,
+The implementation-slice local acceptance verified English desktop and Chinese
+390x844 Team Schedule/Sunday Board rendering, independent conflict-warning visibility,
 successful and stale **Mark Reviewed** behavior, zero Notification emission,
 no `scheduling_revision` change for review-only writes, and null preservation
-for a pre-migration assignment. No normal-local or production migration was
-applied by this slice.
+for a pre-migration assignment. That implementation slice itself did not apply
+the migration to normal-local or production data.
+
+### Production runtime closeout — 2026-09-11
+
+Owner-run production verification records `MO-S.6E.1A` as **IMPLEMENTED / LOCAL
+VERIFIED / PRODUCTION RUNTIME VERIFIED**. The production migration inventory
+showed `ministry.0001` through `ministry.0007` applied, including additive
+`ministry.0005_teamassignment_reviewed_worship_context_fingerprint`. Production
+`manage.py check` reported `System check identified no issues (0 silenced)`.
+Physical/data inspection reported
+`reviewed_worship_context_fingerprint_present = True`,
+`assignments_total = 2`, `fingerprint_null = 0`, `fingerprint_nonnull = 2`,
+`fingerprint_malformed = 0`, and `malformed_assignment_ids = []`. Both persisted
+values were valid 64-character lowercase SHA-256-shaped fingerprints.
+
+A read-only canonical runtime projection found two eligible downstream Worship-
+review assignments (`eligible_downstream_assignments = 2`) and reported
+`review_states = {'current': 2}`: **2 CURRENT / 0 UNKNOWN / 0
+REVIEW_RECOMMENDED**. These counts are a bounded observation of the production
+rows present at verification time, not a product invariant; UNKNOWN and
+REVIEW_RECOMMENDED remain permanent supported runtime states. This verification
+changed no production data and does not establish broad production, scale,
+security, or cross-browser certification. No additional **Mark Reviewed** write
+or other UI-write smoke is required for this closeout, and the evidence does not
+establish which UI action originally persisted the two fingerprints.
 
 ### Canonical Worship-context semantic
 
@@ -636,7 +660,7 @@ irreversible historical event.
 The field has three fail-closed states:
 
 - null: **review status unknown**; all assignments existing at migration time
-  remain null, with no backfill pretending that a review occurred;
+  were initially left null, with no backfill pretending that a review occurred;
 - non-null and equal to the current signature: **current / reviewed**; and
 - non-null and different: **review recommended**.
 
@@ -2238,7 +2262,7 @@ re-upload of the same workbook produced 52 no-op rows, 0 proposed changes,
 - Status: `MO-S.6E.0A` **WORSHIP CONTEXT STALENESS AUDIT / V1 CONTRACT
   COMPLETE**; docs-only `MO-S.6E.0A-FU1` closes display-identity and rendered-
   context acknowledgement binding; `MO-S.6E.1A` is **IMPLEMENTED / LOCAL
-  ACCEPTANCE COMPLETE / READY FOR PRODUCT-OWNER REVIEW**.
+  VERIFIED / PRODUCTION RUNTIME VERIFIED**.
 - Goal: make possible downstream staleness visible without automation.
 - V1 decision: one nullable
   `TeamAssignment.reviewed_worship_context_fingerprint`, computed from the
@@ -2811,9 +2835,10 @@ These are genuine future decisions, not hidden implementation assumptions:
 The direct Worship Team change notification is not an open architecture item:
 `NOTIFY.1G-0A` closed its contract and `NOTIFY.1G` implements that bounded
 runtime. `MO-S.6E.0A/FU1` closed the separate roster-change staleness contract,
-and `MO-S.6E.1A` now implements its one-field advisory review runtime. Deployment
-or migration application to any normal-local/target database remains a
-separate authorized operation.
+and `MO-S.6E.1A` now implements its one-field advisory review runtime. Its
+additive `ministry.0005` migration is applied in production and its bounded
+production runtime/schema verification is complete. Any future production data
+mutation or deployment operation remains separately authorized.
 
 - Which teams participate in the default Sunday board, and how are combined or
   special services represented?

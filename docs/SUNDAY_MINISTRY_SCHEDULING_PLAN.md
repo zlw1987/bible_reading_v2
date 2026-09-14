@@ -97,11 +97,14 @@ runtime: unlinked/display-name-only roster identity participates through a
 privacy-safe display-identity digest, and acknowledgement is bound to the exact
 canonical context rendered to the reviewer.
 Docs/read-only `MO-S.6F.0A` now completes the assignment-import identity,
-authority, workbook-source, mutation, and concurrency audit. It freezes a
+authority, workbook-source, mutation, and concurrency audit. The product owner
+subsequently approved Column F/Sound as the first V1 source: every supported
+nonblank literal represents exactly one Sound person, while blank means no
+proposal/no write. `MO-S.6F.1A` is **IMPLEMENTED / LOCAL VERIFIED** as the
 no-schema, exact-`TeamMembership`-identity, staff/superuser-only, zero-write
-preview direction, but leaves the first source column and existing-roster
-mutation policy as explicit product-owner gates. Assignment import runtime
-remains unimplemented.
+mapping and assignment-state preview. It enables no other assignment column,
+and it explicitly excludes historical ServiceEvent backfill. Confirmation,
+assignment/member writes, and existing-roster mutation remain unimplemented.
 
 ## 1. Purpose
 
@@ -2628,7 +2631,8 @@ required; **C** product-owner decision required; **D** future/deferred.
 
 ##### Recommended separately approved implementation sequence
 
-**MO-S.6F.1A — Assignment-source contract + zero-write identity preview**
+**MO-S.6F.1A — Assignment-source contract + zero-write identity preview —
+IMPLEMENTED / LOCAL VERIFIED**
 
 - Scope: one owner-approved literal downstream column; separately versioned
   parser extension; exact team-key mapping; column-specific tokenization;
@@ -2652,6 +2656,46 @@ required; **C** product-owner decision required; **D** future/deferred.
   product owner approves column grammar, blank/completeness meaning, and
   destination team mapping before 1B.
 
+The implemented V1 adapter is deliberately deployment-named and accepts only
+Column F headed `Sound` from the already supported annual Worship workbook.
+A nonblank source cell must be one literal, normalized person token; formulas,
+errors, separators, annotations, replacement/TBD language, and unsupported
+types block that row. A blank cell means **no source proposal** and never means
+remove, clear, or replace an existing roster. No other assignment column is
+read. The destination is the exact active, assignable deployment-configured
+`MinistryTeam.team_key` `main.cm.digital.sound`; missing, duplicate, inactive,
+or non-assignable configuration fails closed.
+
+V1 does not backfill historical ServiceEvent occurrences. After exact target
+and membership resolution, a completed event or an event whose canonical
+effective end is already past is `HISTORICAL_EVENT_BLOCKER`, even when no Sound
+assignment exists or an exact current roster happens to exist. This remains
+distinct from `HISTORICAL_ASSIGNMENT_BLOCKER`, which describes completed or
+cancelled assignment history on an otherwise non-historical event. Blank rows
+remain `NO_SOURCE_PROPOSAL` regardless of event age.
+
+Identity review is limited to active `TeamMembership` rows for that exact team.
+Visible identity may come from the membership display name or its linked User,
+but mapping always selects the exact membership PK; there is no fuzzy,
+case-insensitive, email, User-PK, cross-team, or auto-create fallback. A unique
+exact visible-name match is only a prefill and remains explicitly reviewable.
+The signed user-bound preview binds the workbook hash, parser/mapping/preview
+versions, canonical profile/team identity, source coordinates/digests, exact
+event FK/Profile identity and revision, membership state, and complete current
+assignment/member baselines. It classifies create candidates, exact no-ops,
+different or duplicate current rosters, historical rows, invalid targets,
+unsupported source cells, unresolved identities, and blank no-proposal rows.
+
+This slice exposes upload, identity mapping, and final preview only. It creates
+or changes no User, membership, assignment, assignment member, event, audience,
+RequiredTeam, notification, or audit row; it advances no scheduling revision
+and registers no confirmation endpoint. `MO-S.6F.1B` remains separately
+unimplemented and unapproved. Focused Django response coverage verifies the
+English/Chinese workflow, privacy boundary, authorization, signing/staleness,
+all target classifications, and zero writes. Rendered browser QA remains open
+because the implementation environment had neither the Browser connector nor
+Playwright installed; no dependency was added for this slice.
+
 **MO-S.6F.1B — Create-only atomic confirmation and audit**
 
 - Scope: only missing-current assignments from a fully reviewed 1A proposal;
@@ -2669,6 +2713,9 @@ required; **C** product-owner decision required; **D** future/deferred.
   baseline recomputation after the SQLite first-write barrier; deterministic
   parent/member order; exact postconditions; full rollback on stale/busy/
   duplicate/audit failure.
+- History gate: confirmation must re-check the canonical event-history rule
+  after its write barrier; a reviewed create candidate that has become
+  completed or canonically past must fail closed without a write.
 - Tests: authorization drift, signature/expiry/tamper/replay, current-assignment
   race, pure-member race that does not bump event revision, membership identity/
   activity race, multiple teams on one event, duplicate-current rows,
@@ -2694,8 +2741,9 @@ required; **C** product-owner decision required; **D** future/deferred.
   `confirmed` parent behavior, notification decision, two-connection races,
   rollback, bilingual rendered difference review, and a new production gate.
 
-Until the matrix's B/C gates are closed, only 1A zero-write preview work is a
-safe implementation candidate. MO-S.6F.0A itself changes no runtime behavior.
+The matrix's 1A gates are now closed only for this zero-write Sound preview.
+Confirmation, any assignment mutation, and every additional column remain
+behind their B/C gates. MO-S.6F.0A itself changes no runtime behavior.
 
 ### MO-S.6G — Operational Board Polish
 

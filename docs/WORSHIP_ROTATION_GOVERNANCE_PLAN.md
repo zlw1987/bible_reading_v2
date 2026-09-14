@@ -48,9 +48,10 @@ event-planner
 prerequisite and Worship-specific pool semantics. The Campus, pool-
 configuration, event-responsibility, read-only governance, governed single-
 event mutation, operational-reachability, planner-confirmation, annual-workbook
-confirmation, and the bounded direct-change notification runtime are
-implemented; assignment import and any broader later notification expansion
-below require separate explicit approval.
+confirmation, the bounded Sound assignment zero-write preview, and the bounded
+direct-change notification runtime are implemented; assignment confirmation/
+writes and any broader later notification expansion below require separate
+explicit approval.
 
 [`GENERIC_DEPLOYMENT_CONFIGURATION_ARCHITECTURE.md`](GENERIC_DEPLOYMENT_CONFIGURATION_ARCHITECTURE.md)
 freezes the adjacent generic boundary. Service-profile defaults may name only explicit static assignable teams; the
@@ -1080,7 +1081,7 @@ Each slice is separately approvable and must verify repository truth again.
 | 7C | **Canonical Bethany 09:30 TEST-data rebuild — PRODUCTION APPLY COMPLETE / VERIFIED (`MO-S.6D-PROFILE-SETUP.1A/FU1`)** | Dry-run default; three-part destructive gate including reviewed-state token; all-ServiceEvent/event-owned reset only; exact active `CHURCH -> campus -> CM`; atomic 52-Sunday setup; audit postcondition; no importer or Worship selection | deletion/cascade/preservation inventory, deterministic token, missing/malformed/wrong/stale rejection, exact local/DST contract, lifecycle-date/path binding, rollback, no-op repeat, post-reset `PROFILE SETUP READY` | Product-owner-reviewed production reset created 52 canonical events plus 52 exact CM audience rows; final audit returned 52/52 ready and `PROFILE SETUP READY` |
 | 8 | **Excel dependency/parser + preview — IMPLEMENTED / PRODUCTION READ-ONLY SMOKE PASSED (`MO-S.6D-SLICE8.1A/FU1/UX1`)** | `openpyxl==3.1.5`; strict known-workbook parser; fixed A/C1/C2/C3 vocabulary with counts and mapping controls derived from present tokens; blocked partial-mapping preview; exact persisted-profile target classification; signed user-bound normalized state; pre-openpyxl 5 MiB upload, 128-member, 20 MiB total-uncompressed, and 8 MiB single-member OOXML limits plus encrypted-member rejection; staff/superuser-only read-only upload/preview; wider compact operational matrix with sticky review context; no confirm route, data write, or migration | contract/header/geometry/date/formula/cache/token/profile/identity classification, altered/absent-token distributions, archive member/count/resource/encryption boundaries, signed semantic tamper, target-before-mapping precedence, incomplete/no-candidate/per-destination mapping blockers, lifecycle/audience/parallel evidence, roster/downstream impact, privacy/expiry, permission, zero-write tests, and desktop/mobile rendered QA | Real workbook SHA-256 `186735DC723979AA49D209C92D4155BE533D6AFE9253CDB5D8B809A77C8B07AA` accepted on local Python 3.14.7: 257,609 bytes, 46 members, 2,291,811 declared uncompressed bytes, 631,391-byte largest member, and observed A/C1/C2/C3 counts 12/13/13/14 (evidence, not an invariant). Production smoke on GoDaddy Python 3.11.15 imported openpyxl 3.1.5 and produced 52 supported Sundays, 52 exact targets, 0 no-op, 52 proposed changes, 0 blocked, and Complete mapping; preview stayed read-only. This is not Slice 9 readiness proof. |
 | 9 | **Excel exact match/update confirmation — PRODUCTION APPLY COMPLETE / VERIFIED (`MO-S.6D-SLICE9.1A`; contract `SLICE9.0A`)** | Staff/superuser-only distinct 30-minute signed reviewed proposal; exact 52 existing events; scheduling-revision CAS plus current-truth recomputation; changed anchors plus all-selected revision claims; per-changed-event shared-operation LogEntry; no ImportRun, assignment/member/audience/RequiredTeam/event/team/structure write, or notification | strict proposal shape/user/expiry, 52-row completed+published atomic success, changed/no-op, identity/governance/ownership failures, stale/busy/replay/audit rollback, zero cross-domain/notification effects, and two-scenario target-like file-backed SQLite concurrency | Local English desktop / Chinese mobile QA passed; product-owner-reviewed production confirmation completed, followed by 52 no-op / 0 proposed / 0 blocked re-upload verification. |
-| 10 | **Later assignment import** | Deferred; would write TeamAssignment/member data and needs exact-team plus bulk authority and identity proof | unresolved/ambiguous people, explicit aliases, team ownership, no user creation, rollback/idempotency | Required; only after operational evidence |
+| 10 | **Sound assignment identity preview — IMPLEMENTED / LOCAL VERIFIED through `MO-S.6F.1A/FU1`; confirmation deferred** | Deployment-named Column-F/Sound adapter; exact active assignable `MinistryTeam.team_key`; explicit exact-team active `TeamMembership` review; canonical event-history no-backfill gate; user-bound signed assignment/member baselines; staff/superuser-only upload/mapping/preview; no confirmation route, schema, assignment/member/event/notification/audit write, or revision advance | literal/formula/error/blank/separator/annotation/TBD grammar, linked/unlinked/duplicate/wrong-team/inactive identity, explicit historical-event versus historical-assignment blockers, every current roster state, signature/expiry/tamper/staleness, permission/privacy, exhaustive zero-write domain proof | Focused Django response QA passed for English/Chinese workflow; rendered browser QA remains open because Browser/Playwright was unavailable and this slice added no dependency |
 
 Dependencies: slices 1, 2, 3, 4A, 4B, 5, and slice 6 through confirmation
 `1B-B` are implemented; docs-only `1B-A0` is complete. Slice 1 remains
@@ -1109,7 +1110,13 @@ only. `MO-S.6D-SLICE9.0A` closes the separate docs/read-only confirmation
 contract and repository audit; `MO-S.6D-SLICE9.1A` is PRODUCTION APPLY COMPLETE / VERIFIED. The
 product-owner-reviewed production confirmation is complete, and a fresh
 re-upload produced 52 no-op rows, 0 proposed changes, 0 blocked rows, and no
-confirmation action. Slice 10 remains later.
+confirmation action. Slice 10 is implemented only through the zero-write
+Column-F/Sound identity preview in `MO-S.6F.1A`. Its signed artifact is evidence
+for a separately approved confirmation design, not write authority.
+`MO-S.6F.1B`, every assignment/member mutation, existing-roster change,
+additional workbook column, alias, notification, and durable import-history
+capability remain later. V1 never backfills a completed or canonically elapsed
+ServiceEvent; any future 1B confirmation must re-check that condition.
 
 ## 18. Permission, privacy, and data invariants
 

@@ -29,6 +29,8 @@ from .services.worship_assignment_guard import (
     WORSHIP_ASSIGNMENT_RETARGET_ERROR_CODE,
 )
 
+from events.forms import WorshipWorkbookUploadForm
+
 
 class ServiceEventChoiceField(forms.ModelChoiceField):
     def __init__(self, *args, language="en", **kwargs):
@@ -1178,3 +1180,93 @@ class MinistryTeamRoleAssignmentForm(forms.Form):
         assignment = self._build_assignment()
         assignment.save()
         return assignment
+
+
+class SoundAssignmentWorkbookUploadForm(WorshipWorkbookUploadForm):
+    """The existing bounded XLSX upload checks with Sound-specific copy."""
+
+    def __init__(self, *args, language="en", **kwargs):
+        super().__init__(*args, language=language, **kwargs)
+        self.fields["workbook"].label = (
+            "上传年度工作簿（仅读取 F 列音控）"
+            if language == "zh"
+            else "Upload annual workbook (Sound Column F only)"
+        )
+
+
+class SoundAssignmentMappingForm(forms.Form):
+    signed_mapping_state = forms.CharField(widget=forms.HiddenInput)
+
+    def __init__(self, *args, language="en", mapping_review, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.language = language
+        self.mapping_review = mapping_review
+        candidate_choices = [
+            (
+                str(candidate.membership_id),
+                (
+                    f"{candidate.visible_identity} — 成员记录 #{candidate.membership_id} — "
+                    f"{'已关联用户' if candidate.linked_user_id else '仅显示姓名'} — "
+                    f"{mapping_review.team.get_name(language)}"
+                    if language == "zh"
+                    else (
+                        f"{candidate.visible_identity} — membership #{candidate.membership_id} — "
+                        f"{'linked' if candidate.linked_user_id else 'display-name only'} — "
+                        f"{mapping_review.team.get_name(language)}"
+                    )
+                ),
+            )
+            for candidate in mapping_review.candidates
+        ]
+        for review in mapping_review.token_reviews:
+            field_name = f"mapping_{review.index}"
+            field = forms.ChoiceField(
+                required=False,
+                choices=[
+                    (
+                        "",
+                        "请选择一个有效的音控团队成员记录"
+                        if language == "zh"
+                        else "Select an active Sound-team membership",
+                    ),
+                    *candidate_choices,
+                ],
+            )
+            field.label = (
+                f"来源文字“{review.token}” — {review.occurrence_count} 个主日"
+                if language == "zh"
+                else (
+                    f'Source token “{review.token}” — '
+                    f"{review.occurrence_count} Sundays"
+                )
+            )
+            if review.identity_state.value == "exact_prefill_available":
+                field.help_text = (
+                    "已按完全一致的可见身份预填；请明确复核后再生成预览。"
+                    if language == "zh"
+                    else (
+                        "Prefilled from one exact visible-identity match; "
+                        "review it explicitly before generating the preview."
+                    )
+                )
+            elif review.identity_state.value == "ambiguous":
+                field.help_text = (
+                    "存在多个完全一致的成员身份；必须明确选择。"
+                    if language == "zh"
+                    else "Multiple exact identities exist; an explicit choice is required."
+                )
+            else:
+                field.help_text = (
+                    "没有完全一致的成员身份；必须明确选择。"
+                    if language == "zh"
+                    else "No exact identity match exists; an explicit choice is required."
+                )
+            self.fields[field_name] = field
+            if not self.is_bound and review.prefill_membership_id is not None:
+                self.initial[field_name] = str(review.prefill_membership_id)
+
+    def selected_mapping(self):
+        return {
+            review.token: self.cleaned_data.get(f"mapping_{review.index}") or None
+            for review in self.mapping_review.token_reviews
+        }

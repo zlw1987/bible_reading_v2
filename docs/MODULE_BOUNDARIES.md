@@ -96,6 +96,21 @@ eligible derived Worship requirements (80 effective pairs) across 16 future
 reviewed events, all with `review_required = 0`; no derived row was persisted
 and no production write occurred. Their `selected_unscheduled` states are valid
 operational gaps pending matching Worship assignments, not configuration drift.
+`MO-S.6F.1A` is **IMPLEMENTED / LOCAL VERIFIED** within ministry's existing
+dependency on events as a deployment-named, integration-gated,
+staff/superuser-only annual-workbook Column-F/Sound identity preview. Events
+retains ownership of strict workbook/target parsing, while ministry consumes
+those facts for exact destination-team membership review and assignment-state
+classification. No new module dependency or parser ownership move is added. The
+adapter uses canonical `ServiceEvent.service_profile` FK/Profile identity and
+exact active `TeamMembership` identity on the configured active assignable
+team. It reads no other assignment column. Upload, mapping, and signed preview
+are zero-write: there is
+no confirmation route, schema, assignment/member/event/revision/user/
+membership/audience/RequiredTeam/notification/audit mutation, or permission
+expansion. Historical ServiceEvents are explicit no-backfill blockers. Future
+`MO-S.6F.1B` confirmation remains separately unimplemented and must re-check
+that history rule.
 During the 5D/5E transition, readiness, the retained bounded reset, ServiceEvent
 Admin, and Worship XLSX matching/confirmation switched to FK/Profile authority
 while compatibility storage still existed as drift evidence. The strict V2

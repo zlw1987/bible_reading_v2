@@ -17,6 +17,11 @@
         <a class="button" href="{% url 'create_team_assignment' %}">
             {% if language == "zh" %}新增排班{% else %}New Assignment{% endif %}
         </a>
+        {% if can_preview_sound_assignment_workbook %}
+        <a class="button button-secondary" href="{% url 'sound_assignment_workbook_preview' %}">
+            {% if language == "zh" %}音控工作簿预览{% else %}Sound Workbook Preview{% endif %}
+        </a>
+        {% endif %}
     </div>
     {% endif %}
 </div>

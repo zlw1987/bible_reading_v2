@@ -4,15 +4,16 @@ from urllib.parse import urlencode
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
-from django.core.exceptions import ValidationError
+from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import OperationalError, transaction
 from django.db.models import Q
+from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.dateparse import parse_date
 from django.utils.http import url_has_allowed_host_and_scheme
-from django.views.decorators.http import require_GET, require_POST
+from django.views.decorators.http import require_GET, require_http_methods, require_POST
 
 from accounts.language import get_user_language
 from accounts.ordering import order_team_memberships_by_visible_identity
@@ -20,6 +21,11 @@ from accounts.serving_readiness import add_serving_readiness_warnings
 from accounts.unit_management import (
     can_manage_unit_coworkers,
     get_user_active_structure_roles,
+)
+from core.integration_registry import (
+    IntegrationDisabled,
+    is_integration_enabled,
+    require_integration_enabled,
 )
 from events.models import (
     ServiceEvent,
@@ -39,6 +45,8 @@ from .forms import (
     MinistryTeamParentTeamLinkForm,
     MinistryTeamRoleAssignmentForm,
     MinistryTeamStructureForm,
+    SoundAssignmentMappingForm,
+    SoundAssignmentWorkbookUploadForm,
     TeamAssignmentConfirmForm,
     TeamAssignmentForm,
     TeamScheduleAssignmentForm,
@@ -126,6 +134,7 @@ from .structure_map import (
 
 MY_SERVING_WEEK_DAYS = 7
 LEADER_NEEDS_ATTENTION_DAYS = 7
+ANNUAL_WORKBOOK_INTEGRATION_KEY = "svca_bethany_2026_worship_xlsx"
 
 
 def ministry_ui_text(language, key):
@@ -2259,6 +2268,184 @@ def confirm_bible_study_role_serving(request, meeting_id):
     return redirect("my_serving")
 
 
+def _sound_preview_error_text(language, error):
+    from .services.sound_assignment_xlsx_preview import (
+        SoundDestinationTeamError,
+        SoundDestinationTeamErrorCode,
+    )
+
+    if isinstance(error, SoundDestinationTeamError):
+        labels = {
+            SoundDestinationTeamErrorCode.MISSING: (
+                "找不到已配置的音控团队。"
+                if language == "zh"
+                else "The configured Sound team is missing."
+            ),
+            SoundDestinationTeamErrorCode.DUPLICATE: (
+                "音控团队技术标识存在冲突。"
+                if language == "zh"
+                else "The configured Sound team identity is duplicated."
+            ),
+            SoundDestinationTeamErrorCode.INACTIVE: (
+                "已配置的音控团队目前未启用。"
+                if language == "zh"
+                else "The configured Sound team is inactive."
+            ),
+            SoundDestinationTeamErrorCode.NON_ASSIGNABLE: (
+                "已配置的音控团队不可用于排班。"
+                if language == "zh"
+                else "The configured Sound team is not assignable."
+            ),
+        }
+        return labels.get(error.code, str(error))
+    if hasattr(error, "code"):
+        return (
+            "工作簿不符合已支持的年度模板：" + str(error.code.value)
+            if language == "zh"
+            else "Workbook does not match the supported annual contract: "
+            + str(error.code.value)
+        )
+    return str(error)
+
+
+def _sound_preview_context(
+    *, language, upload_form=None, mapping_review=None, mapping_form=None, preview=None
+):
+    return {
+        "language": language,
+        "upload_form": upload_form
+        or SoundAssignmentWorkbookUploadForm(language=language),
+        "mapping_review": mapping_review,
+        "mapping_form": mapping_form,
+        "preview": preview,
+    }
+
+
+@login_required
+@require_http_methods(["GET", "POST"])
+def sound_assignment_workbook_preview(request):
+    """Staff-only Column-F mapping and assignment preview; writes no domain row."""
+
+    try:
+        require_integration_enabled(ANNUAL_WORKBOOK_INTEGRATION_KEY)
+    except IntegrationDisabled as exc:
+        raise Http404 from exc
+
+    from ministry.services.sound_assignment_xlsx_preview import (
+        SignedWorkbookStateError,
+        SoundDestinationTeamError,
+        SoundMappingStateError,
+        SoundMappingValidationError,
+        TargetServiceProfileError,
+        WorkbookContractError,
+        build_sound_assignment_preview,
+        decode_sound_assignment_mapping,
+        prepare_sound_assignment_mapping,
+        user_can_preview_sound_assignments,
+    )
+
+    if not user_can_preview_sound_assignments(request.user):
+        raise PermissionDenied
+    language = get_user_language(request)
+    if request.method == "GET":
+        return render(
+            request,
+            "ministry/sound_assignment_workbook_preview.html",
+            _sound_preview_context(language=language),
+        )
+
+    if request.FILES:
+        upload_form = SoundAssignmentWorkbookUploadForm(
+            request.POST, request.FILES, language=language
+        )
+        if not upload_form.is_valid():
+            return render(
+                request,
+                "ministry/sound_assignment_workbook_preview.html",
+                _sound_preview_context(language=language, upload_form=upload_form),
+            )
+        uploaded = upload_form.cleaned_data["workbook"]
+        try:
+            mapping_review = prepare_sound_assignment_mapping(
+                content=uploaded.read(), filename=uploaded.name, user=request.user
+            )
+        except (
+            WorkbookContractError,
+            SoundDestinationTeamError,
+            TargetServiceProfileError,
+            SoundMappingStateError,
+        ) as exc:
+            upload_form.add_error(None, _sound_preview_error_text(language, exc))
+            return render(
+                request,
+                "ministry/sound_assignment_workbook_preview.html",
+                _sound_preview_context(language=language, upload_form=upload_form),
+            )
+        mapping_form = SoundAssignmentMappingForm(
+            language=language,
+            mapping_review=mapping_review,
+            initial={"signed_mapping_state": mapping_review.signed_state},
+        )
+        return render(
+            request,
+            "ministry/sound_assignment_workbook_preview.html",
+            _sound_preview_context(
+                language=language,
+                upload_form=upload_form,
+                mapping_review=mapping_review,
+                mapping_form=mapping_form,
+            ),
+        )
+
+    signed_state = request.POST.get("signed_mapping_state", "")
+    try:
+        mapping_review = decode_sound_assignment_mapping(
+            signed_state, user=request.user
+        )
+    except (
+        SignedWorkbookStateError,
+        SoundDestinationTeamError,
+        TargetServiceProfileError,
+        SoundMappingStateError,
+    ) as exc:
+        upload_form = SoundAssignmentWorkbookUploadForm(language=language)
+        upload_form.add_error(
+            None,
+            "映射复核已失效，请重新上传工作簿。"
+            if language == "zh"
+            else "Mapping review is invalid or stale. Upload the workbook again.",
+        )
+        return render(
+            request,
+            "ministry/sound_assignment_workbook_preview.html",
+            _sound_preview_context(language=language, upload_form=upload_form),
+        )
+
+    mapping_form = SoundAssignmentMappingForm(
+        request.POST, language=language, mapping_review=mapping_review
+    )
+    preview = None
+    if mapping_form.is_valid():
+        try:
+            preview = build_sound_assignment_preview(
+                mapping_review=mapping_review,
+                selected_mapping=mapping_form.selected_mapping(),
+                user=request.user,
+            )
+        except (SoundDestinationTeamError, SoundMappingValidationError) as exc:
+            mapping_form.add_error(None, _sound_preview_error_text(language, exc))
+    return render(
+        request,
+        "ministry/sound_assignment_workbook_preview.html",
+        _sound_preview_context(
+            language=language,
+            mapping_review=mapping_review,
+            mapping_form=mapping_form,
+            preview=preview,
+        ),
+    )
+
+
 @login_required
 def team_assignment_list(request):
     manageable_teams = manageable_assignment_teams(request.user)
@@ -2456,6 +2643,11 @@ def team_assignment_list(request):
             "can_create": can_create,
             "can_show_new_assignment": can_show_new_assignment,
             "show_setup_actions": show_setup_actions,
+            "can_preview_sound_assignment_workbook": bool(
+                request.user.is_active
+                and (request.user.is_staff or request.user.is_superuser)
+                and is_integration_enabled(ANNUAL_WORKBOOK_INTEGRATION_KEY)
+            ),
         },
     )
 

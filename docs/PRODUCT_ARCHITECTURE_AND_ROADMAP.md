@@ -201,12 +201,23 @@ selection set.
 
 Docs/read-only `MO-S.6F.0A` now completes the assignment-import identity,
 authority, real-workbook source, mutation, and concurrency audit. It approves
-no importer runtime. The no-schema direction uses exact existing destination-
-team `TeamMembership` identity, an active staff/superuser-only zero-write
-preview, stable adapter-to-`MinistryTeam.team_key` mapping, and a separately
-versioned confirmation contract. The first enabled assignment column, blank/
-token semantics, and any existing-roster mutation remain explicit gates in the
-canonical Sunday Ministry Scheduling plan.
+no write runtime. Separately approved `MO-S.6F.1A` is now **IMPLEMENTED / LOCAL
+VERIFIED** as a no-schema, staff/superuser-only, zero-write identity preview for
+the deployment-named annual-workbook Column F/Sound contract. It maps only to
+the exact active assignable `main.cm.digital.sound` team and only through
+explicit review of active exact-team `TeamMembership` identity. Blank means no
+source proposal; formulas, errors, multi-person separators, annotations, and
+replacement/TBD grammar block. Existing exact rosters are no-ops, while
+different/duplicate current rosters and historical assignment rows block.
+Completed or canonically elapsed ServiceEvents are separately classified as
+historical-event blockers because V1 never reconstructs past serving data;
+blank historical rows remain no-proposal.
+The user-bound signed preview captures exact event, membership, assignment, and
+member baselines but grants no write authority. It has no confirmation route
+and mutates no assignment/member/event/revision/user/membership/audience/
+RequiredTeam/notification/audit state. `MO-S.6F.1B`, every mutation, and all
+additional columns remain separately deferred; any future confirmation must
+re-check that the event is still non-historical.
 
 `MO-S.REQUIRED.0A` is **EFFECTIVE REQUIRED-TEAM SEMANTICS / EVENT WORSHIP
 ENTRY AUDIT COMPLETE**. `MO-S.REQUIRED.1A` is **IMPLEMENTED / LOCAL VERIFIED /
@@ -1696,13 +1707,13 @@ and bounded presentation. It adds no MO-S.6E Notification producer.
 Short next-candidate list:
 
 - MO-S.6D annual Worship Team workbook confirmation is production-applied and
-  product-owner verified through `MO-S.6D-SLICE9.1A`; docs/read-only
-  `MO-S.6F.0A` has completed the separate assignment-import authority audit,
-  but importer runtime, first-column/token/blank approval, existing-roster
-  mutation, annual-import notifications, arbitrary workbooks, and durable
-  import history remain separately unapproved. Only a one-column, staff/
-  superuser-only, zero-write identity preview is the next safe candidate after
-  its documented product/evidence gates close;
+  product-owner verified through `MO-S.6D-SLICE9.1A`; assignment-import audit
+  `MO-S.6F.0A` is complete and the one-column staff/superuser-only zero-write
+  Column-F/Sound identity preview is implemented/local-verified through
+  `MO-S.6F.1A`. Its confirmation, all assignment/member mutation,
+  existing-roster changes, additional columns, annual-import notifications,
+  arbitrary workbooks, and durable import history remain separately
+  unapproved;
 - MO-S.6E.1A Worship-context staleness review is implemented, local verified,
   and production runtime verified, including the one-field SQLite concurrency
   hard gate and bilingual rendered QA; production `ministry.0005` is applied,

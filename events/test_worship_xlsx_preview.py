@@ -94,6 +94,7 @@ def build_known_workbook(
     b2=EXPECTED_TITLE,
     a3=None,
     b3="Worship/AV @Bethany",
+    f3="Sound",
     missing_sheet=False,
     outside_content=False,
     a4_formula=False,
@@ -101,6 +102,7 @@ def build_known_workbook(
     formula_overrides=None,
     cache_overrides=None,
     token_overrides=None,
+    sound_overrides=None,
     tokens=None,
 ):
     """Create a synthetic strict-contract workbook with real cached formulas."""
@@ -108,6 +110,7 @@ def build_known_workbook(
     formula_overrides = formula_overrides or {}
     cache_overrides = cache_overrides or {}
     token_overrides = token_overrides or {}
+    sound_overrides = sound_overrides or {}
     workbook = Workbook()
     first_title = "Wrong" if missing_sheet else EXPECTED_SHEET_NAMES[0]
     sheet = workbook.active
@@ -117,6 +120,7 @@ def build_known_workbook(
     sheet["B2"] = b2
     sheet["A3"] = a3
     sheet["B3"] = b3
+    sheet["F3"] = f3
     sheet.merge_cells("N2:O2")
     sheet["A4"] = "=1+1" if a4_formula else date(2026, 1, 4)
     sheet["A4"].number_format = "yyyy-mm-dd"
@@ -139,6 +143,8 @@ def build_known_workbook(
             sheet.cell(row_number, 1).number_format = "yyyy-mm-dd"
         token = token_overrides.get(row_number, tokens[index])
         sheet.cell(row_number, 2).value = f"{token}-Private Leader {row_number}"
+        if row_number in sound_overrides:
+            sheet.cell(row_number, 6).value = sound_overrides[row_number]
 
     for row_number in (57, 58):
         sheet.cell(row_number, 1).value = formula_overrides.get(

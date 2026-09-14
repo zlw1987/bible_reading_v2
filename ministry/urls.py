@@ -15,6 +15,11 @@ urlpatterns = [
         views.sunday_schedule_board,
         name="sunday_schedule_board",
     ),
+    path(
+        "assignments/import/sound-preview/",
+        views.sound_assignment_workbook_preview,
+        name="sound_assignment_workbook_preview",
+    ),
     path("assignments/new/", views.create_team_assignment, name="create_team_assignment"),
     path(
         "assignments/<int:assignment_id>/",

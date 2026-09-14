@@ -468,6 +468,20 @@ CMS concepts. They may appear in one deployment's data, a clearly named
 adapter, bounded historical/setup tooling, or tests. They must not become
 behavior gates in generic business logic.
 
+`MO-S.6F.1A` is the current bounded example of that adapter boundary. Its
+deployment-named annual-workbook adapter reads only Column F headed `Sound` and
+maps it to the reviewed local key `main.cm.digital.sound`. That key is adapter
+configuration, not a generic Sound taxonomy or name lookup. The destination
+must resolve to one active assignable team, and people resolve only through
+explicitly reviewed active `TeamMembership` rows on that exact team. The
+adapter has a separately versioned source, mapping, and signed-preview contract;
+blank means no source proposal, unsupported grammar blocks, and every existing
+different/duplicate/history roster blocks. Completed or canonically elapsed
+ServiceEvents are separate no-backfill blockers. The implemented surface is
+staff/superuser-only and zero-write. It adds no generic dependency, schema,
+confirmation endpoint, alias authority, or assignment/member mutation;
+`MO-S.6F.1B` remains separately deferred and must re-check event history.
+
 ## 3. Identity Model
 
 | Identity | Meaning | Portability |

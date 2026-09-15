@@ -12,6 +12,22 @@
 </div>
 
 <div class="card">
+    <h2 class="card-title">{% if language == "zh" %}2026 音控导入模板{% else %}2026 Sound Import Template{% endif %}</h2>
+    <p>
+        <a class="button button-secondary" href="{% url 'download_sound_assignment_workbook_template' %}">
+            {% if language == "zh" %}下载 2026 音控导入模板{% else %}Download 2026 Sound Import Template{% endif %}
+        </a>
+    </p>
+    <ul>
+        <li>{% if language == "zh" %}此导入功能仅可编辑 All 930 → Sound / F 列。{% else %}For this importer, edit only All 930 → Sound / Column F.{% endif %}</li>
+        <li>{% if language == "zh" %}一个受支持的非空单元格只代表一位音控人员。{% else %}One supported nonblank cell means exactly one Sound person.{% endif %}</li>
+        <li>{% if language == "zh" %}空白表示不提出安排，不会清除任何内容。{% else %}A blank makes no proposal and does not clear anything.{% endif %}</li>
+        <li>{% if language == "zh" %}不会补建历史主日的排班。{% else %}Historical Sundays are not backfilled.{% endif %}</li>
+        <li>{% if language == "zh" %}其他排班列尚未启用。{% else %}Other assignment columns are not enabled.{% endif %}</li>
+    </ul>
+</div>
+
+<div class="card">
     <p class="status status-warning">
         <strong>{% if language == "zh" %}预览本身不会更改任何服事排班。{% else %}This preview will not change any assignments.{% endif %}</strong>
     </p>

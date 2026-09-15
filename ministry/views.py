@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta
+import logging
 from types import SimpleNamespace
 from urllib.parse import urlencode
 
@@ -7,7 +8,7 @@ from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import OperationalError, transaction
 from django.db.models import Q
-from django.http import Http404
+from django.http import FileResponse, Http404, HttpResponseNotFound
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
@@ -135,6 +136,7 @@ from .structure_map import (
 MY_SERVING_WEEK_DAYS = 7
 LEADER_NEEDS_ATTENTION_DAYS = 7
 ANNUAL_WORKBOOK_INTEGRATION_KEY = "svca_bethany_2026_worship_xlsx"
+logger = logging.getLogger(__name__)
 
 
 def ministry_ui_text(language, key):
@@ -2326,6 +2328,53 @@ def _sound_preview_context(
         "preview": preview,
         "confirmation_proposal": confirmation_proposal,
     }
+
+
+@login_required
+@require_GET
+def download_sound_assignment_workbook_template(request):
+    """Stream the verified private template without parsing or rewriting it."""
+
+    try:
+        require_integration_enabled(ANNUAL_WORKBOOK_INTEGRATION_KEY)
+    except IntegrationDisabled as exc:
+        raise Http404 from exc
+
+    from ministry.services.sound_assignment_xlsx_preview import (
+        user_can_preview_sound_assignments,
+    )
+
+    if not user_can_preview_sound_assignments(request.user):
+        raise PermissionDenied
+
+    from ministry.services.sound_assignment_template import (
+        DOWNLOAD_CONTENT_TYPE,
+        DOWNLOAD_FILENAME,
+        SoundAssignmentTemplateUnavailable,
+        open_verified_sound_assignment_template,
+    )
+
+    try:
+        source = open_verified_sound_assignment_template()
+    except SoundAssignmentTemplateUnavailable as exc:
+        logger.warning(
+            "Sound assignment template unavailable: reason=%s user_id=%s",
+            exc.code.value,
+            request.user.pk,
+        )
+        language = get_user_language(request)
+        return HttpResponseNotFound(
+            "2026 音控导入模板目前不可用。"
+            if language == "zh"
+            else "The 2026 Sound import template is currently unavailable."
+        )
+
+    return FileResponse(
+        source,
+        as_attachment=True,
+        filename=DOWNLOAD_FILENAME,
+        content_type=DOWNLOAD_CONTENT_TYPE,
+    )
 
 
 @login_required

@@ -14,6 +14,10 @@ CMS_ENABLED_INTEGRATIONS = [
     if key.strip()
 ]
 
+SOUND_ASSIGNMENT_IMPORT_TEMPLATE_PATH = os.environ.get(
+    "SOUND_ASSIGNMENT_IMPORT_TEMPLATE_PATH", ""
+).strip()
+
 # Comma-separated list of hostnames, sourced from the environment so the real
 # production domain can be set at deploy time without a code change. Falls back
 # to the temporary domain only when the env var is unset.

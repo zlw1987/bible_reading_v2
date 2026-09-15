@@ -2795,6 +2795,16 @@ gate are now implemented/local-verified. Existing-roster mutation remains
 deferred to 1C, and every additional workbook column remains separately gated.
 MO-S.6F.0A itself remains a historical docs/read-only audit.
 
+`MO-S.6F.TEMPLATE.1A` adds only a staff/superuser convenience download beside
+the existing Sound preview. The integration-gated endpoint streams the exact
+configured server-private workbook bytes only after the source matches the
+known supported real-workbook SHA-256. The path defaults to unconfigured, is
+configured deployment-locally through
+`SOUND_ASSIGNMENT_IMPORT_TEMPLATE_PATH`, is never shown to users, and the
+workbook remains outside Git; the endpoint does not parse, generate, save, or
+rewrite the XLSX. This does not change the Column-F/Sound import, identity,
+preview, confirmation, or mutation contract.
+
 ### MO-S.6G — Operational Board Polish
 
 - Goal: improve day-to-day scanning after real use.

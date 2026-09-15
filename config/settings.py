@@ -72,6 +72,10 @@ CMS_ENABLED_MODULES = [
     "ministry",
 ]
 
+# Server-private source for the exact supported Sound import template. Keep the
+# workbook outside version control; blank means the download is unavailable.
+SOUND_ASSIGNMENT_IMPORT_TEMPLATE_PATH = ""
+
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',

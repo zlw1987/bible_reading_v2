@@ -227,7 +227,23 @@ only to avoid a second bump. New fingerprints remain NULL, existing assignments
 remain untouched, no Notification is emitted, and bounded per-assignment
 `LogEntry` rows share one operation UUID. Replay is stale. There is no schema,
 migration, dependency, other-column, audience, RequiredTeam, Worship-selection,
-User, or membership change, and production verification has not been claimed.
+User, or membership change. Production apply and the fresh exact-no-op
+verification are complete.
+
+Docs/read-only `MO-S.6F.1C-0A` now freezes—but does not implement—the optional
+existing-Sound-roster update boundary. A future V1 may fill one `scheduled`
+assignment only when it has zero total member rows, or replace its one active,
+unconfirmed, blank-confirmation-note member with the one reviewed new Sound
+membership. Exact one-member matches are no-ops in any current status;
+confirmed/prepared, confirmed-member differences, multiple/inactive members,
+duplicate current rows, and conflicting assignment history block. Parent ID,
+event/team, status, notes, creator, timestamps, existing audit, and reviewed
+Worship fingerprint remain unchanged; new members are unconfirmed and no
+notification is emitted. Pure roster changes do not broaden or advance
+`ServiceEvent.scheduling_revision`: a conditional no-op assignment UPDATE is
+the SQLite first-write barrier, followed by complete signed-baseline
+recomputation, exact-row delete/insert, privacy-bounded shared-operation audit,
+postcondition proof, and whole-workbook rollback on any stale/conflicting row.
 
 `MO-S.REQUIRED.0A` is **EFFECTIVE REQUIRED-TEAM SEMANTICS / EVENT WORSHIP
 ENTRY AUDIT COMPLETE**. `MO-S.REQUIRED.1A` is **IMPLEMENTED / LOCAL VERIFIED /
@@ -1721,7 +1737,9 @@ Short next-candidate list:
   `MO-S.6F.0A` is complete and the one-column staff/superuser-only zero-write
   Column-F/Sound identity preview is implemented/local-verified through
   `MO-S.6F.1A`. Its separate create-only atomic confirmation and bounded audit
-  are implemented/local-verified through `MO-S.6F.1B`; existing-roster changes,
+  are production verified through `MO-S.6F.1B`. Docs/read-only
+  `MO-S.6F.1C-0A` freezes the narrow existing-Sound-roster fill/replacement
+  contract, but its runtime remains unimplemented and separately gated;
   additional columns, annual-import notifications, arbitrary workbooks, and
   durable import history remain separately unapproved;
 - MO-S.6E.1A Worship-context staleness review is implemented, local verified,

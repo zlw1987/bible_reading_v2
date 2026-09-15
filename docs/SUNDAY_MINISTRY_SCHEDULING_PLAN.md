@@ -2699,7 +2699,7 @@ writes. Rendered browser QA remains open; no dependency was added for this
 slice.
 
 **MO-S.6F.1B — Create-only atomic confirmation and audit — IMPLEMENTED /
-LOCAL VERIFIED**
+LOCAL VERIFIED / PRODUCTION APPLY COMPLETE / VERIFIED**
 
 - Scope: only missing-current assignments from a fully reviewed 1A proposal;
   one `scheduled` parent with exact reviewed unconfirmed membership rows;
@@ -2725,9 +2725,9 @@ LOCAL VERIFIED**
   activity race, multiple teams on one event, duplicate-current rows,
   historical-state decision, governance, no-op, rollback, no notification, no
   cross-domain writes.
-- QA/gate: rendered confirm/result/stale/replay QA; product-owner-reviewed
-  local or staging dry run first; production apply is a separate exact reviewed
-  authorization and must be followed by a fresh no-op preview.
+- QA/gate: production apply used separate exact reviewed authorization and the
+  required fresh re-upload verified exact no-op state; the implementation gate
+  remains the focused rendered confirm/result/stale/replay QA recorded for 1B.
 
 The implemented 1B write authority is `SOUND_ASSIGNMENT_CONFIRMATION_V1`, a
 separate expiring, user-bound signature rather than reuse of the 1A preview
@@ -2770,28 +2770,192 @@ claims. Replay is stale through the changed revision/assignment baseline, and a
 fresh review classifies the created exact roster as `EXACT_NOOP`. File-backed
 two-connection SQLite tests cover both writer orders, multi-row stale rollback,
 and failure after the first internal create. This slice adds no migration,
-schema, dependency, other assignment column, or production verification.
+schema, dependency, or other assignment column. Its production apply and fresh
+exact-no-op verification are recorded above.
 
-**MO-S.6F.1C — Optional existing-roster change contract (deferred)**
+**MO-S.6F.1C-0A — Sound existing-roster update contract — DOCS/READ-ONLY
+CONTRACT COMPLETE; RUNTIME UNIMPLEMENTED**
 
-- Scope only if real trial evidence requires it: choose additions-only or exact
-  reviewed replacement; show canonical additions/removals and confirmation/
-  parent-status effects.
-- Non-goals: automatic fuzzy resolution, silent omission removal, retargeting,
-  User/membership creation, alias persistence unless separately approved.
-- Schema: none expected for exact reviewed changes; an alias model remains its
-  own ADR/migration.
-- Permission/write/concurrency: staff/superuser bulk boundary; explicit
-  destructive confirmation; reuse the 1B baseline primitive and revalidate all
-  removed/retained member confirmation state.
-- Tests/QA/gate: removal and confirmation preservation/reset matrix,
-  `confirmed` parent behavior, notification decision, two-connection races,
-  rollback, bilingual rendered difference review, and a new production gate.
+This audit approves no writer, route, template, form, model, migration, test,
+notification, database operation, or production apply. It freezes the smallest
+safe future V1 extension to the existing Column-F/Sound adapter. The selected
+scope is A+B below, tightened so that an empty roster means **zero total
+`TeamAssignmentMember` rows**, not merely zero active members:
+
+1. fill one existing current `scheduled` Sound assignment only when it has zero
+   member rows; or
+2. replace the one exact existing active, unconfirmed, blank-confirmation-note
+   member of one current `scheduled` Sound assignment with the one reviewed new
+   active Sound `TeamMembership`.
+
+Additions-only was considered but rejected as unnecessarily narrower than the
+repository's supported roster semantics: normal assignment editing already
+hard-deletes omitted through rows, and `TeamAssignmentMember` has no soft-delete
+or inactive state. Broad reuse of `sync_assignment_members()` was also rejected:
+it deletes by set difference and does not prove that only the signed old row was
+removed. A future 1C writer must instead delete one row by its signed
+`TeamAssignmentMember.id`, assignment ID, membership ID, null `confirmed_at`,
+and blank `confirmation_note`, require an affected-row count of exactly one,
+then insert the reviewed destination member. The bounded replacement LogEntry
+is the durable import evidence for that otherwise supported hard delete. No
+confirmed member or unexpected confirmation text may be erased.
+
+##### Existing-assignment decision matrix
+
+`EXACT_NOOP` always means the one total member row already points to the reviewed
+destination membership. It performs no write and preserves even unusual current
+truth for later manual review. Every mutation row must satisfy the stricter
+rules in this table:
+
+| Reviewed current event/Sound assignment truth | 1C result |
+| --- | --- |
+| One `scheduled` assignment, zero total member rows | `FILL_CANDIDATE`; add exactly the reviewed destination membership unconfirmed |
+| One `scheduled` assignment, exactly one active member, `confirmed_at=NULL`, blank `confirmation_note`, same destination membership | `EXACT_NOOP` |
+| One `scheduled` assignment, exactly one active member, `confirmed_at=NULL`, blank `confirmation_note`, different reviewed destination membership | `REPLACE_CANDIDATE`; remove exactly the signed old through row and add exactly the reviewed destination membership unconfirmed |
+| One `scheduled` assignment, exactly one confirmed member | `EXACT_NOOP` only when the membership already matches; otherwise block |
+| One `confirmed` or `prepared` assignment | `EXACT_NOOP` only when its one total membership already matches; empty or different roster blocks; never downgrade status |
+| More than one active member, more than one total member row, or any inactive assigned membership | Block; do not select, clear, retain, or revive a subset |
+| More than one current assignment for the exact event/team | Block even if one row appears to match |
+| A completed/cancelled assignment row on an otherwise current/future target, alone or beside a current row | Preserve and block; 1C does not decide that history is replaceable |
+| A completed or canonically elapsed ServiceEvent | Existing `HISTORICAL_EVENT_BLOCKER` safe skip; never backfill or change its assignments |
+| Existing nonblank assignment notes | Does not independently block an otherwise safe fill/replace, but notes must remain byte-for-byte unchanged |
+| Existing valid reviewed-Worship fingerprint | Does not independently block; preserve it byte-for-byte |
+| Existing member confirmation timestamp or nonblank confirmation note | `EXACT_NOOP` is allowed when identity already matches; replacement blocks |
+| Wrong/missing/inactive/nonassignable team, inactive/wrong-team destination membership, ambiguous identity, invalid audience/profile/event/governance truth, unknown status, malformed fingerprint, or any signed identity/activity drift | Block with no write |
+
+For an allowed fill or replacement, the existing `TeamAssignment.id`,
+`service_event_id`, `ministry_team_id`, `status`, `notes`, `created_by_id`,
+`created_at`, `updated_at`, and
+`reviewed_worship_context_fingerprint` remain byte/semantic unchanged. Existing
+LogEntry or other audit provenance is append-only and is never rewritten. The
+parent remains `scheduled`; 1C never changes status. Current confirmation makes
+the parent `confirmed` only through the existing member-confirmation workflow,
+where the last active member confirms. The import must not silently downgrade a
+`confirmed`/`prepared` parent, fabricate confirmation, or imply that a new
+person accepted a predecessor's confirmation. The inserted member has
+`confirmed_at=NULL` and `confirmation_note=""`; confirmation time or text is
+never copied. No `TeamMembership` is edited/retargeted, and no User or
+TeamMembership is created.
+
+##### Worship review, notifications, authority, and non-goals
+
+MO-S.6E fingerprints canonical **Worship** selection and Worship roster, not a
+downstream Sound team's own serving roster. Therefore a Sound-only fill or
+replacement preserves the assignment's existing
+`reviewed_worship_context_fingerprint` exactly. It neither clears/recomputes the
+field nor claims that Sound re-reviewed Worship context. A later actual Worship
+context change continues to drive the existing comparison normally.
+
+The bulk importer continues to emit no per-assignment Notification. The
+interactive producer treats a newly inserted through row as a new assignment
+recipient, but importing a batch must not silently reuse that interactive
+side effect. Any replacement/summary notification requires its own approved
+product slice, recipient policy, copy, dedupe, and rollout.
+
+Annual bulk authority remains active staff/superuser only at upload, mapping,
+preview, proposal mint, confirmation entry, immediately before the writer
+barrier, and again after that barrier before member/audit writes. Global
+assignment manager, Sound Lead/Coordinator, planner, audience membership,
+Church Structure belonging, or an existing serving row grants no annual-import
+authority.
+
+1C remains Sound Column F only. It does not support Projection, Recording,
+Video, Lighting, multi-person Sound grammar, aliases, fuzzy identity, User or
+membership creation, assignment retargeting, notes/status/creator changes,
+arbitrary roster clears, history mutation, RequiredTeam/audience/Worship
+selection changes, Worship-review changes, notifications, arbitrary workbooks,
+or a generic spreadsheet synchronization engine.
+
+##### Signed proposal and SQLite concurrency contract
+
+Implementation requires a distinct expiring, user-bound contract version; it
+must not reinterpret a 1B create-only signature. One signed normalized proposal
+binds the operation UUID, workbook SHA-256 and adapter/import versions, exact
+event/profile/team/source facts, action (`fill` or `replace`), and:
+
+- event ID, scheduling revision, lifecycle/time/profile identity, and a
+  privacy-safe digest of exact audience rows/units and readiness facts used by
+  the audience decision;
+- Sound team ID/key, activity, assignability, and `updated_at`;
+- assignment ID, event/team IDs, exact `scheduled` status, `updated_at`, notes
+  digest, creator ID, and nullable reviewed-fingerprint value;
+- the sorted complete through-row set: every `TeamAssignmentMember.id`,
+  membership ID, `created_at`, nullable exact `confirmed_at`, confirmation-note
+  presence and digest (never raw confirmation text), plus current membership
+  active/team facts;
+- removed membership ID for replacement and added membership ID for either
+  action; and
+- each involved `TeamMembership.id`, team ID, active state, `updated_at`, linked
+  user ID/activity, or the existing privacy-safe canonical display-identity
+  digest for an unlinked/display identity. The destination must still be the
+  one reviewed active exact-team membership and must still satisfy audience
+  safety.
+
+`ServiceEvent.scheduling_revision` is evidence but is not a roster-write lock:
+pure through-row changes do not advance it. For a batch containing at least one
+fill/replace, the future confirmation transaction must establish SQLite's first
+write barrier with a conditional no-op `UPDATE` on the lowest-ID actual-mutation
+`TeamAssignment`, and then do the same in deterministic assignment-ID order for
+the remaining mutation rows. Each predicate binds assignment ID, event ID, team
+ID, exact `scheduled` status, `updated_at`, and the null-or-exact reviewed
+fingerprint; the update self-assigns the non-auto-updated fingerprint field and
+must affect exactly one row. It must not call `save()`, change `updated_at`, or
+alter any business value. Existing 1B create candidates, if present in the same
+workbook, retain their event-revision CAS in deterministic event-ID order after
+the first writer barrier; a create-only batch retains the existing 1B first
+write path.
+
+Once SQLite writer ownership is established, reload the actor and integration
+gate, then completely reload and recompute every material and safe-nonwrite row:
+source mapping, event/revision/profile/time/lifecycle/history, audience,
+governance, team, assignment multiplicity and all bound parent/member/
+membership/user facts. Only then may exact delete/insert and audit writes occur.
+Do not claim `select_for_update()` is a SQLite row lock. A competing writer that
+wins first makes the predicate/recomputed baseline stale; a writer that cannot
+obtain the SQLite lock yields the existing bounded busy/retry failure. After
+this transaction owns the writer slot, another supported SQLite writer cannot
+interleave before commit.
+
+All writes stay inside one outer transaction in deterministic order. Blank,
+exact-no-op, and historical-event rows do nothing, but every create/fill/
+replace row and every safe-nonwrite baseline must still be current. One stale,
+busy, duplicate, invalid, delete-count, insert, audit, or postcondition failure
+rolls back the entire workbook: conditional barriers, 1B revision claims,
+member deletes/inserts, created parents, and LogEntry rows. Exact postconditions
+must prove unchanged parent fields, the one exact active destination roster,
+new unconfirmed/blank-note state, absent removed row, unchanged nonmutation rows,
+and the expected audit count.
+
+1C does **not** broaden `ServiceEvent.scheduling_revision`. Fill/replacement
+uses the assignment/member baselines plus the SQLite writer boundary; only
+coexisting 1B create rows retain their already-frozen `N -> N+1` claim. Pure
+roster updates leave the event revision unchanged.
+
+Each changed assignment gets one privacy-bounded `CHANGE` LogEntry, all sharing
+the proposal operation UUID. Its JSON contains only operation UUID, workbook
+SHA-256, 1C contract version, event ID, assignment ID, team ID/key, nullable
+removed membership ID, added membership ID, and `fill`/`replace`. Do not persist
+the workbook filename, source/display names, user identity, email, phone,
+assignment notes, confirmation text, or confirmation-note digest. Existing
+audit rows remain unchanged. After success, a fresh upload classifies the same
+canonical destination roster as `EXACT_NOOP`, exposes no confirmation action,
+and makes no further audit or domain write; replay of the old signed proposal is
+stale because its member baseline no longer matches.
+
+Implementation prerequisites are focused preview/result copy for explicit
+old-ID -> new-ID review without private fields, a separate confirmation token
+and POST handler, exact-row writer helpers rather than broad member sync,
+file-backed two-connection SQLite tests for both writer orders and member-only
+races, the full state/status/confirmation/history matrix, authority drift,
+mixed create/update batch rollback, no-notification and cross-domain zero-write
+assertions, exact LogEntry/postcondition tests, bilingual rendered QA, and a
+new dry-run/review/production authorization. None is implemented by this audit.
 
 The Column-F/Sound 1A identity-preview gate and the 1B create-only confirmation
-gate are now implemented/local-verified. Existing-roster mutation remains
-deferred to 1C, and every additional workbook column remains separately gated.
-MO-S.6F.0A itself remains a historical docs/read-only audit.
+gate are implemented and production verified. The 1C-0A existing-roster
+contract above is docs/read-only complete, but its runtime remains unimplemented
+and separately gated. Every additional workbook column remains separately
+gated. MO-S.6F.0A itself remains a historical docs/read-only audit.
 
 `MO-S.6F.TEMPLATE.1A` adds only a staff/superuser convenience download beside
 the existing Sound preview. The integration-gated endpoint streams the exact

@@ -468,19 +468,23 @@ CMS concepts. They may appear in one deployment's data, a clearly named
 adapter, bounded historical/setup tooling, or tests. They must not become
 behavior gates in generic business logic.
 
-`MO-S.6F.1A` is the current bounded example of that adapter boundary. Its
-deployment-named annual-workbook adapter reads only Column F headed `Sound` and
-maps it to the reviewed local key `main.cm.digital.sound`. That key is adapter
-configuration, not a generic Sound taxonomy or name lookup. The destination
-must resolve to one active assignable team, and people resolve only through
-explicitly reviewed active `TeamMembership` rows on that exact team. The
-adapter has a separately versioned source, mapping, and signed-preview contract;
-blank means no source proposal, unsupported grammar blocks, and every existing
-different/duplicate/history roster blocks. Completed or canonically elapsed
-ServiceEvents are separate no-backfill blockers. The implemented surface is
-staff/superuser-only and zero-write. It adds no generic dependency, schema,
-confirmation endpoint, alias authority, or assignment/member mutation;
-`MO-S.6F.1B` remains separately deferred and must re-check event history.
+`MO-S.6F.1A` and `MO-S.6F.1B` are the current bounded example of that adapter
+boundary. The deployment-named annual-workbook adapter reads only Column F
+headed `Sound` and maps it to the reviewed local key
+`main.cm.digital.sound`. That key is adapter configuration, not a generic Sound
+taxonomy or name lookup. The destination must resolve to one active assignable
+team, and people resolve only through explicitly reviewed active
+`TeamMembership` rows on that exact team. 1A has separately versioned source,
+mapping, and signed-preview contracts and provides zero-write exact membership
+review: blank means no source proposal, unsupported grammar blocks, and every
+existing different/duplicate/history roster blocks. 1B uses a separate signed
+create-only confirmation contract, exact local `team_key` and
+`TeamMembership` identities, and the canonical scheduling-revision CAS. It
+creates only reviewed current/future Sound assignment/member rows; completed
+or canonically elapsed events are safe no-write history rows, not backfill
+targets. The adapter adds no generic Sound taxonomy, schema, or dependency and
+never mutates an existing roster. 1C, additional columns, aliases, and external
+identity mapping remain deferred.
 
 ## 3. Identity Model
 

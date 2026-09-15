@@ -1,7 +1,7 @@
 """Focused MO-S.6F.1A Sound assignment zero-write preview tests."""
 
 from copy import deepcopy
-from datetime import datetime, time
+from datetime import date, datetime, time
 import os
 from pathlib import Path
 from unittest import skipUnless
@@ -15,7 +15,7 @@ from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
-from accounts.models import ChurchStructureUnit
+from accounts.models import ChurchStructureMembership, ChurchStructureUnit
 from accounts.permissions import CAP_MANAGE_TEAM_ASSIGNMENTS
 from events.models import (
     ServiceEvent,
@@ -105,6 +105,13 @@ class SoundAssignmentPreviewTestBase(TestCase):
         )
         cls.alice = User.objects.create_user(
             "alice", password="pw", first_name="Alice"
+        )
+        ChurchStructureMembership.objects.create(
+            user=cls.alice,
+            unit=cls.cm,
+            status=ChurchStructureMembership.STATUS_ACTIVE,
+            is_primary=True,
+            start_date=date(2020, 1, 1),
         )
         cls.alice_membership = TeamMembership.objects.create(
             team=cls.sound,
@@ -507,6 +514,41 @@ class SoundAssignmentClassificationTests(SoundAssignmentPreviewTestBase):
                     SoundTargetState.HISTORICAL_ASSIGNMENT_BLOCKER,
                 )
 
+    def test_history_alongside_exact_current_and_inactive_extra_member_still_block(self):
+        event = self.event_for_row()
+        current = TeamAssignment.objects.create(
+            service_event=event,
+            ministry_team=self.sound,
+            status=TeamAssignment.STATUS_SCHEDULED,
+        )
+        TeamAssignmentMember.objects.create(
+            assignment=current, membership=self.alice_membership
+        )
+        TeamAssignment.objects.create(
+            service_event=event,
+            ministry_team=self.sound,
+            status=TeamAssignment.STATUS_COMPLETED,
+        )
+        self.assertEqual(
+            self.preview().rows[0].target_state,
+            SoundTargetState.HISTORICAL_ASSIGNMENT_BLOCKER,
+        )
+
+        TeamAssignment.objects.filter(status=TeamAssignment.STATUS_COMPLETED).delete()
+        inactive = TeamMembership.objects.create(
+            team=self.sound,
+            display_name="Inactive history",
+            is_active=True,
+        )
+        TeamAssignmentMember.objects.create(
+            assignment=current, membership=inactive
+        )
+        TeamMembership.objects.filter(pk=inactive.pk).update(is_active=False)
+        self.assertEqual(
+            self.preview().rows[0].target_state,
+            SoundTargetState.EXISTING_ROSTER_BLOCKER,
+        )
+
     def test_invalid_target_and_unsupported_source_block_without_retarget(self):
         event = self.event_for_row(status=ServiceEvent.STATUS_DRAFT)
         preview = self.preview()
@@ -780,7 +822,7 @@ class SoundPreviewPermissionPrivacyAndZeroWriteTests(SoundAssignmentPreviewTestB
             "logs": LogEntry.objects.count(),
         }
 
-    def test_upload_mapping_preview_is_domain_zero_write_and_privacy_bounded(self):
+    def test_upload_mapping_preview_and_confirmation_proposal_are_zero_write_and_privacy_bounded(self):
         self.event_for_row()
         unrelated = TeamMembership.objects.create(
             team=self.other_team,
@@ -824,7 +866,8 @@ class SoundPreviewPermissionPrivacyAndZeroWriteTests(SoundAssignmentPreviewTestB
         ):
             self.assertNotIn(private_value, rendered)
         self.assertContains(preview_response, "This preview will not change any assignments")
-        self.assertNotContains(preview_response, "Confirm import")
+        self.assertIsNotNone(preview_response.context["confirmation_proposal"])
+        self.assertContains(preview_response, "Confirm and Create")
         self.assertEqual(self._domain_snapshot(), before)
         on_commit.assert_not_called()
 

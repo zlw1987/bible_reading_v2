@@ -213,11 +213,22 @@ Completed or canonically elapsed ServiceEvents are separately classified as
 historical-event blockers because V1 never reconstructs past serving data;
 blank historical rows remain no-proposal.
 The user-bound signed preview captures exact event, membership, assignment, and
-member baselines but grants no write authority. It has no confirmation route
-and mutates no assignment/member/event/revision/user/membership/audience/
-RequiredTeam/notification/audit state. `MO-S.6F.1B`, every mutation, and all
-additional columns remain separately deferred; any future confirmation must
-re-check that the event is still non-historical.
+member baselines but grants no write authority. `MO-S.6F.1B` is now
+**IMPLEMENTED / LOCAL VERIFIED** as a separate
+`SOUND_ASSIGNMENT_CONFIRMATION_V1` staff/superuser-only, create-only atomic
+confirmation. Historical-event, exact-no-op, and blank rows are safe skips;
+every roster/history conflict, linked active user outside the event audience,
+and other hard blocker suppresses the entire action, with no bulk audience
+override. The write transaction claims exactly the create-event revisions in
+ascending ID order as its SQLite first-write boundary, recomputes complete
+current truth, and creates one scheduled parent plus one exact unconfirmed
+member per approved row. Each created event advances exactly once from `N` to
+`N+1`; the normal validated assignment save uses `_skip_scheduling_revision`
+only to avoid a second bump. New fingerprints remain NULL, existing assignments
+remain untouched, no Notification is emitted, and bounded per-assignment
+`LogEntry` rows share one operation UUID. Replay is stale. There is no schema,
+migration, dependency, other-column, audience, RequiredTeam, Worship-selection,
+User, or membership change, and production verification has not been claimed.
 
 `MO-S.REQUIRED.0A` is **EFFECTIVE REQUIRED-TEAM SEMANTICS / EVENT WORSHIP
 ENTRY AUDIT COMPLETE**. `MO-S.REQUIRED.1A` is **IMPLEMENTED / LOCAL VERIFIED /
@@ -1710,10 +1721,10 @@ Short next-candidate list:
   product-owner verified through `MO-S.6D-SLICE9.1A`; assignment-import audit
   `MO-S.6F.0A` is complete and the one-column staff/superuser-only zero-write
   Column-F/Sound identity preview is implemented/local-verified through
-  `MO-S.6F.1A`. Its confirmation, all assignment/member mutation,
-  existing-roster changes, additional columns, annual-import notifications,
-  arbitrary workbooks, and durable import history remain separately
-  unapproved;
+  `MO-S.6F.1A`. Its separate create-only atomic confirmation and bounded audit
+  are implemented/local-verified through `MO-S.6F.1B`; existing-roster changes,
+  additional columns, annual-import notifications, arbitrary workbooks, and
+  durable import history remain separately unapproved;
 - MO-S.6E.1A Worship-context staleness review is implemented, local verified,
   and production runtime verified, including the one-field SQLite concurrency
   hard gate and bilingual rendered QA; production `ministry.0005` is applied,

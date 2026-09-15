@@ -2309,7 +2309,13 @@ def _sound_preview_error_text(language, error):
 
 
 def _sound_preview_context(
-    *, language, upload_form=None, mapping_review=None, mapping_form=None, preview=None
+    *,
+    language,
+    upload_form=None,
+    mapping_review=None,
+    mapping_form=None,
+    preview=None,
+    confirmation_proposal=None,
 ):
     return {
         "language": language,
@@ -2318,13 +2324,14 @@ def _sound_preview_context(
         "mapping_review": mapping_review,
         "mapping_form": mapping_form,
         "preview": preview,
+        "confirmation_proposal": confirmation_proposal,
     }
 
 
 @login_required
 @require_http_methods(["GET", "POST"])
 def sound_assignment_workbook_preview(request):
-    """Staff-only Column-F mapping and assignment preview; writes no domain row."""
+    """Staff-only Column-F review; preview itself writes no domain row."""
 
     try:
         require_integration_enabled(ANNUAL_WORKBOOK_INTEGRATION_KEY)
@@ -2425,6 +2432,7 @@ def sound_assignment_workbook_preview(request):
         request.POST, language=language, mapping_review=mapping_review
     )
     preview = None
+    confirmation_proposal = None
     if mapping_form.is_valid():
         try:
             preview = build_sound_assignment_preview(
@@ -2432,6 +2440,23 @@ def sound_assignment_workbook_preview(request):
                 selected_mapping=mapping_form.selected_mapping(),
                 user=request.user,
             )
+            if preview.is_confirmable:
+                from ministry.services.sound_assignment_xlsx_confirmation import (
+                    SoundAssignmentConfirmationProposalError,
+                    build_sound_assignment_confirmation_proposal,
+                )
+
+                try:
+                    confirmation_proposal = (
+                        build_sound_assignment_confirmation_proposal(
+                            preview=preview,
+                            user=request.user,
+                        )
+                    )
+                except SoundAssignmentConfirmationProposalError as exc:
+                    mapping_form.add_error(
+                        None, _sound_preview_error_text(language, exc)
+                    )
         except (SoundDestinationTeamError, SoundMappingValidationError) as exc:
             mapping_form.add_error(None, _sound_preview_error_text(language, exc))
     return render(
@@ -2442,8 +2467,61 @@ def sound_assignment_workbook_preview(request):
             mapping_review=mapping_review,
             mapping_form=mapping_form,
             preview=preview,
+            confirmation_proposal=confirmation_proposal,
         ),
     )
+
+
+@login_required
+@require_POST
+def confirm_sound_assignment_workbook(request):
+    """Apply one distinct signed Sound create-only proposal, then redirect."""
+
+    try:
+        require_integration_enabled(ANNUAL_WORKBOOK_INTEGRATION_KEY)
+    except IntegrationDisabled as exc:
+        raise Http404 from exc
+
+    from ministry.services.sound_assignment_xlsx_confirmation import (
+        SoundAssignmentConfirmationError,
+        SoundAssignmentConfirmationProposalError,
+        confirm_sound_assignments,
+        decode_signed_sound_assignment_confirmation,
+        user_can_confirm_sound_assignments,
+    )
+
+    if not user_can_confirm_sound_assignments(request.user):
+        raise PermissionDenied
+    language = get_user_language(request)
+    try:
+        payload = decode_signed_sound_assignment_confirmation(
+            request.POST.get("signed_confirmation", ""),
+            user=request.user,
+        )
+        result = confirm_sound_assignments(user=request.user, payload=payload)
+    except (
+        SoundAssignmentConfirmationProposalError,
+        SoundAssignmentConfirmationError,
+    ):
+        messages.error(
+            request,
+            (
+                "确认内容已失效或当前排班已变化。请重新上传并复核工作簿；未写入任何音控排班。"
+                if language == "zh"
+                else "Confirmation is stale or current scheduling changed. Upload and review the workbook again; no Sound assignment was written."
+            ),
+        )
+        return redirect("sound_assignment_workbook_preview")
+
+    messages.success(
+        request,
+        (
+            f"已建立 {result.created_count} 个未来音控排班。"
+            if language == "zh"
+            else f"Created {result.created_count} future Sound assignments."
+        ),
+    )
+    return redirect("team_assignment_list")
 
 
 @login_required

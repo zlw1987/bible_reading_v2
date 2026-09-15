@@ -103,8 +103,11 @@ nonblank literal represents exactly one Sound person, while blank means no
 proposal/no write. `MO-S.6F.1A` is **IMPLEMENTED / LOCAL VERIFIED** as the
 no-schema, exact-`TeamMembership`-identity, staff/superuser-only, zero-write
 mapping and assignment-state preview. It enables no other assignment column,
-and it explicitly excludes historical ServiceEvent backfill. Confirmation,
-assignment/member writes, and existing-roster mutation remain unimplemented.
+and it explicitly excludes historical ServiceEvent backfill. `MO-S.6F.1B` is
+now **IMPLEMENTED / LOCAL VERIFIED** as the separate signed, create-only,
+staff/superuser confirmation: it claims each create-event revision exactly once,
+creates one scheduled assignment plus one exact unconfirmed member, records a
+bounded shared-operation audit, and leaves every existing roster untouched.
 
 ## 1. Purpose
 
@@ -2686,25 +2689,28 @@ assignment/member baselines. It classifies create candidates, exact no-ops,
 different or duplicate current rosters, historical rows, invalid targets,
 unsupported source cells, unresolved identities, and blank no-proposal rows.
 
-This slice exposes upload, identity mapping, and final preview only. It creates
-or changes no User, membership, assignment, assignment member, event, audience,
-RequiredTeam, notification, or audit row; it advances no scheduling revision
-and registers no confirmation endpoint. `MO-S.6F.1B` remains separately
-unimplemented and unapproved. Focused Django response coverage verifies the
-English/Chinese workflow, privacy boundary, authorization, signing/staleness,
-all target classifications, and zero writes. Rendered browser QA remains open
-because the implementation environment had neither the Browser connector nor
-Playwright installed; no dependency was added for this slice.
+At the 1A milestone, that slice exposed upload, identity mapping, and final
+preview only. It created or changed no User, membership, assignment, assignment
+member, event, audience, RequiredTeam, notification, or audit row; it advanced
+no scheduling revision and registered no confirmation endpoint. The later,
+separately approved 1B implementation below adds the bounded confirmation write
+without changing those 1A preview-side-effect guarantees. Focused 1A Django
+response coverage verifies the English/Chinese workflow, privacy boundary,
+authorization, signing/staleness, all target classifications, and preview zero
+writes. Rendered browser QA remains open; no dependency was added for this
+slice.
 
-**MO-S.6F.1B — Create-only atomic confirmation and audit**
+**MO-S.6F.1B — Create-only atomic confirmation and audit — IMPLEMENTED /
+LOCAL VERIFIED**
 
 - Scope: only missing-current assignments from a fully reviewed 1A proposal;
   one `scheduled` parent with exact reviewed unconfirmed membership rows;
   exact-roster no-op; all other current roster differences block; shared
   operation audit.
 - Non-goals: update/add/remove/replace, confirmation reset, history deletion,
-  retarget, notification, aliases/ImportRun, User/membership/event/RequiredTeam/
-  audience/review-fingerprint writes.
+  retarget, notification, aliases/ImportRun, User/membership/ServiceEvent
+  business-field/RequiredTeam/audience/review-fingerprint writes. The canonical
+  `scheduling_revision` CAS is the only ServiceEvent-row mutation.
 - Likely components: distinct confirmation service/decoder, POST-only result
   view/template, `LogEntry` audit helper, focused file-backed concurrency tests.
 - Schema/permission/write: no schema; active staff/superuser only; one atomic
@@ -2725,6 +2731,49 @@ Playwright installed; no dependency was added for this slice.
   local or staging dry run first; production apply is a separate exact reviewed
   authorization and must be followed by a fresh no-op preview.
 
+The implemented 1B write authority is `SOUND_ASSIGNMENT_CONFIRMATION_V1`, a
+separate expiring, user-bound signature rather than reuse of the 1A preview
+signature. It binds the Column F / Sound source contract and workbook SHA-256,
+the preview digest, exact profile/team/membership identity, the complete
+canonical create set, all safe no-write classifications, event revisions, and
+assignment/member baselines. Confirmation is exposed only when there is at
+least one `CREATE_CANDIDATE` and zero hard blockers. `NO_SOURCE_PROPOSAL`,
+`EXACT_NOOP`, and `HISTORICAL_EVENT_BLOCKER` are safe no-write states;
+historical rows are never backfilled and blanks clear nothing. Every other
+roster/history/source/identity/target state, any unknown state, and a linked
+active selected user outside the canonical event audience hard-block the whole
+apply. Bulk import has no audience override; intentional out-of-audience
+serving remains available only through the normal manual assignment workflow.
+
+One outer transaction claims expected revisions for exactly the ascending
+create-event IDs through `claim_scheduling_revisions`. Each successful CAS is
+the SQLite first-write serialization boundary and advances its event exactly
+once from reviewed `N` to `N+1`; `select_for_update()` is not described or used
+as the SQLite guarantee. After the claims, the actor is reloaded from current
+database truth, active staff/superuser authority is re-established, and the
+integration gate is rechecked before domain revalidation or any assignment,
+member, or audit write. Complete current truth is then reloaded and recomputed,
+accepting only the transaction's own expected `N+1` revision for create rows.
+Assignment creation uses normal model validation and
+`assignment.save(_skip_scheduling_revision=True)` only to prevent a second
+revision advance. Thus no created event remains at `N` or reaches `N+2`.
+
+For each create row, 1B writes exactly one `scheduled` `TeamAssignment` with
+blank notes, the confirming actor, and
+`reviewed_worship_context_fingerprint=NULL`, plus exactly one unconfirmed
+`TeamAssignmentMember` for the reviewed exact membership with a blank
+confirmation note. It never edits/replaces/reactivates an existing assignment
+or roster, creates a User/membership/RequiredTeam, changes Worship selection,
+or emits a Notification. One shared operation UUID ties privacy-bounded
+per-created-assignment `LogEntry` rows containing only technical IDs, team key,
+contract revision, workbook hash, and create action. Audit and exact
+postcondition failures roll back audits, members, assignments, and all revision
+claims. Replay is stale through the changed revision/assignment baseline, and a
+fresh review classifies the created exact roster as `EXACT_NOOP`. File-backed
+two-connection SQLite tests cover both writer orders, multi-row stale rollback,
+and failure after the first internal create. This slice adds no migration,
+schema, dependency, other assignment column, or production verification.
+
 **MO-S.6F.1C — Optional existing-roster change contract (deferred)**
 
 - Scope only if real trial evidence requires it: choose additions-only or exact
@@ -2741,9 +2790,10 @@ Playwright installed; no dependency was added for this slice.
   `confirmed` parent behavior, notification decision, two-connection races,
   rollback, bilingual rendered difference review, and a new production gate.
 
-The matrix's 1A gates are now closed only for this zero-write Sound preview.
-Confirmation, any assignment mutation, and every additional column remain
-behind their B/C gates. MO-S.6F.0A itself changes no runtime behavior.
+The Column-F/Sound 1A identity-preview gate and the 1B create-only confirmation
+gate are now implemented/local-verified. Existing-roster mutation remains
+deferred to 1C, and every additional workbook column remains separately gated.
+MO-S.6F.0A itself remains a historical docs/read-only audit.
 
 ### MO-S.6G — Operational Board Polish
 

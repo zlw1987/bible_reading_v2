@@ -19,10 +19,12 @@ import re
 import unicodedata
 
 from django.core import signing
+from django.contrib.auth import get_user_model
 from django.db.models import Prefetch
 from django.utils import timezone
 from openpyxl import load_workbook
 
+from accounts.structure_selectors import user_matches_structure_audience
 from events.models import ServiceEvent, service_event_is_history
 from events.service_profile_readiness import service_event_audience_readiness
 from events.service_profile_runtime import inspect_service_profile_identity
@@ -117,10 +119,12 @@ class SoundTargetState(StrEnum):
     EXISTING_ROSTER_BLOCKER = "existing_roster_blocker"
     DUPLICATE_ASSIGNMENT_BLOCKER = "duplicate_assignment_blocker"
     HISTORICAL_ASSIGNMENT_BLOCKER = "historical_assignment_blocker"
+    UNKNOWN_ASSIGNMENT_BLOCKER = "unknown_assignment_blocker"
     HISTORICAL_EVENT_BLOCKER = "historical_event_blocker"
     INVALID_TARGET_BLOCKER = "invalid_target_blocker"
     SOURCE_BLOCKER = "source_blocker"
     IDENTITY_BLOCKER = "identity_blocker"
+    AUDIENCE_SAFETY_BLOCKER = "audience_safety_blocker"
 
 
 class SoundDestinationTeamErrorCode(StrEnum):
@@ -181,6 +185,7 @@ class SoundMembershipCandidate:
     identity_digest: str
     linked_user_id: int | None
     linked_state: str
+    linked_user_active: bool | None
     updated_at: str
 
 
@@ -240,16 +245,34 @@ class SoundAssignmentPreview:
         return sum(row.target_state == SoundTargetState.NO_SOURCE_PROPOSAL for row in self.rows)
 
     @property
-    def blocked_count(self):
+    def historical_event_count(self):
+        return sum(
+            row.target_state == SoundTargetState.HISTORICAL_EVENT_BLOCKER
+            for row in self.rows
+        )
+
+    @property
+    def hard_blocker_count(self):
         return sum(
             row.target_state
             not in {
                 SoundTargetState.CREATE_CANDIDATE,
                 SoundTargetState.EXACT_NOOP,
                 SoundTargetState.NO_SOURCE_PROPOSAL,
+                SoundTargetState.HISTORICAL_EVENT_BLOCKER,
             }
             for row in self.rows
         )
+
+    @property
+    def blocked_count(self):
+        """Compatibility name for confirmation-suppressing hard blockers."""
+
+        return self.hard_blocker_count
+
+    @property
+    def is_confirmable(self):
+        return self.create_candidate_count > 0 and self.hard_blocker_count == 0
 
 
 def user_can_preview_sound_assignments(user):
@@ -390,6 +413,7 @@ def _membership_candidate(membership):
         identity_digest=_identity_digest(visible_identity),
         linked_user_id=membership.user_id,
         linked_state="linked" if membership.user_id else "display_name_only",
+        linked_user_active=(membership.user.is_active if membership.user_id else None),
         updated_at=membership.updated_at.isoformat(),
     )
 
@@ -462,6 +486,7 @@ def _candidate_payload(candidate):
         "identity_digest": candidate.identity_digest,
         "linked_user_id": candidate.linked_user_id,
         "linked_state": candidate.linked_state,
+        "linked_user_active": candidate.linked_user_active,
         "updated_at": candidate.updated_at,
     }
 
@@ -738,6 +763,12 @@ def _classify_assignment(assignments, selected_membership_id):
     historical = [
         item for item in assignments if item.status in HISTORICAL_ASSIGNMENT_STATUSES
     ]
+    unknown = [
+        item
+        for item in assignments
+        if item.status
+        not in {*CURRENT_ASSIGNMENT_STATUSES, *HISTORICAL_ASSIGNMENT_STATUSES}
+    ]
     current_ids = tuple(item.pk for item in current)
     historical_ids = tuple(item.pk for item in historical)
     roster = ()
@@ -746,17 +777,18 @@ def _classify_assignment(assignments, selected_membership_id):
             sorted(
                 item.membership_id
                 for item in current[0].assignment_members.all()
-                if item.membership.is_active
             )
         )
     if len(current) > 1:
         state = SoundTargetState.DUPLICATE_ASSIGNMENT_BLOCKER
+    elif unknown:
+        state = SoundTargetState.UNKNOWN_ASSIGNMENT_BLOCKER
+    elif historical:
+        state = SoundTargetState.HISTORICAL_ASSIGNMENT_BLOCKER
     elif len(current) == 1 and roster == (selected_membership_id,):
         state = SoundTargetState.EXACT_NOOP
     elif len(current) == 1:
         state = SoundTargetState.EXISTING_ROSTER_BLOCKER
-    elif historical:
-        state = SoundTargetState.HISTORICAL_ASSIGNMENT_BLOCKER
     else:
         state = SoundTargetState.CREATE_CANDIDATE
     return state, current_ids, roster, historical_ids
@@ -780,6 +812,18 @@ def _event_is_historical_for_assignment_import(event, *, now):
     return (
         event.status == ServiceEvent.STATUS_COMPLETED
         or service_event_is_history(event, now=now)
+    )
+
+
+def _membership_is_outside_event_audience(candidate, event):
+    """Mirror interactive audience matching, but never permit bulk override."""
+
+    if not candidate.linked_user_id or not candidate.linked_user_active:
+        return False
+    audience_units = list(event.get_audience_scope_units())
+    return bool(audience_units) and not user_matches_structure_audience(
+        get_user_model()._default_manager.get(pk=candidate.linked_user_id),
+        audience_units,
     )
 
 
@@ -862,6 +906,12 @@ def build_sound_assignment_preview(*, mapping_review, selected_mapping, user, no
                 blocker_detail = (
                     "The ServiceEvent is historical; V1 does not backfill assignments."
                 )
+            elif _membership_is_outside_event_audience(selected, event):
+                target_state = SoundTargetState.AUDIENCE_SAFETY_BLOCKER
+                blocker_detail = (
+                    "The linked user is outside the event audience. Use the normal "
+                    "manual assignment workflow for an intentional override."
+                )
             else:
                 target_state = assignment_state
 
@@ -887,6 +937,7 @@ def build_sound_assignment_preview(*, mapping_review, selected_mapping, user, no
                         "active": True,
                         "updated_at": selected.updated_at,
                         "linked_user_id": selected.linked_user_id,
+                        "linked_user_active": selected.linked_user_active,
                         "visible_identity_digest": selected.identity_digest,
                     },
                     "target_state": target_state.value,
@@ -1069,6 +1120,8 @@ def decode_signed_sound_assignment_preview(
                 event, now=classification_now
             ):
                 target_state = SoundTargetState.HISTORICAL_EVENT_BLOCKER
+            elif _membership_is_outside_event_audience(candidate, event):
+                target_state = SoundTargetState.AUDIENCE_SAFETY_BLOCKER
             if (
                 not membership.is_active
                 or membership.team_id != team.pk
@@ -1079,6 +1132,7 @@ def decode_signed_sound_assignment_preview(
                     "active": True,
                     "updated_at": candidate.updated_at,
                     "linked_user_id": candidate.linked_user_id,
+                    "linked_user_active": candidate.linked_user_active,
                     "visible_identity_digest": candidate.identity_digest,
                 }
                 or row["target_state"] != target_state.value

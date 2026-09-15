@@ -20,6 +20,11 @@ urlpatterns = [
         views.sound_assignment_workbook_preview,
         name="sound_assignment_workbook_preview",
     ),
+    path(
+        "assignments/import/sound-confirm/",
+        views.confirm_sound_assignment_workbook,
+        name="confirm_sound_assignment_workbook",
+    ),
     path("assignments/new/", views.create_team_assignment, name="create_team_assignment"),
     path(
         "assignments/<int:assignment_id>/",

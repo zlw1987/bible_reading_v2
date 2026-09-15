@@ -103,11 +103,9 @@ nonblank literal represents exactly one Sound person, while blank means no
 proposal/no write. `MO-S.6F.1A` is **IMPLEMENTED / LOCAL VERIFIED** as the
 no-schema, exact-`TeamMembership`-identity, staff/superuser-only, zero-write
 mapping and assignment-state preview. It enables no other assignment column,
-and it explicitly excludes historical ServiceEvent backfill. `MO-S.6F.1B` is
-now **IMPLEMENTED / LOCAL VERIFIED** as the separate signed, create-only,
-staff/superuser confirmation: it claims each create-event revision exactly once,
-creates one scheduled assignment plus one exact unconfirmed member, records a
-bounded shared-operation audit, and leaves every existing roster untouched.
+and it explicitly excludes historical ServiceEvent backfill. MO-S.6F.1B is now IMPLEMENTED / LOCAL VERIFIED / PRODUCTION APPLY COMPLETE / VERIFIED as the separate signed, create-only, staff/superuser confirmation. The reviewed production batch created only future missing Sound assignments; a fresh re-upload classified the newly created rows as exact no-ops with zero hard blockers and no further confirmation action. A read-only production audit confirmed the created assignments were scheduled, contained exactly the reviewed unconfirmed Sound member, preserved a null Worship-review fingerprint, and introduced no duplicate event/team assignment.
+
+MO-S.6F.TEMPLATE.1A is also PRODUCTION ACTIVATED / VERIFIED: the staff/superuser-only template download serves the private canonical workbook byte-for-byte after fixed SHA-256 verification; the workbook remains outside Git and outside the public application tree.
 
 ## 1. Purpose
 

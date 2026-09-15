@@ -213,8 +213,7 @@ Completed or canonically elapsed ServiceEvents are separately classified as
 historical-event blockers because V1 never reconstructs past serving data;
 blank historical rows remain no-proposal.
 The user-bound signed preview captures exact event, membership, assignment, and
-member baselines but grants no write authority. `MO-S.6F.1B` is now
-**IMPLEMENTED / LOCAL VERIFIED** as a separate
+member baselines but grants no write authority. `MO-S.6F.1B` is IMPLEMENTED / LOCAL VERIFIED / PRODUCTION APPLY COMPLETE / VERIFIED
 `SOUND_ASSIGNMENT_CONFIRMATION_V1` staff/superuser-only, create-only atomic
 confirmation. Historical-event, exact-no-op, and blank rows are safe skips;
 every roster/history conflict, linked active user outside the event audience,

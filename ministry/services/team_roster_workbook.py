@@ -267,6 +267,28 @@ def _column_number(value):
 
 
 @dataclass(frozen=True, slots=True)
+class ObservedTeamRosterColumn:
+    """Exact external column evidence before any human team review."""
+
+    sheet_name: str
+    column: str
+    observed_header: str
+
+    def __post_init__(self):
+        _validate_external_evidence_text(
+            "sheet_name", self.sheet_name, maximum_length=31
+        )
+        _validate_exact_config_text("column", self.column, maximum_length=3)
+        _validate_external_evidence_text(
+            "observed_header",
+            self.observed_header,
+            maximum_length=255,
+            allow_blank=True,
+        )
+        _validate_worksheet_column(self.column)
+
+
+@dataclass(frozen=True, slots=True)
 class TeamRosterColumnHint:
     """Optional adapter convenience for exact-header automatic matching."""
 
@@ -282,6 +304,49 @@ class TeamRosterColumnHint:
         )
         if _TEAM_KEY_RE.fullmatch(self.destination_team_key) is None:
             raise ValueError("destination_team_key must be a canonical team key.")
+
+
+class TeamRosterColumnHintConfigurationError(ValueError):
+    pass
+
+
+def validate_team_roster_column_hints(hints):
+    """Return immutable exact hints or fail on an ambiguous header claim."""
+
+    if isinstance(hints, (str, bytes)) or not isinstance(hints, Iterable):
+        raise TeamRosterColumnHintConfigurationError(
+            "Column hints must be an iterable of TeamRosterColumnHint values."
+        )
+    validated = tuple(hints)
+    if any(type(hint) is not TeamRosterColumnHint for hint in validated):
+        raise TeamRosterColumnHintConfigurationError(
+            "Column hints must contain only TeamRosterColumnHint values."
+        )
+    seen_headers = set()
+    for hint in validated:
+        if hint.expected_header in seen_headers:
+            raise TeamRosterColumnHintConfigurationError(
+                "Two column hints claim the same exact observed header."
+            )
+        seen_headers.add(hint.expected_header)
+    return validated
+
+
+def resolve_exact_team_roster_column_hint(observed_header, hints):
+    """Resolve one literal header without trimming or Unicode/case rewriting."""
+
+    _validate_external_evidence_text(
+        "observed_header", observed_header, maximum_length=255, allow_blank=True
+    )
+    for hint in validate_team_roster_column_hints(hints):
+        if observed_header == hint.expected_header:
+            return hint
+    return None
+
+
+def _validate_worksheet_column(column):
+    if _COLUMN_RE.fullmatch(column) is None or _column_number(column) > 16384:
+        raise ValueError("column must be a valid uppercase worksheet column.")
 
 
 @dataclass(frozen=True, slots=True)
@@ -312,11 +377,7 @@ class ReviewedTeamRosterColumn:
         _validate_exact_config_text(
             "destination_team_key", self.destination_team_key, maximum_length=64
         )
-        if (
-            _COLUMN_RE.fullmatch(self.column) is None
-            or _column_number(self.column) > 16384
-        ):
-            raise ValueError("column must be a valid uppercase worksheet column.")
+        _validate_worksheet_column(self.column)
         if type(self.destination_team_id) is not int:
             raise TypeError("destination_team_id must be an integer.")
         if self.destination_team_id <= 0:

@@ -1,0 +1,1 @@
+"""Deployment-named integration adapters."""

@@ -9,13 +9,17 @@ from ministry.services.team_roster_workbook import (
     MAX_SOURCE_LITERAL_LENGTH,
     TEAM_ROSTER_CELL_CONTRACT_REVISION,
     TEAM_ROSTER_CELL_V1,
+    ObservedTeamRosterColumn,
     ReviewedTeamRosterColumn,
     TeamRosterCellInput,
     TeamRosterCellState,
     TeamRosterColumnHint,
+    TeamRosterColumnHintConfigurationError,
     TeamRosterDiffError,
     compute_team_roster_diff,
     parse_team_roster_cell,
+    resolve_exact_team_roster_column_hint,
+    validate_team_roster_column_hints,
 )
 
 
@@ -205,6 +209,83 @@ class TeamRosterColumnMappingTests(SimpleTestCase):
             hint.expected_header = "changed"
         with self.assertRaises(FrozenInstanceError):
             reviewed.observed_header = "changed"
+
+    def test_observed_column_is_immutable_unmapped_external_evidence(self):
+        decomposed = "Cafe\N{COMBINING ACUTE ACCENT}"
+        observed = ObservedTeamRosterColumn(
+            sheet_name="  Annual Roster  ",
+            column="F",
+            observed_header=decomposed,
+        )
+        self.assertEqual(
+            tuple(field.name for field in fields(observed)),
+            ("sheet_name", "column", "observed_header"),
+        )
+        self.assertEqual(observed.sheet_name, "  Annual Roster  ")
+        self.assertEqual(observed.observed_header, decomposed)
+        self.assertNotEqual(
+            observed.observed_header,
+            unicodedata.normalize("NFC", observed.observed_header),
+        )
+        self.assertFalse(hasattr(observed, "destination_team_key"))
+        with self.assertRaises(FrozenInstanceError):
+            observed.observed_header = "changed"
+
+    def test_observed_column_preserves_blank_header_and_requires_uppercase_column(self):
+        observed = ObservedTeamRosterColumn(
+            sheet_name="Annual Roster", column="C", observed_header=""
+        )
+        self.assertEqual(observed.observed_header, "")
+        with self.assertRaises(ValueError):
+            ObservedTeamRosterColumn(
+                sheet_name="Annual Roster", column="c", observed_header="Crew"
+            )
+
+    def test_hint_resolver_uses_literal_exact_equality_only(self):
+        sound = TeamRosterColumnHint(
+            expected_header="Sound",
+            destination_team_key="main.cm.digital.sound",
+        )
+        hints = validate_team_roster_column_hints((sound,))
+        self.assertIs(
+            resolve_exact_team_roster_column_hint("Sound", hints), sound
+        )
+        for observed_header in ("sound", "Sound ", "sounder"):
+            with self.subTest(observed_header=repr(observed_header)):
+                self.assertIsNone(
+                    resolve_exact_team_roster_column_hint(observed_header, hints)
+                )
+
+    def test_hint_resolver_does_not_normalize_unicode(self):
+        composed = "Vid\N{LATIN SMALL LETTER E WITH ACUTE}o"
+        decomposed = "Vide\N{COMBINING ACUTE ACCENT}o"
+        hint = TeamRosterColumnHint(
+            expected_header=composed,
+            destination_team_key="main.cm.digital.video",
+        )
+        self.assertIsNone(
+            resolve_exact_team_roster_column_hint(decomposed, (hint,))
+        )
+
+    def test_duplicate_exact_hint_configuration_fails_closed(self):
+        duplicate_hints = (
+            TeamRosterColumnHint(
+                expected_header="Crew", destination_team_key="main.ops.first"
+            ),
+            TeamRosterColumnHint(
+                expected_header="Crew", destination_team_key="main.ops.second"
+            ),
+        )
+        for operation in (
+            lambda: validate_team_roster_column_hints(duplicate_hints),
+            lambda: resolve_exact_team_roster_column_hint(
+                "unrelated", duplicate_hints
+            ),
+        ):
+            with self.subTest(operation=operation), self.assertRaises(
+                TeamRosterColumnHintConfigurationError
+            ):
+                operation()
 
     def test_observed_header_preserves_exact_external_evidence(self):
         decomposed = "Cafe\N{COMBINING ACUTE ACCENT}"

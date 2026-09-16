@@ -1,6 +1,7 @@
 """Focused MO-S.6D-SLICE8.1A parser and read-only preview tests."""
 
 import copy
+from dataclasses import FrozenInstanceError
 from datetime import date, datetime, time, timedelta
 from io import BytesIO
 import os
@@ -15,9 +16,15 @@ from django.contrib.admin.models import LogEntry
 from django.contrib.auth.models import User
 from django.core import signing
 from django.core.files.uploadedfile import SimpleUploadedFile
-from django.db import transaction
+from django.db import connection, transaction
 from django.http import Http404
-from django.test import RequestFactory, SimpleTestCase, TestCase, override_settings
+from django.test import (
+    RequestFactory,
+    SimpleTestCase,
+    TestCase,
+    override_settings,
+)
+from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from django.utils import timezone
 from openpyxl import Workbook
@@ -36,6 +43,11 @@ from ministry.models import (
     TeamAssignment,
     TeamAssignmentMember,
     TeamMembership,
+)
+from ministry.integrations.svca_bethany_2026_worship_xlsx.team_roster_sources import (
+    TEAM_ROSTER_COLUMN_HINTS,
+    TeamRosterColumnScope,
+    inventory_team_roster_columns,
 )
 from ministry.services.worship_xlsx_preview import (
     CONTRACT_REVISION,
@@ -105,6 +117,7 @@ def build_known_workbook(
     token_overrides=None,
     projection_overrides=None,
     sound_overrides=None,
+    header_overrides=None,
     tokens=None,
 ):
     """Create a synthetic strict-contract workbook with real cached formulas."""
@@ -114,6 +127,7 @@ def build_known_workbook(
     token_overrides = token_overrides or {}
     projection_overrides = projection_overrides or {}
     sound_overrides = sound_overrides or {}
+    header_overrides = header_overrides or {}
     workbook = Workbook()
     first_title = "Wrong" if missing_sheet else EXPECTED_SHEET_NAMES[0]
     sheet = workbook.active
@@ -125,6 +139,8 @@ def build_known_workbook(
     sheet["B3"] = b3
     sheet["E3"] = e3
     sheet["F3"] = f3
+    for column, value in header_overrides.items():
+        sheet[f"{column}3"] = value
     sheet.merge_cells("N2:O2")
     sheet["A4"] = "=1+1" if a4_formula else date(2026, 1, 4)
     sheet["A4"].number_format = "yyyy-mm-dd"
@@ -628,6 +644,180 @@ class WorshipWorkbookTargetMatchingTests(WorshipWorkbookDomainTestBase):
         )
         match = match_exact_service_event_targets(self.parsed)[0]
         self.assertIn("ancestor_descendant_overlap", match.audience_readiness["invalid_reasons"])
+
+
+class SvcaBethanyTeamRosterColumnInventoryTests(WorshipWorkbookDomainTestBase):
+    def _by_column(self, result):
+        return {
+            item.observed_column.column: item
+            for item in result.observed_columns
+        }
+
+    def test_inventory_is_deterministic_and_preserves_unknown_blank_and_non_nfc_headers(self):
+        decomposed = "Cafe\N{COMBINING ACUTE ACCENT}"
+        content = build_known_workbook(
+            header_overrides={
+                "C": "Speaker",
+                "D": "BB & Offering",
+                "G": "Lighting",
+                "H": "Video",
+                "J": "Camera",
+                "L": decomposed,
+            }
+        )
+        result = inventory_team_roster_columns(content, filename="annual.xlsx")
+        self.assertEqual(result.integration_key, INTEGRATION_KEY)
+        self.assertEqual(result.source_contract_revision, CONTRACT_REVISION)
+        self.assertEqual(result.filename, "annual.xlsx")
+        self.assertEqual(result.sheet_name, "All 930")
+        self.assertEqual(len(result.target_matches), 52)
+        self.assertEqual(
+            tuple(
+                item.observed_column.column for item in result.observed_columns
+            ),
+            tuple("ABCDEFGHIJKLMNO"),
+        )
+
+        by_column = self._by_column(result)
+        self.assertEqual(by_column["I"].observed_column.observed_header, "")
+        self.assertEqual(by_column["J"].observed_column.observed_header, "Camera")
+        self.assertEqual(by_column["L"].observed_column.observed_header, decomposed)
+        self.assertIsNone(by_column["C"].matched_hint)
+        self.assertIsNone(by_column["D"].matched_hint)
+        self.assertIsNone(by_column["G"].matched_hint)
+        self.assertIsNone(by_column["J"].matched_hint)
+        self.assertEqual(
+            by_column["E"].matched_hint.destination_team_key,
+            "main.cm.digital.projection",
+        )
+        self.assertEqual(
+            by_column["F"].matched_hint.destination_team_key,
+            "main.cm.digital.sound",
+        )
+        self.assertEqual(
+            by_column["H"].matched_hint.destination_team_key,
+            "main.cm.digital.video",
+        )
+        self.assertEqual(
+            by_column["A"].scope,
+            TeamRosterColumnScope.STRUCTURAL_EVENT_IDENTITY,
+        )
+        self.assertEqual(
+            by_column["B"].scope,
+            TeamRosterColumnScope.STRUCTURAL_WORSHIP_IDENTITY,
+        )
+        self.assertTrue(
+            all(
+                by_column[column].scope
+                == TeamRosterColumnScope.TARGET_PROFILE_REVIEW_CANDIDATE
+                for column in "CDEFGHI"
+            )
+        )
+        self.assertTrue(
+            all(
+                by_column[column].scope
+                == TeamRosterColumnScope.OUT_OF_TARGET_PROFILE_SCOPE
+                for column in "JKLMNO"
+            )
+        )
+        with self.assertRaises(FrozenInstanceError):
+            result.sheet_name = "changed"
+
+    def test_sound_header_variants_are_accepted_but_only_exact_sound_gets_hint(self):
+        for header, expected_hint in (
+            ("Sound", "main.cm.digital.sound"),
+            ("sound", None),
+            ("Sound ", None),
+            ("sounder", None),
+        ):
+            with self.subTest(header=repr(header)):
+                result = inventory_team_roster_columns(
+                    build_known_workbook(f3=header)
+                )
+                observed = self._by_column(result)["F"]
+                self.assertEqual(observed.observed_column.observed_header, header)
+                self.assertEqual(
+                    observed.scope,
+                    TeamRosterColumnScope.TARGET_PROFILE_REVIEW_CANDIDATE,
+                )
+                actual_hint = (
+                    observed.matched_hint.destination_team_key
+                    if observed.matched_hint is not None
+                    else None
+                )
+                self.assertEqual(actual_hint, expected_hint)
+                self.assertEqual(len(result.parsed_workbook.rows), 52)
+
+    def test_out_of_target_profile_headers_remain_visible_without_actionable_hints(self):
+        result = inventory_team_roster_columns(
+            build_known_workbook(
+                header_overrides={"J": "Sound", "N": "Video"}
+            )
+        )
+        by_column = self._by_column(result)
+        for column, header in (("J", "Sound"), ("N", "Video")):
+            with self.subTest(column=column):
+                observed = by_column[column]
+                self.assertEqual(observed.observed_column.observed_header, header)
+                self.assertEqual(
+                    observed.scope,
+                    TeamRosterColumnScope.OUT_OF_TARGET_PROFILE_SCOPE,
+                )
+                self.assertIsNone(observed.matched_hint)
+
+    def test_hint_configuration_is_exact_and_excludes_non_authoritative_headers(self):
+        self.assertEqual(
+            tuple(
+                (hint.expected_header, hint.destination_team_key)
+                for hint in TEAM_ROSTER_COLUMN_HINTS
+            ),
+            (
+                ("projector", "main.cm.digital.projection"),
+                ("Sound", "main.cm.digital.sound"),
+                ("Video", "main.cm.digital.video"),
+            ),
+        )
+
+    def test_inventory_reuses_exact_event_profile_matching(self):
+        other = self.event_for_row(service_profile=self.other_profile)
+        other.title = "Bethany 09:30 lookalike"
+        other.save()
+        result = inventory_team_roster_columns(build_known_workbook())
+        self.assertEqual(
+            result.target_matches[0].state,
+            TargetMatchState.TARGET_EVENT_OWNED_BY_OTHER_PROFILE,
+        )
+        self.assertIsNone(result.target_matches[0].event)
+
+    def test_malformed_structure_and_date_mismatch_still_block_before_inventory(self):
+        cases = (
+            (
+                build_known_workbook(b3="wrong"),
+                WorkbookErrorCode.HEADER_MISMATCH,
+            ),
+            (
+                build_known_workbook(formula_overrides={6: "=A4+8"}),
+                WorkbookErrorCode.FORMULA_CACHE_MISMATCH,
+            ),
+        )
+        for content, expected_code in cases:
+            with self.subTest(expected_code=expected_code), self.assertRaises(
+                WorkbookContractError
+            ) as raised:
+                inventory_team_roster_columns(content)
+            self.assertEqual(raised.exception.code, expected_code)
+
+    def test_inventory_queries_only_existing_profile_event_evidence_and_never_writes(self):
+        with CaptureQueriesContext(connection) as queries:
+            result = inventory_team_roster_columns(build_known_workbook())
+        self.assertEqual(len(result.observed_columns), 15)
+        normalized_sql = tuple(query["sql"].lower().lstrip() for query in queries)
+        self.assertTrue(normalized_sql)
+        self.assertTrue(all(sql.startswith("select") for sql in normalized_sql))
+        joined_sql = "\n".join(normalized_sql)
+        self.assertNotIn("ministry_teammembership", joined_sql)
+        self.assertNotIn("ministry_teamassignment", joined_sql)
+        self.assertNotIn("ministry_teamassignmentmember", joined_sql)
 
 
 class WorshipWorkbookMappingAndGovernanceTests(WorshipWorkbookDomainTestBase):

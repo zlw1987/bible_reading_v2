@@ -2473,6 +2473,12 @@ must not branch on key text or infer a team from a header/name. Confirmation
 re-resolves and binds both the current team PK and key, activity, and
 assignability. No hard-coded database PK is configuration.
 
+Historical 0A decision only: the destination-selection and column-specific
+grammar rules below are superseded by MO-S.6F.GENERAL.0A/FU1. Current
+authority is an explicit reviewed per-upload column-to-team mapping, template
+matches are convenience hints only, and every supported team-roster column
+uses TEAM_ROSTER_CELL_V1 complete-roster 1..N slash semantics.
+
 The reviewed adapter mapping plus `team_key` is sufficient authority for the
 destination selection; a second arbitrary per-upload team picker would weaken
 the contract. Preview must nevertheless show the source column and resolved
@@ -3035,6 +3041,22 @@ domain foundation: TEAM_ROSTER_CELL_V1, typed cell input, TeamRosterColumnHint,
 ReviewedTeamRosterColumn, and deterministic TeamRosterDiff. It adds no DB
 lookup, route, form, signing, preview writer, confirmation writer, schema,
 migration, or dependency.
+
+MO-S.6F.GENERAL.1B adds the deployment-named, zero-write annual-workbook column
+inventory on top of that foundation. The existing strict workbook parser and
+exact ServiceProfile/ServiceEvent matcher remain unchanged. The adapter returns
+columns A:O in deterministic order, preserving blank headers as `""` and every
+nonblank header literally. A is marked as reserved event-date identity and B as
+reserved Worship-rotation identity. C:I are the column-review scope for the
+exact `bethany_0930_cm` target profile and remain candidates even when blank or
+unknown. J:O remain visible parallel-service evidence but are not mappable by
+this adapter. Exact convenience hints are only `projector` to
+`main.cm.digital.projection`, `Sound` to `main.cm.digital.sound`, and `Video` to
+`main.cm.digital.video`. Lighting, Speaker, BB & Offering, Worship/AV, changed
+case/spacing, and fuzzy lookalikes receive no hint. This inventory performs no
+membership or assignment lookup, signing, session persistence, preview, or
+write. Column-name flexibility never relaxes the exact ServiceProfile or
+ServiceEvent identity boundary.
 
 This decision supersedes the former current-direction statements that Sound is
 exactly one person, Projection is at most two people, Video is exactly three

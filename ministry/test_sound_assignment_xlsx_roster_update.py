@@ -34,6 +34,7 @@ from .services.sound_assignment_xlsx_roster_update import (
     build_sound_roster_update_proposal,
     confirm_sound_roster_update,
     decode_signed_sound_roster_update,
+    _valid_hash,
 )
 from .test_sound_assignment_xlsx_preview import SoundAssignmentPreviewTestBase
 
@@ -56,7 +57,7 @@ class SoundRosterUpdateTests(SoundAssignmentPreviewTestBase):
         membership=None,
         confirmed_at=None,
         confirmation_note="",
-        fingerprint="B" * 64,
+        fingerprint="b" * 64,
     ):
         assignment = TeamAssignment.objects.create(
             service_event=event,
@@ -154,6 +155,56 @@ class SoundRosterUpdateTests(SoundAssignmentPreviewTestBase):
             SoundTargetState.EXISTING_ROSTER_BLOCKER,
         )
 
+    def test_canonical_lowercase_fingerprint_allows_fill_candidate(self):
+        event = self.event_for_row()
+        assignment, _member = self._assignment(event, fingerprint="b" * 64)
+
+        preview = self._preview()
+
+        self.assertEqual(preview.rows[0].target_state, SoundTargetState.FILL_CANDIDATE)
+        assignment.refresh_from_db()
+        self.assertEqual(
+            assignment.reviewed_worship_context_fingerprint,
+            "b" * 64,
+        )
+
+    def test_canonical_lowercase_fingerprint_allows_replace_candidate(self):
+        event = self.event_for_row()
+        assignment, _member = self._assignment(
+            event,
+            membership=self.bob,
+            fingerprint="b" * 64,
+        )
+
+        preview = self._preview()
+
+        self.assertEqual(
+            preview.rows[0].target_state,
+            SoundTargetState.REPLACE_CANDIDATE,
+        )
+        assignment.refresh_from_db()
+        self.assertEqual(
+            assignment.reviewed_worship_context_fingerprint,
+            "b" * 64,
+        )
+
+    def test_canonical_lowercase_fingerprint_allows_exact_noop(self):
+        event = self.event_for_row()
+        assignment, _member = self._assignment(
+            event,
+            membership=self.alice_membership,
+            fingerprint="b" * 64,
+        )
+
+        preview = self._preview()
+
+        self.assertEqual(preview.rows[0].target_state, SoundTargetState.EXACT_NOOP)
+        assignment.refresh_from_db()
+        self.assertEqual(
+            assignment.reviewed_worship_context_fingerprint,
+            "b" * 64,
+        )
+
     def test_confirmed_and_prepared_exact_noop_but_difference_blocks(self):
         for status in (
             TeamAssignment.STATUS_CONFIRMED,
@@ -206,9 +257,77 @@ class SoundRosterUpdateTests(SoundAssignmentPreviewTestBase):
             SoundTargetState.INVALID_ASSIGNMENT_BLOCKER,
         )
 
+    def test_noncanonical_worship_fingerprints_fail_closed_but_none_is_valid(self):
+        event = self.event_for_row()
+        assignment, _member = self._assignment(event, fingerprint=None)
+        self.assertEqual(
+            self._preview().rows[0].target_state,
+            SoundTargetState.FILL_CANDIDATE,
+        )
+
+        for fingerprint in (
+            "B" * 64,
+            "b" * 63 + "B",
+            "b" * 63,
+            "b" * 65,
+            "g" * 64,
+            "malformed",
+        ):
+            with self.subTest(fingerprint=fingerprint):
+                TeamAssignment.objects.filter(pk=assignment.pk).update(
+                    reviewed_worship_context_fingerprint=fingerprint
+                )
+                self.assertEqual(
+                    self._preview().rows[0].target_state,
+                    SoundTargetState.INVALID_ASSIGNMENT_BLOCKER,
+                )
+
+    def test_proposal_accepts_lowercase_fingerprint_and_keeps_uppercase_hashes(self):
+        event = self.event_for_row()
+        self._assignment(event, fingerprint="0123456789abcdef" * 4)
+
+        proposal, payload = self._proposal(self._preview())
+
+        self.assertEqual(
+            payload["rows"][0]["assignment_baseline"][0][
+                "reviewed_worship_context_fingerprint"
+            ],
+            "0123456789abcdef" * 4,
+        )
+        self.assertEqual(
+            decode_signed_sound_roster_update(
+                proposal.signed_payload,
+                user=self.staff,
+            ),
+            payload,
+        )
+        self.assertTrue(_valid_hash(payload["workbook_sha256"]))
+        self.assertTrue(_valid_hash(payload["preview_digest"]))
+        self.assertEqual(
+            payload["workbook_sha256"], payload["workbook_sha256"].upper()
+        )
+        self.assertEqual(
+            payload["preview_digest"], payload["preview_digest"].upper()
+        )
+        self.assertFalse(_valid_hash("a" * 64))
+
+        uppercase_fingerprint = deepcopy(payload)
+        uppercase_fingerprint["rows"][0]["assignment_baseline"][0][
+            "reviewed_worship_context_fingerprint"
+        ] = "B" * 64
+        with self.assertRaises(SoundAssignmentConfirmationProposalError):
+            decode_signed_sound_roster_update(
+                signing.dumps(
+                    uppercase_fingerprint,
+                    salt=ROSTER_UPDATE_SIGNING_SALT,
+                ),
+                user=self.staff,
+            )
+
     def test_fill_preserves_parent_revision_fingerprint_and_is_idempotent(self):
         event = self.event_for_row()
-        assignment, _member = self._assignment(event)
+        fingerprint = "0123456789abcdef" * 4
+        assignment, _member = self._assignment(event, fingerprint=fingerprint)
         event.refresh_from_db()
         revision_before = event.scheduling_revision
         parent_before = TeamAssignment.objects.values().get(pk=assignment.pk)
@@ -229,6 +348,9 @@ class SoundRosterUpdateTests(SoundAssignmentPreviewTestBase):
         self.assertEqual(event.scheduling_revision, revision_before)
         parent_after = TeamAssignment.objects.values().get(pk=assignment.pk)
         self.assertEqual(parent_after, parent_before)
+        self.assertEqual(
+            parent_after["reviewed_worship_context_fingerprint"], fingerprint
+        )
         member = TeamAssignmentMember.objects.get(assignment=assignment)
         self.assertEqual(member.membership_id, self.alice_membership.pk)
         self.assertIsNone(member.confirmed_at)
@@ -252,7 +374,12 @@ class SoundRosterUpdateTests(SoundAssignmentPreviewTestBase):
 
     def test_replace_deletes_exact_old_row_and_adds_unconfirmed_member(self):
         event = self.event_for_row()
-        assignment, old = self._assignment(event, membership=self.bob)
+        fingerprint = "fedcba9876543210" * 4
+        assignment, old = self._assignment(
+            event,
+            membership=self.bob,
+            fingerprint=fingerprint,
+        )
         event.refresh_from_db()
         revision_before = event.scheduling_revision
         parent_before = TeamAssignment.objects.values().get(pk=assignment.pk)
@@ -270,6 +397,12 @@ class SoundRosterUpdateTests(SoundAssignmentPreviewTestBase):
         self.assertEqual(new.confirmation_note, "")
         self.assertEqual(
             TeamAssignment.objects.values().get(pk=assignment.pk), parent_before
+        )
+        self.assertEqual(
+            TeamAssignment.objects.values_list(
+                "reviewed_worship_context_fingerprint", flat=True
+            ).get(pk=assignment.pk),
+            fingerprint,
         )
         event.refresh_from_db()
         self.assertEqual(event.scheduling_revision, revision_before)

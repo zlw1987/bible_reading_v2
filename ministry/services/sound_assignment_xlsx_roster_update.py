@@ -70,6 +70,7 @@ from .sound_assignment_xlsx_preview import (
     resolve_target_service_profile,
 )
 from .worship_governance import inspect_worship_ownership_consistency
+from .worship_context_review import FINGERPRINT_RE as WORSHIP_CONTEXT_FINGERPRINT_RE
 from .worship_xlsx_preview import (
     SIGNING_MAX_AGE_SECONDS,
     SUPPORTED_EVENT_TYPE,
@@ -165,6 +166,13 @@ def _valid_hash(value):
     return isinstance(value, str) and _SHA256_RE.fullmatch(value) is not None
 
 
+def _valid_reviewed_worship_context_fingerprint(value):
+    return value is None or (
+        isinstance(value, str)
+        and WORSHIP_CONTEXT_FINGERPRINT_RE.fullmatch(value) is not None
+    )
+
+
 def _valid_membership_baseline(value):
     if not isinstance(value, dict) or set(value) != {
         "id",
@@ -246,8 +254,7 @@ def _validate_assignment_baseline(value):
                 type(assignment["created_by_id"]) is not int
                 or assignment["created_by_id"] <= 0
             )
-            or fingerprint is not None
-            and (not isinstance(fingerprint, str) or len(fingerprint) > 64)
+            or not _valid_reviewed_worship_context_fingerprint(fingerprint)
             or not isinstance(assignment["members"], list)
         ):
             return False
@@ -632,11 +639,8 @@ def _strict_payload_shape(payload):
                     and baseline[0]["event_id"] == event["id"]
                     and baseline[0]["team_id"] == team["id"]
                     and baseline[0]["status"] == TeamAssignment.STATUS_SCHEDULED
-                    and (
-                        baseline[0]["reviewed_worship_context_fingerprint"] is None
-                        or _valid_hash(
-                            baseline[0]["reviewed_worship_context_fingerprint"]
-                        )
+                    and _valid_reviewed_worship_context_fingerprint(
+                        baseline[0]["reviewed_worship_context_fingerprint"]
                     )
                     and baseline[0]["members"] == []
                     and mutation["assignment_id"] == baseline[0]["id"]
@@ -649,11 +653,8 @@ def _strict_payload_shape(payload):
                     and baseline[0]["event_id"] == event["id"]
                     and baseline[0]["team_id"] == team["id"]
                     and baseline[0]["status"] == TeamAssignment.STATUS_SCHEDULED
-                    and (
-                        baseline[0]["reviewed_worship_context_fingerprint"] is None
-                        or _valid_hash(
-                            baseline[0]["reviewed_worship_context_fingerprint"]
-                        )
+                    and _valid_reviewed_worship_context_fingerprint(
+                        baseline[0]["reviewed_worship_context_fingerprint"]
                     )
                     and len(baseline[0]["members"]) == 1
                     and baseline[0]["members"][0]["membership"]["active"] is True

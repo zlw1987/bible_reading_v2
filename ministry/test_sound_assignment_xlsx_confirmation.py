@@ -562,7 +562,7 @@ class FileBackedSQLiteSoundAssignmentConfirmationTests(unittest.TestCase):
             ministry_team=self.sound,
             status=TeamAssignment.STATUS_SCHEDULED,
             notes="preserve metadata",
-            reviewed_worship_context_fingerprint="C" * 64,
+            reviewed_worship_context_fingerprint="c" * 64,
         )
         old_member = TeamAssignmentMember.objects.create(
             assignment=assignment, membership=old_membership

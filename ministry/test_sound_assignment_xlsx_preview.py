@@ -442,7 +442,7 @@ class SoundAssignmentClassificationTests(SoundAssignmentPreviewTestBase):
             ministry_team=self.sound,
             status=status,
             notes="preserve private assignment note",
-            reviewed_worship_context_fingerprint="A" * 64,
+            reviewed_worship_context_fingerprint="a" * 64,
         )
         if member is not None:
             TeamAssignmentMember.objects.create(

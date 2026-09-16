@@ -55,6 +55,7 @@ from .worship_xlsx_preview import (
     parse_known_worship_workbook,
     resolve_target_service_profile,
 )
+from .worship_context_review import FINGERPRINT_RE as WORSHIP_CONTEXT_FINGERPRINT_RE
 
 
 SOURCE_CONTRACT_REVISION = "SVCA_BETHANY_0930_2026_SOUND_SOURCE_V1"
@@ -813,7 +814,10 @@ def _classify_assignment(assignments, selected_membership_id):
         assignment = current[0]
         members = list(assignment.assignment_members.all())
         fingerprint = assignment.reviewed_worship_context_fingerprint
-        if fingerprint is not None and _SHA256_RE.fullmatch(fingerprint) is None:
+        if (
+            fingerprint is not None
+            and WORSHIP_CONTEXT_FINGERPRINT_RE.fullmatch(fingerprint) is None
+        ):
             state = SoundTargetState.INVALID_ASSIGNMENT_BLOCKER
         elif any(not item.membership.is_active for item in members):
             state = SoundTargetState.EXISTING_ROSTER_BLOCKER

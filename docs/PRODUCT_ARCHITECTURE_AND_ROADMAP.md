@@ -278,12 +278,16 @@ is no proposal/no write. Sound-one, Projection-one/two, and Video-three remain
 historical or observed shapes only. The local Projection 2A limitation is
 therefore refactor evidence, not production/write readiness.
 
-The frozen direction is a generic team-neutral roster core plus deployment-
-specific reviewed source specs—not a generic arbitrary spreadsheet engine.
-One small adapter registry binds `source_key`, exact sheet/column/header,
-destination `MinistryTeam.team_key`, and source-contract revision. The generic
-core owns NFC/outer-trim/ASCII-slash 1..N parsing (technical cap 16), exact
-active-team `TeamMembership.id` review, set-based preview and roster diff,
+The frozen direction is a generic team-neutral roster core plus a two-stage
+human-reviewed mapping workflow—not a generic arbitrary spreadsheet engine.
+The deployment adapter retains exact event-row/date/ServiceProfile matching and
+may supply exact-header-to-team auto-match hints. Templates and hints only
+prefill review; authority is the signed exact observed sheet/column/header ->
+exact active, assignable `MinistryTeam.id` + `team_key` choice. Unknown columns
+default to Ignore or explicit team selection, and duplicate destination-team
+choices block rather than merge. The generic core owns NFC/outer-trim/ASCII-
+slash 1..N parsing (technical cap 16), the separate exact active-team person-
+token -> `TeamMembership.id` review, set-based preview and roster diff,
 row-preserving create/add/safe-remove reconciliation, new mutually exclusive
 `TEAM_ROSTER_MAPPING_V1` / `TEAM_ROSTER_PREVIEW_V1` /
 `TEAM_ROSTER_CONFIRMATION_V1` signatures, SQLite CAS/conditional-write
@@ -292,12 +296,14 @@ audit. Confirmed/prepared differences, protected member removal, inactive
 membership, audience/history/duplicate/unknown/invalid truth, or any stale
 baseline block the whole apply.
 
-Sound's production-created model rows remain untouched and old Sound V1 tokens
+Event matching remains exact and non-fuzzy; this flexibility applies only to
+roster-team columns inside the reviewed adapter structure. Sound's production-
+created model rows remain untouched and old Sound V1 tokens
 retain only their old semantics. New generic Sound must accept multiple people.
 Projection should be refactored onto the generic preview before approval; old
-zero-write Projection tokens may simply require re-upload. Video is not enabled
-by this architecture task. Recording and formula-derived Lighting remain
-unresolved/blocked, and Speaker/BB & Offering/Worship roster are out of scope.
+zero-write Projection tokens may simply require re-upload. Known Video evidence
+may be a hint but is not itself authority. Formula-derived Lighting remains
+non-authoritative, and Speaker/BB & Offering/Worship roster are out of scope.
 No runtime file, model, migration, dependency, production command, or data was
 changed by GENERAL.0A.
 

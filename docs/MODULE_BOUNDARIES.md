@@ -140,12 +140,16 @@ historical/local implementation evidence, while all future configured
 team-roster sources use one generic 1..N complete-roster core. Ministry owns the
 team-neutral grammar, exact `TeamMembership.id` review, set diff,
 reconciliation, signatures, SQLite writer barriers, and privacy-bounded audit.
-The deployment-named annual-workbook adapter owns a small static registry of
-exact `source_key`/sheet/column/header/destination `team_key`/source-version
-facts and continues to consume the existing strict workbook/profile/event
-matcher. Deployment data continues to own the stable profile/team key rows.
-This creates no `events -> ministry` reverse dependency, arbitrary-column
-engine, plugin framework, global User lookup, or mutable-name authority.
+The deployment-named annual-workbook adapter owns the strict workbook/profile/
+event matcher and optional exact-header-to-team auto-match hints. Generic
+ministry code owns immutable observed-column evidence and the human-reviewed
+column-to-exact-team mapping; that reviewed mapping, not the hint/template, is
+authority. Unknown columns default to Ignore or explicit active/assignable-team
+selection. Column review and exact-team person-token-to-`TeamMembership.id`
+review remain distinct. Deployment data continues to own the stable profile/
+team key rows. This creates no `events -> ministry` reverse dependency, generic
+arbitrary-ETL engine, plugin framework, fuzzy event/team matching, global User
+lookup, or mutable-name authority.
 
 The new generic contracts are architecture only:
 `TEAM_ROSTER_MAPPING_V1`, `TEAM_ROSTER_PREVIEW_V1`, and
@@ -153,10 +157,11 @@ The new generic contracts are architecture only:
 2A route remains zero-write and is not production-ready; it must be refactored
 before any writer is approved. Existing Sound V1 signatures retain only their
 old semantics and may never be reinterpreted by the generic decoder. Sound and
-Projection are the reviewed future specs; Video is evidence only, Recording
-lacks a reviewed destination key, and formula-derived Lighting remains outside
-identity authority. No runtime/schema/migration/dependency/data change occurs
-in GENERAL.0A.
+Exact known Sound/Projection/Video headers may prefill reviewed mappings, but
+they are convenience rather than an importable-team allowlist; formula-derived
+Lighting remains outside identity authority. Duplicate columns selecting one
+team fail closed and are never merged. Event matching remains exact. No runtime/
+schema/migration/dependency/data change occurs in GENERAL.0A.
 During the 5D/5E transition, readiness, the retained bounded reset, ServiceEvent
 Admin, and Worship XLSX matching/confirmation switched to FK/Profile authority
 while compatibility storage still existed as drift evidence. The strict V2

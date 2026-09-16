@@ -526,17 +526,27 @@ The selected architecture preserves the three layers in this document:
   privacy-bounded audit;
 - deployment data owns stable `ServiceProfile.key` and `MinistryTeam.team_key`
   identities; and
-- the deployment-named annual-workbook adapter owns a small reviewed static
-  registry of `source_key`, exact sheet/column/header, destination `team_key`,
-  and source-contract revision. Unknown/unconfigured keys fail closed; there is
-  no discovery framework, arbitrary column/team input, mutable-name inference,
-  or hard-coded database PK.
+- the deployment-named annual-workbook adapter owns the exact event-row/date/
+  ServiceProfile matcher plus optional exact-header-to-team auto-match hints.
+  The observed workbook columns and the uploader's explicit reviewed column-to-
+  team choices are authority; adapter hints and templates are convenience only.
+  This is flexible team-column review inside a known adapter, not arbitrary ETL
+  or fuzzy event matching.
 
-`source_key` is the single source semantic/identity; a second
-`source_semantic` field is intentionally omitted to prevent drift. The generic
-parser uses NFC plus outer trim, ASCII `/` only, nonempty distinct literal
-tokens, and technical bounds of 16 members, 120 characters per token, and 2,048
-characters per cell. Sixteen is a resource guard, never a business count.
+Every observed column retains its exact sheet, column identity, and literal
+header evidence. Unknown columns default to Ignore and may instead be mapped
+explicitly to any currently active, assignable `MinistryTeam`; exact destination
+ID and `team_key` are bound together and revalidated. One observed column maps
+to at most one team, and one destination team may be selected by at most one
+roster column per import; duplicate destination choices block until explicitly
+resolved and are never merged. Column mapping is separate from the later person-
+token mapping, which remains exact active `TeamMembership.id` authority on the
+chosen team. No fuzzy header/name, hierarchy, `team_kind`, role-profile, or PK
+inference grants authority.
+
+The generic parser uses NFC plus outer trim, ASCII `/` only, nonempty distinct
+literal tokens, and technical bounds of 16 members, 120 characters per token,
+and 2,048 characters per cell. Sixteen is a resource guard, never a business count.
 Exact roster equality is membership-ID set equality. Existing rows already in
 the reviewed set are preserved with confirmation truth; additions are new
 unconfirmed blank-note rows; removals are allowed only for exact signed active
@@ -545,14 +555,17 @@ confirmed/prepared roster difference, inactive membership, history/duplicate/
 unknown/invalid assignment, audience failure, or stale baseline blocks the
 whole confirmation. `sync_assignment_members()` is not implicit authority.
 
-The adapter's current reviewed source facts are Sound F / `Sound` /
-`main.cm.digital.sound` and Projection E / `projector` /
-`main.cm.digital.projection`. Video H / `Video` /
-`main.cm.digital.video` is architectural evidence only and is not enabled by
-this audit. Recording still lacks a reviewed destination key, formula-derived
-Lighting is not identity authority, and Speaker/BB & Offering/Worship roster
-semantics remain outside scope. No generic runtime, route, model, migration,
-dependency, production command, or data mutation is implemented here.
+The adapter's reviewed exact-header hints may include Sound F / `Sound` /
+`main.cm.digital.sound`, Projection E / `projector` /
+`main.cm.digital.projection`, and Video H / `Video` /
+`main.cm.digital.video`; they are prefill convenience, not an importable-team
+allowlist. A changed header such as `sounder` stays visible and unmapped rather
+than failing the workbook or being fuzzily authorized. Formula-derived Lighting
+is not identity authority, and Speaker/BB & Offering/Worship roster semantics
+remain outside scope. The known event-row structure and exact ServiceProfile/
+ServiceEvent matching remain unchanged and fail closed. No generic runtime,
+route, model, migration, dependency, production command, or data mutation is
+implemented here.
 
 ## 3. Identity Model
 

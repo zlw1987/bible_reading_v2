@@ -22,6 +22,11 @@
             {% if language == "zh" %}音控工作簿预览{% else %}Sound Workbook Preview{% endif %}
         </a>
         {% endif %}
+        {% if can_preview_projection_assignment_workbook %}
+        <a class="button button-secondary" href="{% url 'projection_assignment_workbook_preview' %}">
+            {% if language == "zh" %}投影工作簿预览{% else %}Projection Workbook Preview{% endif %}
+        </a>
+        {% endif %}
     </div>
     {% endif %}
 </div>

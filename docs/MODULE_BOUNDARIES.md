@@ -121,6 +121,42 @@ audit rows. Neither path performs another-column or historical-backfill,
 Notification, schema, dependency, user/membership/audience/RequiredTeam, or
 unapproved ServiceEvent business-field write. Production 1C review/apply is
 not yet performed.
+`MO-S.6F.2A` remains inside the same one-way `ministry -> events` adapter
+dependency but is a distinct **zero-write** Column-E/`projector` Projection
+contract. Events continues to own strict annual-workbook structure, exact
+ServiceProfile/event matching, lifecycle/history, audience-readiness, and
+scheduling-revision facts. Ministry owns the one-or-two-token ASCII-slash
+grammar, exact `main.cm.digital.projection` team resolution, explicit active
+exact-team `TeamMembership.id` review, one/two-person set-based roster
+classification, and user-bound signed evidence. No Projection confirmation
+endpoint or assignment/member/audit/notification/revision writer exists.
+Projection source syntax is implemented; complete-roster product confirmation
+was outstanding at the 2A milestone. No reverse dependency, parser ownership move, schema,
+migration, dependency, Sound-contract rewrite, or generic arbitrary-column
+engine is introduced.
+`MO-S.6F.GENERAL.0A` later supersedes only that count/framework direction:
+the one/two-person Projection grammar and one-person Sound grammar remain
+historical/local implementation evidence, while all future configured
+team-roster sources use one generic 1..N complete-roster core. Ministry owns the
+team-neutral grammar, exact `TeamMembership.id` review, set diff,
+reconciliation, signatures, SQLite writer barriers, and privacy-bounded audit.
+The deployment-named annual-workbook adapter owns a small static registry of
+exact `source_key`/sheet/column/header/destination `team_key`/source-version
+facts and continues to consume the existing strict workbook/profile/event
+matcher. Deployment data continues to own the stable profile/team key rows.
+This creates no `events -> ministry` reverse dependency, arbitrary-column
+engine, plugin framework, global User lookup, or mutable-name authority.
+
+The new generic contracts are architecture only:
+`TEAM_ROSTER_MAPPING_V1`, `TEAM_ROSTER_PREVIEW_V1`, and
+`TEAM_ROSTER_CONFIRMATION_V1` are not implemented. The current local Projection
+2A route remains zero-write and is not production-ready; it must be refactored
+before any writer is approved. Existing Sound V1 signatures retain only their
+old semantics and may never be reinterpreted by the generic decoder. Sound and
+Projection are the reviewed future specs; Video is evidence only, Recording
+lacks a reviewed destination key, and formula-derived Lighting remains outside
+identity authority. No runtime/schema/migration/dependency/data change occurs
+in GENERAL.0A.
 During the 5D/5E transition, readiness, the retained bounded reset, ServiceEvent
 Admin, and Worship XLSX matching/confirmation switched to FK/Profile authority
 while compatibility storage still existed as drift evidence. The strict V2

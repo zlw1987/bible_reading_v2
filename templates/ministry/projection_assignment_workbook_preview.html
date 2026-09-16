@@ -1,0 +1,105 @@
+{% extends "base.html" %}
+{% load ministry_extras %}
+
+{% block title %}{% if language == "zh" %}投影排班零写入预览{% else %}Projection Assignment Zero-Write Preview{% endif %} | {{ ui.site_title }}{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1 class="page-title">{% if language == "zh" %}投影排班零写入预览{% else %}Projection Assignment Zero-Write Preview{% endif %}</h1>
+    <p class="page-subtitle">{% if language == "zh" %}仅支持已知年度工作簿 All 930 工作表 E 列 / projector{% else %}Only Column E / projector on the known annual workbook’s All 930 sheet is supported{% endif %}</p>
+</div>
+
+<div class="card">
+    <p class="status status-warning"><strong>ZERO WRITE</strong> — {% if language == "zh" %}本阶段不会建立或更改任何排班。{% else %}No assignment will be created or changed in this slice.{% endif %}</p>
+    <p>{% if language == "zh" %}每个支持的单元格必须是一人文字，或由一个 ASCII 斜线分隔的恰好两人文字。两人都会分别复核，并共同构成建议名单。空白不提出安排，也不会清除现有名单。{% else %}A supported cell is either one literal person token or exactly two person tokens separated by one ASCII slash. Both people are reviewed separately and together form the proposed roster. A blank makes no proposal and never clears an existing roster.{% endif %}</p>
+    <p class="muted">{% if language == "zh" %}Projection source syntax implemented / roster completeness still awaiting product confirmation。没有确认或写入路径。{% else %}Projection source syntax implemented / roster completeness still awaiting product confirmation. No confirmation or write path exists.{% endif %}</p>
+</div>
+
+<div class="card">
+    <h2 class="card-title">{% if language == "zh" %}上传工作簿{% else %}Upload Workbook{% endif %}</h2>
+    <form method="post" enctype="multipart/form-data">
+        {% csrf_token %}
+        {{ upload_form.non_field_errors }}
+        {% for field in upload_form %}
+        <div class="form-row">{{ field.label_tag }}{{ field }}{{ field.errors }}{% if field.help_text %}<p class="help-text">{{ field.help_text }}</p>{% endif %}</div>
+        {% endfor %}
+        <div class="actions"><button type="submit">{% if language == "zh" %}上传并复核身份{% else %}Upload and Review Identities{% endif %}</button></div>
+    </form>
+</div>
+
+{% if mapping_review %}
+<div class="card">
+    <h2 class="card-title">{% if language == "zh" %}复核投影团队成员身份{% else %}Review Projection Membership Identities{% endif %}</h2>
+    <p><strong>{% if language == "zh" %}目标团队：{% else %}Destination team:{% endif %}</strong> {{ mapping_review.team|ministry_team_name:language }}</p>
+    <p class="muted">{% if language == "zh" %}完全一致只用于便利预填；明确选择的有效投影团队成员记录才是身份依据。不会显示电邮、电话、备注或其他团队资料。{% else %}An exact visible-identity match is only a convenience prefill. The explicitly selected active Projection-team membership is authoritative. Email, phone, notes, and unrelated-team data are excluded.{% endif %}</p>
+    <form method="post">
+        {% csrf_token %}
+        {{ mapping_form.signed_mapping_state }}
+        {{ mapping_form.non_field_errors }}
+        {% for field in mapping_form.visible_fields %}
+        <div class="form-row">{{ field.label_tag }}{{ field }}{{ field.errors }}{% if field.help_text %}<p class="help-text">{{ field.help_text }}</p>{% endif %}</div>
+        {% endfor %}
+        <div class="actions"><button type="submit">{% if language == "zh" %}生成零写入预览{% else %}Generate Zero-Write Preview{% endif %}</button></div>
+    </form>
+</div>
+{% endif %}
+
+{% if preview %}
+<div class="card">
+    <h2 class="card-title">{% if language == "zh" %}投影排班分类{% else %}Projection Assignment Classification{% endif %}</h2>
+    <p class="status status-warning"><strong>ZERO WRITE</strong> — {% if language == "zh" %}仅显示复核结果；没有写入操作。{% else %}Review results only; no write action is available.{% endif %}</p>
+    <div class="grid grid-4">
+        <p><strong>{{ preview.create_candidate_count }}</strong><br>{% if language == "zh" %}可新建候选（仅预览）{% else %}Create candidates (preview only){% endif %}</p>
+        <p><strong>{{ preview.exact_noop_count }}</strong><br>{% if language == "zh" %}完全一致{% else %}Exact no-ops{% endif %}</p>
+        <p><strong>{{ preview.historical_event_count }}</strong><br>{% if language == "zh" %}历史聚会，安全跳过{% else %}Historical rows skipped{% endif %}</p>
+        <p><strong>{{ preview.no_source_count }}</strong><br>{% if language == "zh" %}空白，不提出安排{% else %}Blank / no proposal{% endif %}</p>
+        <p><strong>{{ preview.hard_blocker_count }}</strong><br>{% if language == "zh" %}硬性阻止项{% else %}Hard blockers{% endif %}</p>
+    </div>
+</div>
+
+<div class="table-wrap">
+<table class="sound-preview-table">
+    <thead><tr>
+        <th>{% if language == "zh" %}来源{% else %}Source{% endif %}</th>
+        <th>{% if language == "zh" %}复核建议名单{% else %}Reviewed proposed roster{% endif %}</th>
+        <th>{% if language == "zh" %}当前 CMS 名单{% else %}Current CMS roster{% endif %}</th>
+        <th>{% if language == "zh" %}目标聚会{% else %}Target event{% endif %}</th>
+        <th>{% if language == "zh" %}分类{% else %}Classification{% endif %}</th>
+    </tr></thead>
+    <tbody>
+    {% for row in preview.rows %}
+    <tr>
+        <td data-label="{% if language == 'zh' %}来源{% else %}Source{% endif %}">
+            <strong>{{ row.source.source_cell }}</strong> · {{ row.source.local_date|date:"Y-m-d" }}<br>
+            {% if row.source.original_literal %}<span>{{ row.source.original_literal }}</span>{% else %}<span class="muted">{% if language == "zh" %}空白{% else %}Blank{% endif %}</span>{% endif %}
+            {% if row.source.normalized_tokens %}<br><span class="muted">{% if language == "zh" %}解析：{% else %}Parsed:{% endif %} {{ row.source.normalized_tokens|join:" + " }}</span>{% endif %}
+        </td>
+        <td data-label="{% if language == 'zh' %}复核建议名单{% else %}Reviewed proposed roster{% endif %}">
+            {% if row.selected_memberships %}
+                {% if row.selected_memberships|length == 2 %}<strong>{% if language == "zh" %}两人建议名单（两人都包括）：{% else %}Two-person proposed roster — both included:{% endif %}</strong><br>{% endif %}
+                {% for member in row.selected_memberships %}
+                    <span>{{ forloop.counter }}. {{ member.visible_identity }} · #{% if language == "zh" %}成员记录{% else %}membership{% endif %} {{ member.membership_id }}</span>{% if not forloop.last %}<br>{% endif %}
+                {% endfor %}
+            {% elif row.identity_state.value == "ambiguous" %}{% if language == "zh" %}有歧义，需要明确复核{% else %}Ambiguous — explicit review required{% endif %}
+            {% elif row.identity_state.value == "mapping_required" or row.identity_state.value == "exact_prefill_available" %}{% if language == "zh" %}需要选择成员身份{% else %}Membership mapping required{% endif %}
+            {% else %}<span class="muted">—</span>{% endif %}
+        </td>
+        <td data-label="{% if language == 'zh' %}当前 CMS 名单{% else %}Current CMS roster{% endif %}">
+            {% if row.current_memberships %}{% for member in row.current_memberships %}{{ member.visible_identity }} · #{{ member.membership_id }}{% if not forloop.last %}<br>{% endif %}{% endfor %}{% else %}<span class="muted">—</span>{% endif %}
+        </td>
+        <td data-label="{% if language == 'zh' %}目标聚会{% else %}Target event{% endif %}">{% if row.event %}#{{ row.event.id }} · {{ row.event.start_datetime|date:"Y-m-d H:i" }}{% else %}<span class="muted">—</span>{% endif %}</td>
+        <td data-label="{% if language == 'zh' %}分类{% else %}Classification{% endif %}">
+            {% if row.target_state.value == "create_candidate" %}<span class="status status-success">CREATE_CANDIDATE</span>
+            {% elif row.target_state.value == "exact_noop" %}<span class="status status-success">EXACT_NOOP</span>
+            {% elif row.target_state.value == "no_source_proposal" %}<span class="muted">NO_SOURCE_PROPOSAL</span>
+            {% elif row.target_state.value == "historical_event_blocker" %}<span class="status status-warning">HISTORICAL_EVENT_BLOCKER</span>
+            {% else %}<span class="status status-warning">{{ row.target_state.value|upper }}</span>{% endif %}
+            {% if row.blocker_detail %}<br><span class="muted">{{ row.blocker_detail }}</span>{% endif %}
+        </td>
+    </tr>
+    {% endfor %}
+    </tbody>
+</table>
+</div>
+{% endif %}
+{% endblock %}

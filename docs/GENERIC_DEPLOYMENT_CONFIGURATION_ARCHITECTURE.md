@@ -493,6 +493,67 @@ adapter still adds no generic Sound taxonomy, schema, or dependency.
 Production 1C review/apply, additional columns, aliases, and external identity
 mapping remain deferred.
 
+`MO-S.6F.2A` adds a second deployment-adapter example without widening the
+Sound contract or generic CMS behavior. It reads only `All 930` Column E headed
+exactly `projector`, maps only to the deployment-local stable key
+`main.cm.digital.projection`, and accepts only one literal identity token or two
+distinct nonblank literal tokens separated by one ASCII slash (NFC and outer
+trim only). Exact reviewed active Projection `TeamMembership.id` values remain
+serving identity; display names are convenience evidence, never authority.
+Roster comparison is set-based for one/two-person exact no-op only; all other
+existing Projection rosters block. The staff/superuser preview is zero-write,
+has no confirmation endpoint, adds no generic column registry/framework, and
+changes no assignment/member/event/revision/audience/RequiredTeam/audit/
+notification data. Projection source syntax is implemented, while complete-
+roster product confirmation and every write path were outstanding at the 2A
+milestone.
+
+`MO-S.6F.GENERAL.0A` is the later **docs-only generic Team Roster Workbook
+Import architecture** and supersedes the count/framework direction above
+without falsifying the implemented evidence. Sound-exactly-one,
+Projection-at-most-two, and Video-exactly-three were observed or historical
+contract shapes, not domain invariants. Every future supported team-roster cell
+uses one complete-roster 1..N ASCII-slash grammar; blank remains no proposal/no
+write and never clears a CMS roster. The local Projection 2A preview must be
+refactored before it can gain write authority and is not production-ready.
+
+The selected architecture preserves the three layers in this document:
+
+- generic ministry service code owns `TEAM_ROSTER_CELL_V1`, exact-team
+  membership review, set-based preview/diff/reconciliation, new
+  `TEAM_ROSTER_MAPPING_V1` / `TEAM_ROSTER_PREVIEW_V1` /
+  `TEAM_ROSTER_CONFIRMATION_V1` signatures, SQLite-safe atomic mutation, and
+  privacy-bounded audit;
+- deployment data owns stable `ServiceProfile.key` and `MinistryTeam.team_key`
+  identities; and
+- the deployment-named annual-workbook adapter owns a small reviewed static
+  registry of `source_key`, exact sheet/column/header, destination `team_key`,
+  and source-contract revision. Unknown/unconfigured keys fail closed; there is
+  no discovery framework, arbitrary column/team input, mutable-name inference,
+  or hard-coded database PK.
+
+`source_key` is the single source semantic/identity; a second
+`source_semantic` field is intentionally omitted to prevent drift. The generic
+parser uses NFC plus outer trim, ASCII `/` only, nonempty distinct literal
+tokens, and technical bounds of 16 members, 120 characters per token, and 2,048
+characters per cell. Sixteen is a resource guard, never a business count.
+Exact roster equality is membership-ID set equality. Existing rows already in
+the reviewed set are preserved with confirmation truth; additions are new
+unconfirmed blank-note rows; removals are allowed only for exact signed active
+team-member rows with no confirmation timestamp or note. Any protected removal,
+confirmed/prepared roster difference, inactive membership, history/duplicate/
+unknown/invalid assignment, audience failure, or stale baseline blocks the
+whole confirmation. `sync_assignment_members()` is not implicit authority.
+
+The adapter's current reviewed source facts are Sound F / `Sound` /
+`main.cm.digital.sound` and Projection E / `projector` /
+`main.cm.digital.projection`. Video H / `Video` /
+`main.cm.digital.video` is architectural evidence only and is not enabled by
+this audit. Recording still lacks a reviewed destination key, formula-derived
+Lighting is not identity authority, and Speaker/BB & Offering/Worship roster
+semantics remain outside scope. No generic runtime, route, model, migration,
+dependency, production command, or data mutation is implemented here.
+
 ## 3. Identity Model
 
 | Identity | Meaning | Portability |

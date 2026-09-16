@@ -21,6 +21,11 @@ urlpatterns = [
         name="sound_assignment_workbook_preview",
     ),
     path(
+        "assignments/import/projection-preview/",
+        views.projection_assignment_workbook_preview,
+        name="projection_assignment_workbook_preview",
+    ),
+    path(
         "assignments/import/sound-template/",
         views.download_sound_assignment_workbook_template,
         name="download_sound_assignment_workbook_template",

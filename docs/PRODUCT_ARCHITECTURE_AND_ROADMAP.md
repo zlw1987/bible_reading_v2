@@ -250,6 +250,57 @@ token; mixed create/update batches retain `N -> N+1` only for create events,
 emit no Notification, and add no schema, migration, dependency, other column,
 or production data mutation. Production review/apply remains unperformed.
 
+MO-S.6F.2A has a LOCALLY IMPLEMENTED / LOCAL VERIFIED, UNCOMMITTED
+zero-write Projection prototype preserved in the current worktree as
+refactor evidence. It is not part of current HEAD, is not production-ready,
+and must not be committed in its current one/two-person form. Its independently versioned source grammar accepts
+only one literal person token or exactly two nonblank distinct tokens separated
+by one ASCII slash, with Unicode NFC plus outer trim only. Exact active
+Projection `TeamMembership.id` selections are identity authority; a unique
+visible match is prefill convenience only, and a two-token row requires two
+distinct selected memberships. No current/history assignment is a create
+candidate; one current assignment is an exact no-op only when its complete
+active membership-ID set equals the reviewed one/two-person set. Every other
+existing roster or assignment anomaly blocks, while blank rows and historical
+events are safe no-write states. The signed preview binds source/team/
+membership/event/audience/assignment/member/Worship-fingerprint baselines but
+creates no confirmation or mutation authority and leaks no private contact,
+notes, or confirmation text. **Projection source syntax implemented; at the 2A
+milestone roster completeness still awaited product confirmation.** Production verification is
+deferred; no schema, migration, dependency, production command, or write path
+was added.
+
+`MO-S.6F.GENERAL.0A` is now **DOCS/READ-ONLY ARCHITECTURE COMPLETE; GENERIC
+RUNTIME UNIMPLEMENTED**. Product-owner clarification supersedes the former
+current-direction count assumptions: any configured team-assignment cell is a
+complete 1..N roster, every ASCII-slash segment is one actual serving person, and blank
+is no proposal/no write. Sound-one, Projection-one/two, and Video-three remain
+historical or observed shapes only. The local Projection 2A limitation is
+therefore refactor evidence, not production/write readiness.
+
+The frozen direction is a generic team-neutral roster core plus deployment-
+specific reviewed source specs—not a generic arbitrary spreadsheet engine.
+One small adapter registry binds `source_key`, exact sheet/column/header,
+destination `MinistryTeam.team_key`, and source-contract revision. The generic
+core owns NFC/outer-trim/ASCII-slash 1..N parsing (technical cap 16), exact
+active-team `TeamMembership.id` review, set-based preview and roster diff,
+row-preserving create/add/safe-remove reconciliation, new mutually exclusive
+`TEAM_ROSTER_MAPPING_V1` / `TEAM_ROSTER_PREVIEW_V1` /
+`TEAM_ROSTER_CONFIRMATION_V1` signatures, SQLite CAS/conditional-write
+barriers, whole-workbook atomicity, zero Notification, and privacy-bounded
+audit. Confirmed/prepared differences, protected member removal, inactive
+membership, audience/history/duplicate/unknown/invalid truth, or any stale
+baseline block the whole apply.
+
+Sound's production-created model rows remain untouched and old Sound V1 tokens
+retain only their old semantics. New generic Sound must accept multiple people.
+Projection should be refactored onto the generic preview before approval; old
+zero-write Projection tokens may simply require re-upload. Video is not enabled
+by this architecture task. Recording and formula-derived Lighting remain
+unresolved/blocked, and Speaker/BB & Offering/Worship roster are out of scope.
+No runtime file, model, migration, dependency, production command, or data was
+changed by GENERAL.0A.
+
 `MO-S.REQUIRED.0A` is **EFFECTIVE REQUIRED-TEAM SEMANTICS / EVENT WORSHIP
 ENTRY AUDIT COMPLETE**. `MO-S.REQUIRED.1A` is **IMPLEMENTED / LOCAL VERIFIED /
 PRODUCTION RUNTIME VERIFIED**.

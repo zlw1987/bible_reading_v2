@@ -98,9 +98,12 @@ privacy-safe display-identity digest, and acknowledgement is bound to the exact
 canonical context rendered to the reviewer.
 Docs/read-only `MO-S.6F.0A` now completes the assignment-import identity,
 authority, workbook-source, mutation, and concurrency audit. The product owner
-subsequently approved Column F/Sound as the first V1 source: every supported
-nonblank literal represents exactly one Sound person, while blank means no
-proposal/no write. `MO-S.6F.1A` is **IMPLEMENTED / LOCAL VERIFIED** as the
+subsequently approved Column F/Sound as the first V1 source under the then-
+current one-person contract. That count rule remains historical evidence for
+the signed Sound V1 contracts; `MO-S.6F.GENERAL.0A` now supersedes it as the
+current product direction with one generic 1..N complete-roster grammar for
+every configured team-roster source. Blank remains no proposal/no write.
+`MO-S.6F.1A` is **IMPLEMENTED / LOCAL VERIFIED** as the
 no-schema, exact-`TeamMembership`-identity, staff/superuser-only, zero-write
 mapping and assignment-state preview. It enables no other assignment column,
 and it explicitly excludes historical ServiceEvent backfill. MO-S.6F.1B is now IMPLEMENTED / LOCAL VERIFIED / PRODUCTION APPLY COMPLETE / VERIFIED as the separate signed, create-only, staff/superuser confirmation. The reviewed production batch created only future missing Sound assignments; a fresh re-upload classified the newly created rows as exact no-ops with zero hard blockers and no further confirmation action. A read-only production audit confirmed the created assignments were scheduled, contained exactly the reviewed unconfirmed Sound member, preserved a null Worship-review fingerprint, and introduced no duplicate event/team assignment.
@@ -2385,10 +2388,10 @@ For the 52 supported Sunday rows (4 and 6:56), the observed source is:
 | B | `Worship/AV @Bethany` | 52 literal strings; A/C1/C2/C3 prefix plus leader/free text; 26 distinct values; parenthetical annotations, one slash-combined case, one `TBD`, and one mixed Chinese/English value occur | Proven rotation input, but not proven to be a complete Worship roster. Do not import a Worship roster from B in V1. |
 | C | `BB & Offering` | 32 populated literal strings and 20 blanks; populated cells use slash-oriented slot text | Not an approved Worship/AVL destination in this slice. |
 | D | `Speaker @Bethany` | 44 populated literal strings and 8 blanks; includes multi-name punctuation | Speaker scheduling is outside MO-S.6F. |
-| E | `projector` | 52 populated literal strings; 17 distinct values; 19 cells contain slash-combined values; English, Chinese, and mixed-script values occur | Plausible Projection assignment source, but requires a column-specific one-or-two-token slash grammar and product confirmation that the cell is the complete roster. |
+| E | `projector` | 52 populated literal strings; 17 distinct values; 19 cells contain slash-combined values; English, Chinese, and mixed-script values occur | Reviewed Projection team-roster source. One/two-person values are observed data shapes, not a maximum; use the generic 1..N complete-roster grammar. |
 | F | `Sound` | 26 populated literal strings and 26 blanks; four distinct single Latin-script values; no observed separator | Narrowest syntactic downstream candidate, but blank/completeness semantics and the first V1 scope still require product-owner approval. |
 | G | `Recording` | 24 populated literal strings and 28 blanks; four distinct single Latin-script values; no observed separator | The workbook semantic exists, but the reviewed deployment has no separate `recording` team key. Mapping it to Video or another team would be an unsupported inference. |
-| H | `Video` | 39 populated literal strings and 13 blanks; 29 distinct values; every populated cell has three slash-separated segments; English, Chinese, and mixed/bilingual combinations occur | Plausible Video source, but only under an exact three-nonblank-token column contract and product confirmation that all three segments are serving people. |
+| H | `Video` | 39 populated literal strings and 13 blanks; 29 distinct values; every populated cell has three slash-separated segments; English, Chinese, and mixed/bilingual combinations occur | Architectural evidence for the generic grammar: the observed three segments are three serving people, but three is not a required count. Video runtime remains separately gated. |
 | I | `Light` | all 52 source cells are formulas; 50 cached strings and 2 cached blanks; four distinct cached identities derived from column B token text | Formula-driven identity is excluded from V1. Cached names are evidence only and must not schedule a person. |
 
 Repeated values occur across Sundays. The workbook contains English, Chinese,
@@ -2399,13 +2402,15 @@ grammar. No comma, ampersand, parentheses, Chinese punctuation, hyphen, or free
 text may become a generic splitter merely because it appears somewhere in the
 workbook.
 
-The remaining semantic questions are not obtainable from cell syntax alone:
-whether B names one Worship leader or the complete Worship roster; whether a
-blank F/G/H/I cell means no server, not yet planned, inherited/paired service,
-or intentionally omitted; whether E/H slash segments are always independent
-people; and whether `Recording` belongs to the configured Video team. These are
-**REAL WORKBOOK EVIDENCE REQUIRED plus product-owner confirmation** before the
-corresponding column is enabled.
+The product owner has since resolved the team-roster count and delimiter
+questions: every supported nonblank team-assignment cell is the complete
+serving roster, every ASCII-slash segment is one actual person, every supported
+team allows 1..N people, and blank means no proposal/no write rather than clear.
+Observed Sound/Projection/Video counts are evidence, never invariants. The
+remaining unresolved questions are whether B is a team-roster source at all,
+whether `Recording` has an exact separately reviewed destination `team_key`,
+and whether any authoritative non-formula Lighting source exists. Speaker and
+BB & Offering remain outside this team-roster scope.
 
 The checkout's local operational SQLite file is not current enough to prove
 membership mappings: read-only ORM inspection stops because its
@@ -2968,6 +2973,335 @@ contract is docs/read-only complete, and its narrow 1C-1A runtime is now
 implemented/local-verified but not production-applied. Every additional
 workbook column remains separately gated. MO-S.6F.0A itself remains a
 historical docs/read-only audit.
+
+MO-S.6F.2A has a LOCALLY IMPLEMENTED / LOCAL VERIFIED, UNCOMMITTED
+zero-write Projection prototype preserved in the current worktree as
+refactor evidence. It is not part of current HEAD, is not production-ready,
+and must not be committed in its current one/two-person form. It first runs the unchanged strict
+annual-workbook parser, then reads only `All 930` Column E and resolves only the
+exact active assignable `main.cm.digital.projection` team. A nonblank source is
+supported only as one literal person token, or exactly two nonblank person
+tokens separated by one ASCII slash. Splitting is followed only by outer trim
+and Unicode NFC; identity text is otherwise preserved exactly. Formula/error
+cells, extra or empty slash segments, duplicate normalized tokens, multiline
+text, placeholders, replacement/substitution/arrows, bracketed annotations,
+comma/semicolon/Chinese enumeration syntax, unsupported free text, and bounded-
+length violations fail closed. Blank is `NO_SOURCE_PROPOSAL` and never clears a
+CMS roster.
+
+Each token is reviewed separately against an exact active
+`TeamMembership.id` on that Projection team. Unique exact visible identity is
+only a convenience prefill; zero or duplicate matches require explicit review,
+and two source tokens must resolve to two distinct memberships. For a current/
+future exact event, no current/history Projection assignment is
+`CREATE_CANDIDATE`; exactly one current assignment whose complete active roster
+membership-ID set equals the reviewed one- or two-person set is `EXACT_NOOP`
+regardless of member-row order. Empty, different, extra, inactive-member,
+duplicate, history, unknown-status, malformed canonical Worship-fingerprint,
+invalid-target, unresolved-identity, or audience-unsafe state blocks. Completed
+or canonically elapsed events are safe `HISTORICAL_EVENT_BLOCKER` skips. The
+persisted Worship fingerprint accepts only `NULL` or lowercase 64-character
+canonical hex; it is neither recomputed nor mutated.
+
+The expiring user-bound preview signs workbook/source versions and SHA-256,
+privacy-safe token digests, exact source cells, destination-team lifecycle,
+reviewed membership/user facts, exact event/profile/revision/time/lifecycle and
+audience facts, complete assignment/member baselines, and the persisted Worship
+fingerprint. It grants no write authority. The integration-gated UI is active-
+staff/superuser-only, shows both members clearly for a two-person proposal, and
+exposes no email, phone, private notes, confirmation-note text, or writer
+control. There is no confirmation endpoint, create/fill/replace/delete,
+LogEntry, Notification, or scheduling-revision mutation. **Projection source
+syntax implemented; at the 2A milestone roster completeness still awaited
+product confirmation.**
+No production command or production verification has been performed.
+
+**Supersession:** the one-or-two-person restriction above accurately describes
+the current local 2A implementation, but it is not an approved domain rule and
+must not reach a writer. The product owner has confirmed that Projection, Sound,
+Video, and every other supported team-roster source share complete-roster 1..N
+semantics. The local 2A work is implementation evidence to refactor onto the
+generic architecture below; it is not production-ready.
+
+#### MO-S.6F.GENERAL.0A — Generic Team Roster Workbook Import architecture
+
+Status: **READ-ONLY REPOSITORY AUDIT + DOCS-ONLY ARCHITECTURE COMPLETE;
+GENERIC RUNTIME UNIMPLEMENTED**.
+
+This decision supersedes the former current-direction statements that Sound is
+exactly one person, Projection is at most two people, Video is exactly three
+people, or that no generic roster/column mechanics should exist. Those statements
+remain valid only as milestone-scoped implementation or observed-workbook
+history. The approved direction is one reusable **team roster** import core plus
+a small reviewed, deployment-specific source-spec registry. It does not make
+Speaker, BB & Offering, Worship free text, Recording, or formula-derived Lighting
+an approved source.
+
+##### Repository duplication to remove in a future implementation slice
+
+The current Sound stack and local Projection 2A stack independently implement
+the same concepts. A future refactor should make the following generic while
+leaving workbook coordinates and destination keys in the named adapter:
+
+| Current duplication | Current locations | Generic destination |
+| --- | --- | --- |
+| Source/mapping/preview versions, signing salts, source semantic/column/header/team constants | `sound_assignment_xlsx_preview.py`; `projection_assignment_xlsx_preview.py` | Generic contract versions and salts; one adapter-owned `TeamRosterSourceSpec` registry |
+| Source, identity, target, and destination-team error enums | Both preview services | Team-neutral enums and fail-closed errors |
+| Source row, parsed workbook, membership candidate, token review, mapping review, preview row/result dataclasses | Both preview services | Team-neutral immutable preview domain |
+| NFC normalization, unsupported-syntax checks, literal parsing, strict workbook re-open, exact header/column extraction | Both preview services | Generic 1..N cell grammar plus adapter extraction from one reviewed spec |
+| Exact `team_key` resolution, active/assignable checks, privacy-safe visible identity, active exact-team candidate enumeration, exact prefill review | Both preview services | One team-neutral identity-review service |
+| Mapping payload construction, signing/decoding, canonical-shape checks, selected-membership validation | Both preview services | `TEAM_ROSTER_MAPPING_V1` |
+| Assignment/member prefetch, complete baseline, history/current/unknown classification, fingerprint validation, exact roster comparison | Both preview services | One roster-diff preview classifier |
+| Exact target details, canonical event-history rule, audience safety, event/team/membership payloads, preview signing and stale-state decode | Both preview services | `TEAM_ROSTER_PREVIEW_V1` |
+| Upload and mapping forms | `SoundAssignmentWorkbookUploadForm` / `SoundAssignmentMappingForm`; Projection equivalents | One source-selected upload form and one token-to-membership review form |
+| Upload/mapping/preview views, context/error copy, routes, assignment-list buttons, and two near-duplicate templates | `ministry/views.py`, `ministry/urls.py`, `assignment_list.html`, Sound/Projection preview templates | One Team Roster Workbook Import route/template; optional server-defined convenience links |
+| Separate full Sound/Projection preview test stacks | `test_sound_assignment_xlsx_preview.py`; local `test_projection_assignment_xlsx_preview.py` | Parameterized generic contract tests plus small adapter-spec tests |
+| Sound-only create and narrow fill/replace proposal shapes, revalidation, audit, postconditions, and transaction orchestration | `sound_assignment_xlsx_confirmation.py`; `sound_assignment_xlsx_roster_update.py` | A new generic confirmation contract and writer; legacy V1 decoders remain isolated during transition |
+
+The generic core must not import or branch on Sound, Projection, Video, Lighting,
+SVCA/Bethany names, database PKs, workbook columns, or mutable team names. It may
+consume canonical `ServiceEvent`, `MinistryTeam`, `TeamMembership`,
+`TeamAssignment`, `TeamAssignmentMember`, audience/governance facts, and the
+existing scheduling-revision primitives.
+
+##### Layer boundary and proposed module layout
+
+1. Generic CMS domain/service code owns cell grammar, exact-team membership
+   review, generic preview states/diffs, reconciliation safety, signatures,
+   atomic confirmation, audit/privacy, and concurrency invariants.
+2. Deployment configuration owns stable `ServiceProfile.key` and
+   `MinistryTeam.team_key` rows. It does not own spreadsheet coordinates.
+3. The deployment-named annual-workbook adapter owns the exact sheet, column,
+   header, source key, destination team key, and source-contract revision. It
+   continues to call the strict known-workbook parser/target matcher.
+
+Proposed files for a later authorized implementation are:
+
+- `ministry/services/team_roster_workbook.py`: generic grammar, immutable domain
+  types, identity review, states, and roster diff;
+- `ministry/services/team_roster_workbook_preview.py`: mapping/preview signing
+  and stale-state validation;
+- `ministry/services/team_roster_workbook_confirmation.py`: one generic writer,
+  SQLite barriers, revalidation, audit, and postconditions;
+- `ministry/integrations/svca_bethany_2026_worship_xlsx/team_roster_sources.py`:
+  reviewed specs and exact cell extraction, or an equivalently explicit named-
+  adapter module if namespace movement is deferred;
+- one generic form/view/template route under ministry, with the existing private
+  workbook-download endpoint remaining a separate raw-byte concern; and
+- parameterized generic tests plus adapter tests for exact coordinates/headers/
+  keys. No model, migration, dependency, `ImportRun`, or plugin framework is
+  required.
+
+##### Small static source specification
+
+Use one frozen dataclass with only these fields:
+
+| Field | Contract |
+| --- | --- |
+| `source_key` | Stable adapter-local machine key used by the registry, selector, signatures, logs, and routing; unknown keys fail closed |
+| `sheet_name` | Exact reviewed worksheet name |
+| `column` | Exact reviewed column coordinate; never supplied freely by the request |
+| `exact_header` | Exact expected header value and reviewed header cell convention |
+| `destination_team_key` | Exact stable deployment-local `MinistryTeam.team_key`; never a name or PK |
+| `source_contract_revision` | Version for the complete adapter/spec meaning, including workbook family and extraction semantics |
+
+Do not add a second `source_semantic` identity: `source_key` is sufficient and
+avoids two machine fields that can drift. The generic cell grammar has its own
+single `TEAM_ROSTER_CELL_V1` revision and is not duplicated per source. Human-
+facing bilingual labels belong to adapter/UI copy, not authority. The reviewed
+static registry is explicit and has no discovery, hooks, arbitrary user fields,
+or plugin API.
+
+The initial future registry may contain the already reviewed facts `sound` ->
+`All 930` / F / `Sound` / `main.cm.digital.sound` and `projection` -> `All 930`
+/ E / `projector` / `main.cm.digital.projection`. Adding a Video spec or exposing
+it in the selector remains a separately approved runtime slice even though H /
+`Video` / `main.cm.digital.video` is current deployment evidence. Recording has
+no approved destination key. Lighting formulas/cached values are not authority.
+
+##### One literal 1..N roster grammar
+
+`TEAM_ROSTER_CELL_V1` is:
+
+- normalize the complete text and each segment with Unicode NFC and outer trim;
+- ASCII `/` is the only separator;
+- a supported nonblank cell has one or more nonblank person tokens and is the
+  complete proposed roster for that team/event;
+- reject empty segments and duplicate normalized tokens;
+- do not case-fold, transliterate, strip punctuation, infer aliases, or split on
+  comma, ampersand, semicolon, Chinese enumeration punctuation, full-width slash,
+  backslash, whitespace, or line breaks;
+- annotations, placeholders, replacement/substitution syntax, arrows, formula
+  cells, error cells, and non-text values block; and
+- blank/outer-whitespace-only means `NO_SOURCE_PROPOSAL`: no write and never
+  clear the CMS roster.
+
+Set `MAX_ROSTER_MEMBERS_PER_CELL = 16`, `MAX_PERSON_TOKEN_LENGTH = 120`, and a
+compatible complete-literal cap of 2,048 characters as resource-protection
+bounds. Eight is needlessly close to plausible operational teams; 32 doubles
+signed-form/query/write exposure without current evidence. Sixteen naturally
+covers the observed one/two/three-person cells and required tests above three
+while staying conservative. It is explicitly not a business maximum: a reviewed
+source requiring more must change the technical contract/version rather than be
+silently truncated. There is no hard-coded minimum/maximum of 1, 2, or 3 by
+team.
+
+##### Generic identity review and zero-write preview
+
+For the chosen server-registered spec, resolve exactly one active, assignable
+`MinistryTeam` by `destination_team_key`. Enumerate only active
+`TeamMembership` rows on that exact team, including linked and display-name-only
+memberships. A unique exact visible-identity match may prefill a control, but the
+authority is the staff review of an exact membership ID. Zero/multiple visible
+matches require explicit review. Never query a global User identity, create a
+User/membership, use aliases/fuzzy matching, or accept a wrong-team/inactive ID.
+Within one source cell, distinct tokens must map to distinct membership IDs.
+
+The generic preview states are:
+
+| State | Meaning |
+| --- | --- |
+| `NO_SOURCE_PROPOSAL` | Blank; no write and no clear |
+| `CREATE_CANDIDATE` | Current/future exact target with no current or historical destination assignment |
+| `EXACT_NOOP` | Reviewed and current membership-ID sets are equal, independent of member-row/source order |
+| `ROSTER_UPDATE_CANDIDATE` | One current `scheduled` assignment has a non-empty diff and every removal is safe |
+| `HISTORICAL_EVENT_SKIP` | Completed or canonically elapsed event; no historical backfill |
+| `SOURCE_BLOCKER` | Cell/spec/workbook grammar or resource bound failed |
+| `IDENTITY_BLOCKER` | Review missing/ambiguous/wrong-team/inactive or two tokens map to one membership |
+| `INVALID_TARGET_BLOCKER` | Exact profile/event/lifecycle target is not valid |
+| `AUDIENCE_BLOCKER` | A linked active selected member is outside canonical audience; bulk import has no override |
+| `DUPLICATE_ASSIGNMENT_BLOCKER` | More than one current assignment exists |
+| `HISTORICAL_ASSIGNMENT_BLOCKER` | Any completed/cancelled destination assignment conflicts with the current/future row |
+| `UNKNOWN_ASSIGNMENT_BLOCKER` | An assignment has an unsupported status |
+| `INVALID_ASSIGNMENT_BLOCKER` | Parent/fingerprint/team/member baseline is malformed |
+| `UNSAFE_ROSTER_UPDATE_BLOCKER` | A difference would remove protected truth, change a confirmed/prepared parent, or involves invalid current membership truth |
+
+`FILL_CANDIDATE` and `REPLACE_CANDIDATE` remain historical Sound V1/UI labels,
+not generic domain states. Render one generic set diff using sorted exact IDs:
+
+```text
+current_membership_ids
+reviewed_membership_ids
+preserved_ids = current intersect reviewed
+add_ids       = reviewed minus current
+remove_ids    = current minus reviewed
+```
+
+Sign the complete member-row baseline as well as this set view. Set equality,
+not order, defines `EXACT_NOOP`; roster order grants no serving authority.
+
+##### Generic V1 reconciliation matrix
+
+| Current exact destination truth | Result |
+| --- | --- |
+| No current/history assignment | `CREATE_CANDIDATE`; create one `scheduled` parent and all reviewed members unconfirmed with blank confirmation notes |
+| One current `scheduled` assignment; equal set | `EXACT_NOOP`; preserve every through row and all confirmation truth |
+| One current `scheduled` assignment; additions only | `ROSTER_UPDATE_CANDIDATE`; preserve existing rows and create only added rows unconfirmed/blank-note |
+| One current `scheduled` assignment; removals or mixed diff | Candidate only when every exact removed through row is unconfirmed, has a blank confirmation note, and its membership is still active, exact-team, and otherwise current under the signed contract |
+| Any retained row | Preserve the exact row, `confirmed_at`, `confirmation_note`, and `created_at` |
+| Any removed row with confirmation timestamp, nonblank confirmation note, inactive/wrong-team membership, or other protected operational truth | Block the whole workbook confirmation |
+| One current `confirmed` or `prepared` assignment | Equal set is `EXACT_NOOP`; any difference blocks |
+| Any completed/cancelled assignment conflict, duplicate current assignment, unknown status, malformed parent, inactive existing membership, or invalid membership baseline | Block |
+
+For update candidates, delete only exact signed `TeamAssignmentMember.id` rows
+with assignment/membership and safe-confirmation predicates, require the exact
+delete count, and insert only exact signed additions. Do not delete-all/recreate,
+do not copy confirmations, do not change the parent ID/event/team/status/notes/
+creator/timestamps/Worship fingerprint, and do not call
+`sync_assignment_members()` implicitly. That helper performs broad set-difference
+deletion and cannot by itself prove each removal is authorized.
+
+##### Versioned authority, concurrency, audit, and privacy
+
+Use new and mutually exclusive `TEAM_ROSTER_MAPPING_V1`,
+`TEAM_ROSTER_PREVIEW_V1`, and `TEAM_ROSTER_CONFIRMATION_V1` contracts. Each
+payload binds the canonical registry entry (`source_key`, sheet, column, exact
+header, destination team key, source-contract revision), generic grammar
+revision, workbook SHA-256, actor, profile, exact resolved team, and expiry. A
+Projection proposal therefore cannot be replayed as Sound even if every other
+row happens to match.
+
+Write authority also binds and rechecks exact event ID/revision/profile/time/
+lifecycle/history, audience and governance facts, complete assignment parent
+baseline, every assignment-member row and confirmation-presence/digest fact,
+every involved membership/team/activity/user/display-identity-digest fact, the
+complete reviewed membership-ID set, and exact preserved/add/remove diff. Never
+sign or persist raw contact data or private note/confirmation text.
+
+For a batch with creates, the canonical `ServiceEvent.scheduling_revision` CAS
+remains each create event's exact once-only `N -> N+1` claim. For roster updates,
+do not broaden event revision: conditionally self-update a non-auto-updated
+`TeamAssignment` value in deterministic assignment-ID order, binding the signed
+parent predicates, and require exactly one row as SQLite's first-writer boundary.
+For mixed create/update, establish the lowest deterministic update barrier first,
+then remaining update barriers and ascending create-event CAS claims inside one
+outer transaction. If there are no updates, the first create CAS remains the
+writer boundary. Reload the actor and integration gate after the first-write
+boundary and before any `TeamAssignment`, `TeamAssignmentMember`, or `LogEntry`
+write; then recompute all material and safe-no-write truth. Any stale, busy,
+duplicate, invalid, delete-count, insert, audit, or postcondition failure rolls
+back every barrier, revision claim, parent/member write, and audit row. Do not
+claim `select_for_update()` provides the SQLite guarantee.
+
+Continue zero `Notification`. Emit one bounded `ADDITION` or `CHANGE` `LogEntry`
+per changed assignment with a shared operation UUID and only contract/source key,
+workbook SHA-256, event/assignment/team IDs and team key, added/removed membership
+IDs, and action. Preserved IDs need not be logged because they are unchanged and
+remain in the signed baseline. Omit filenames, source tokens/names, display
+names, users, email, phone, assignment notes, confirmation text, and note digests.
+
+##### Sound, Projection, Video, UI, and implementation sequence
+
+Sound's already-created assignments remain canonical model data and are never
+rewritten for migration. Stop minting old Sound V1 proposals at cutover; new
+Sound uploads use the generic contracts and accept `Aaron / Nelson` as a
+two-person complete roster. Old `SOUND_ASSIGNMENT_CONFIRMATION_V1` and
+`SOUND_ASSIGNMENT_ROSTER_UPDATE_CONFIRMATION_V1` tokens must never be decoded as
+generic tokens. During a bounded transition, their existing endpoints may only
+finish still-valid old tokens under their exact old semantics, then be removed
+after the maximum signing age. Existing Sound links can become server-defined
+convenience entries into the generic page with `source_key=sound`; they are not a
+second authority.
+
+Projection 2A has no writer and no production verification. Refactor its local
+evidence onto the generic core before approval; refuse its old zero-write signed
+preview and require re-upload rather than preserving the one/two limit. Keep an
+optional Projection convenience link only as a server-defined shortcut to the
+generic `projection` spec.
+
+Video Column H proves the same parser naturally handles three people, but this
+task does not register/expose or authorize Video writes. Recording remains
+blocked until one destination `team_key` is explicitly reviewed. Formula-derived
+Lighting remains non-authoritative; the retired Lighting Pilot is not revived.
+Speaker, BB & Offering, and Worship-roster semantics remain outside scope.
+
+The future UI is one **Workbook Team Roster Import** surface under Team
+Assignments: choose only from server-registered specs, upload, review every
+token-to-membership ID, inspect zero-write states/diffs, then use a distinct
+confirmation action. Never accept arbitrary sheet/column/header/team key from a
+request. Temporary Sound/Projection links may preselect a registered source.
+
+Implementation should proceed only in separately approved slices:
+
+1. generic grammar/spec/domain types and parameterized zero-write tests;
+2. named-adapter registry/extraction and exact Sound/Projection adapter tests;
+3. generic identity mapping, preview, signatures, one route/form/template, and
+   refactor of local Projection evidence with zero writes;
+4. new generic confirmation writer with file-backed SQLite race/rollback tests;
+5. Sound cutover/legacy-token expiry and focused regression/browser QA; and
+6. separately approve any Video registration/write enablement or any future
+   source. Recording and Lighting stay blocked until their source decisions are
+   explicitly resolved.
+
+Generic tests must be parameterized across reviewed specs and cover 1, 2, 3,
+and more-than-3-within-16 people; duplicate token; empty segment; duplicate
+mapped membership; order-insensitive no-op; N-member create; add-only, safe
+remove-only, and safe mixed update; protected confirmed/note removal; confirmed/
+prepared parent difference and exact no-op; inactive membership; audience,
+history, duplicate, unknown, and invalid assignment blockers; stale membership/
+assignment/member races; mixed create/update atomic rollback; privacy; zero
+notification; and fresh-upload idempotency. Adapter tests separately prove each
+exact source coordinate, header, source version, and destination key.
 
 `MO-S.6F.TEMPLATE.1A` adds only a staff/superuser convenience download beside
 the existing Sound preview. The integration-gated endpoint streams the exact

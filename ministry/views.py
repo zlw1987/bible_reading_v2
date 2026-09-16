@@ -46,6 +46,8 @@ from .forms import (
     MinistryTeamParentTeamLinkForm,
     MinistryTeamRoleAssignmentForm,
     MinistryTeamStructureForm,
+    ProjectionAssignmentMappingForm,
+    ProjectionAssignmentWorkbookUploadForm,
     SoundAssignmentMappingForm,
     SoundAssignmentWorkbookUploadForm,
     TeamAssignmentConfirmForm,
@@ -2538,6 +2540,185 @@ def sound_assignment_workbook_preview(request):
     )
 
 
+def _projection_preview_error_text(language, error):
+    from .services.projection_assignment_xlsx_preview import (
+        ProjectionDestinationTeamError,
+        ProjectionDestinationTeamErrorCode,
+    )
+
+    if isinstance(error, ProjectionDestinationTeamError):
+        labels = {
+            ProjectionDestinationTeamErrorCode.MISSING: (
+                "找不到已配置的投影团队。"
+                if language == "zh"
+                else "The configured Projection team is missing."
+            ),
+            ProjectionDestinationTeamErrorCode.DUPLICATE: (
+                "投影团队技术标识存在冲突。"
+                if language == "zh"
+                else "The configured Projection team identity is duplicated."
+            ),
+            ProjectionDestinationTeamErrorCode.INACTIVE: (
+                "已配置的投影团队目前未启用。"
+                if language == "zh"
+                else "The configured Projection team is inactive."
+            ),
+            ProjectionDestinationTeamErrorCode.NON_ASSIGNABLE: (
+                "已配置的投影团队不可用于排班。"
+                if language == "zh"
+                else "The configured Projection team is not assignable."
+            ),
+        }
+        return labels.get(error.code, str(error))
+    if hasattr(error, "code"):
+        return (
+            "工作簿不符合已支持的年度模板：" + str(error.code.value)
+            if language == "zh"
+            else "Workbook does not match the supported annual contract: "
+            + str(error.code.value)
+        )
+    return str(error)
+
+
+def _projection_preview_context(
+    *, language, upload_form=None, mapping_review=None, mapping_form=None, preview=None
+):
+    return {
+        "language": language,
+        "upload_form": upload_form
+        or ProjectionAssignmentWorkbookUploadForm(language=language),
+        "mapping_review": mapping_review,
+        "mapping_form": mapping_form,
+        "preview": preview,
+    }
+
+
+@login_required
+@require_http_methods(["GET", "POST"])
+def projection_assignment_workbook_preview(request):
+    """Staff-only Column-E zero-write review; there is no writer endpoint."""
+
+    try:
+        require_integration_enabled(ANNUAL_WORKBOOK_INTEGRATION_KEY)
+    except IntegrationDisabled as exc:
+        raise Http404 from exc
+
+    from ministry.services.projection_assignment_xlsx_preview import (
+        ProjectionDestinationTeamError,
+        ProjectionMappingStateError,
+        ProjectionMappingValidationError,
+        build_projection_assignment_preview,
+        decode_projection_assignment_mapping,
+        prepare_projection_assignment_mapping,
+        user_can_preview_projection_assignments,
+    )
+    from ministry.services.worship_xlsx_preview import (
+        SignedWorkbookStateError,
+        TargetServiceProfileError,
+        WorkbookContractError,
+    )
+
+    if not user_can_preview_projection_assignments(request.user):
+        raise PermissionDenied
+    language = get_user_language(request)
+    if request.method == "GET":
+        return render(
+            request,
+            "ministry/projection_assignment_workbook_preview.html",
+            _projection_preview_context(language=language),
+        )
+
+    if request.FILES:
+        upload_form = ProjectionAssignmentWorkbookUploadForm(
+            request.POST, request.FILES, language=language
+        )
+        if not upload_form.is_valid():
+            return render(
+                request,
+                "ministry/projection_assignment_workbook_preview.html",
+                _projection_preview_context(language=language, upload_form=upload_form),
+            )
+        uploaded = upload_form.cleaned_data["workbook"]
+        try:
+            mapping_review = prepare_projection_assignment_mapping(
+                content=uploaded.read(), filename=uploaded.name, user=request.user
+            )
+        except (
+            WorkbookContractError,
+            ProjectionDestinationTeamError,
+            TargetServiceProfileError,
+            ProjectionMappingStateError,
+        ) as exc:
+            upload_form.add_error(None, _projection_preview_error_text(language, exc))
+            return render(
+                request,
+                "ministry/projection_assignment_workbook_preview.html",
+                _projection_preview_context(language=language, upload_form=upload_form),
+            )
+        mapping_form = ProjectionAssignmentMappingForm(
+            language=language,
+            mapping_review=mapping_review,
+            initial={"signed_mapping_state": mapping_review.signed_state},
+        )
+        return render(
+            request,
+            "ministry/projection_assignment_workbook_preview.html",
+            _projection_preview_context(
+                language=language,
+                upload_form=upload_form,
+                mapping_review=mapping_review,
+                mapping_form=mapping_form,
+            ),
+        )
+
+    try:
+        mapping_review = decode_projection_assignment_mapping(
+            request.POST.get("signed_mapping_state", ""), user=request.user
+        )
+    except (
+        SignedWorkbookStateError,
+        ProjectionDestinationTeamError,
+        TargetServiceProfileError,
+        ProjectionMappingStateError,
+    ):
+        upload_form = ProjectionAssignmentWorkbookUploadForm(language=language)
+        upload_form.add_error(
+            None,
+            "映射复核已失效，请重新上传工作簿。"
+            if language == "zh"
+            else "Mapping review is invalid or stale. Upload the workbook again.",
+        )
+        return render(
+            request,
+            "ministry/projection_assignment_workbook_preview.html",
+            _projection_preview_context(language=language, upload_form=upload_form),
+        )
+
+    mapping_form = ProjectionAssignmentMappingForm(
+        request.POST, language=language, mapping_review=mapping_review
+    )
+    preview = None
+    if mapping_form.is_valid():
+        try:
+            preview = build_projection_assignment_preview(
+                mapping_review=mapping_review,
+                selected_mapping=mapping_form.selected_mapping(),
+                user=request.user,
+            )
+        except (ProjectionDestinationTeamError, ProjectionMappingValidationError) as exc:
+            mapping_form.add_error(None, _projection_preview_error_text(language, exc))
+    return render(
+        request,
+        "ministry/projection_assignment_workbook_preview.html",
+        _projection_preview_context(
+            language=language,
+            mapping_review=mapping_review,
+            mapping_form=mapping_form,
+            preview=preview,
+        ),
+    )
+
+
 @login_required
 @require_POST
 def confirm_sound_assignment_workbook(request):
@@ -2845,6 +3026,11 @@ def team_assignment_list(request):
             "can_show_new_assignment": can_show_new_assignment,
             "show_setup_actions": show_setup_actions,
             "can_preview_sound_assignment_workbook": bool(
+                request.user.is_active
+                and (request.user.is_staff or request.user.is_superuser)
+                and is_integration_enabled(ANNUAL_WORKBOOK_INTEGRATION_KEY)
+            ),
+            "can_preview_projection_assignment_workbook": bool(
                 request.user.is_active
                 and (request.user.is_staff or request.user.is_superuser)
                 and is_integration_enabled(ANNUAL_WORKBOOK_INTEGRATION_KEY)

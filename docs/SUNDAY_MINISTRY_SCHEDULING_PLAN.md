@@ -2942,20 +2942,32 @@ canonical destination roster as `EXACT_NOOP`, exposes no confirmation action,
 and makes no further audit or domain write; replay of the old signed proposal is
 stale because its member baseline no longer matches.
 
-Implementation prerequisites are focused preview/result copy for explicit
-old-ID -> new-ID review without private fields, a separate confirmation token
-and POST handler, exact-row writer helpers rather than broad member sync,
-file-backed two-connection SQLite tests for both writer orders and member-only
-races, the full state/status/confirmation/history matrix, authority drift,
-mixed create/update batch rollback, no-notification and cross-domain zero-write
-assertions, exact LogEntry/postcondition tests, bilingual rendered QA, and a
-new dry-run/review/production authorization. None is implemented by this audit.
+`MO-S.6F.1C-1A` is **IMPLEMENTED / LOCAL VERIFIED** on top of this frozen
+contract. The preview now distinguishes `FILL_CANDIDATE` and
+`REPLACE_CANDIDATE` and shows the bounded old-membership-ID -> reviewed-new-
+membership-ID replacement before confirmation. A distinct expiring,
+user-bound `SOUND_ASSIGNMENT_ROSTER_UPDATE_CONFIRMATION_V1` proposal and POST
+handler own mixed create/fill/replace confirmation; create-only previews still
+use the unchanged `SOUND_ASSIGNMENT_CONFIRMATION_V1` path. The 1C transaction
+uses deterministic conditional no-op `TeamAssignment` updates as SQLite's
+first-write boundary, then reauthorizes/recomputes current truth, retains the
+existing create-event revision CAS only for create rows, performs exact
+through-row fill/replacement, writes one privacy-bounded `CHANGE` LogEntry per
+changed existing assignment, and verifies exact postconditions. Pure roster
+updates leave event revisions and every parent field—including the reviewed
+Worship fingerprint and `updated_at`—unchanged and emit no Notification.
+Focused tests include the status/confirmation matrix, token separation/replay,
+whole-batch rollback, and real file-backed two-connection SQLite races. This
+local implementation adds no schema, migration, dependency, other column,
+production command, or production data mutation. Production review/apply
+remains separately authorized and unperformed.
 
 The Column-F/Sound 1A identity-preview gate and the 1B create-only confirmation
 gate are implemented and production verified. The 1C-0A existing-roster
-contract above is docs/read-only complete, but its runtime remains unimplemented
-and separately gated. Every additional workbook column remains separately
-gated. MO-S.6F.0A itself remains a historical docs/read-only audit.
+contract is docs/read-only complete, and its narrow 1C-1A runtime is now
+implemented/local-verified but not production-applied. Every additional
+workbook column remains separately gated. MO-S.6F.0A itself remains a
+historical docs/read-only audit.
 
 `MO-S.6F.TEMPLATE.1A` adds only a staff/superuser convenience download beside
 the existing Sound preview. The integration-gated endpoint streams the exact

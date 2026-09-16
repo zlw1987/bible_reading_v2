@@ -96,7 +96,8 @@ eligible derived Worship requirements (80 effective pairs) across 16 future
 reviewed events, all with `review_required = 0`; no derived row was persisted
 and no production write occurred. Their `selected_unscheduled` states are valid
 operational gaps pending matching Worship assignments, not configuration drift.
-`MO-S.6F.1A` and `MO-S.6F.1B` are **IMPLEMENTED / LOCAL VERIFIED** within
+`MO-S.6F.1A`, `MO-S.6F.1B`, and `MO-S.6F.1C-1A` are **IMPLEMENTED / LOCAL
+VERIFIED** within
 ministry's existing dependency on events as a deployment-named,
 integration-gated annual-workbook Column-F/Sound adapter. Events retains
 ownership of strict workbook/target/event-history parsing and canonical
@@ -110,10 +111,16 @@ no other assignment column. 1A's staff/superuser-only upload, mapping, and
 signed preview remain zero-write. 1B requires separate signed staff/superuser
 authority, claims each create event's scheduling revision exactly once, then
 creates only the reviewed current/future Sound assignment and one exact
-unconfirmed member with a bounded audit. It performs no other-column or
-existing-roster mutation, historical backfill, Notification, schema,
-dependency, user/membership/audience/RequiredTeam, or ServiceEvent
-business-field write.
+unconfirmed member with a bounded audit. 1C has a distinct signed authority and
+POST path for mixed batches that fill one zero-member scheduled roster or
+replace its one active, unconfirmed, blank-note member by exact through-row ID.
+It uses conditional parent no-op updates as SQLite's first-write boundary,
+retains 1B's revision CAS only for mixed create rows, preserves all existing
+parent fields and the Worship fingerprint, and writes privacy-bounded change
+audit rows. Neither path performs another-column or historical-backfill,
+Notification, schema, dependency, user/membership/audience/RequiredTeam, or
+unapproved ServiceEvent business-field write. Production 1C review/apply is
+not yet performed.
 During the 5D/5E transition, readiness, the retained bounded reset, ServiceEvent
 Admin, and Worship XLSX matching/confirmation switched to FK/Profile authority
 while compatibility storage still existed as drift evidence. The strict V2

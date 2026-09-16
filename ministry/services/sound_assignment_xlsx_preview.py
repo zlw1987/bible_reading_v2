@@ -115,11 +115,14 @@ class SoundIdentityState(StrEnum):
 class SoundTargetState(StrEnum):
     NO_SOURCE_PROPOSAL = "no_source_proposal"
     CREATE_CANDIDATE = "create_candidate"
+    FILL_CANDIDATE = "fill_candidate"
+    REPLACE_CANDIDATE = "replace_candidate"
     EXACT_NOOP = "exact_noop"
     EXISTING_ROSTER_BLOCKER = "existing_roster_blocker"
     DUPLICATE_ASSIGNMENT_BLOCKER = "duplicate_assignment_blocker"
     HISTORICAL_ASSIGNMENT_BLOCKER = "historical_assignment_blocker"
     UNKNOWN_ASSIGNMENT_BLOCKER = "unknown_assignment_blocker"
+    INVALID_ASSIGNMENT_BLOCKER = "invalid_assignment_blocker"
     HISTORICAL_EVENT_BLOCKER = "historical_event_blocker"
     INVALID_TARGET_BLOCKER = "invalid_target_blocker"
     SOURCE_BLOCKER = "source_blocker"
@@ -219,6 +222,7 @@ class SoundAssignmentPreviewRow:
     current_assignment_ids: tuple[int, ...]
     current_roster_membership_ids: tuple[int, ...]
     historical_assignment_ids: tuple[int, ...]
+    current_membership: SoundMembershipCandidate | None
 
 
 @dataclass(frozen=True)
@@ -235,6 +239,16 @@ class SoundAssignmentPreview:
     @property
     def create_candidate_count(self):
         return sum(row.target_state == SoundTargetState.CREATE_CANDIDATE for row in self.rows)
+
+    @property
+    def fill_candidate_count(self):
+        return sum(row.target_state == SoundTargetState.FILL_CANDIDATE for row in self.rows)
+
+    @property
+    def replace_candidate_count(self):
+        return sum(
+            row.target_state == SoundTargetState.REPLACE_CANDIDATE for row in self.rows
+        )
 
     @property
     def exact_noop_count(self):
@@ -257,6 +271,8 @@ class SoundAssignmentPreview:
             row.target_state
             not in {
                 SoundTargetState.CREATE_CANDIDATE,
+                SoundTargetState.FILL_CANDIDATE,
+                SoundTargetState.REPLACE_CANDIDATE,
                 SoundTargetState.EXACT_NOOP,
                 SoundTargetState.NO_SOURCE_PROPOSAL,
                 SoundTargetState.HISTORICAL_EVENT_BLOCKER,
@@ -272,7 +288,13 @@ class SoundAssignmentPreview:
 
     @property
     def is_confirmable(self):
-        return self.create_candidate_count > 0 and self.hard_blocker_count == 0
+        return (
+            self.create_candidate_count
+            + self.fill_candidate_count
+            + self.replace_candidate_count
+            > 0
+            and self.hard_blocker_count == 0
+        )
 
 
 def user_can_preview_sound_assignments(user):
@@ -726,7 +748,9 @@ def _validate_selected_mapping(review, selected_mapping):
 
 
 def _assignment_queryset(event_ids, team):
-    members = TeamAssignmentMember.objects.select_related("membership").order_by("id")
+    members = TeamAssignmentMember.objects.select_related(
+        "membership", "membership__user"
+    ).order_by("id")
     return (
         TeamAssignment.objects.filter(service_event_id__in=event_ids, ministry_team=team)
         .select_related("service_event", "ministry_team")
@@ -785,10 +809,29 @@ def _classify_assignment(assignments, selected_membership_id):
         state = SoundTargetState.UNKNOWN_ASSIGNMENT_BLOCKER
     elif historical:
         state = SoundTargetState.HISTORICAL_ASSIGNMENT_BLOCKER
-    elif len(current) == 1 and roster == (selected_membership_id,):
-        state = SoundTargetState.EXACT_NOOP
     elif len(current) == 1:
-        state = SoundTargetState.EXISTING_ROSTER_BLOCKER
+        assignment = current[0]
+        members = list(assignment.assignment_members.all())
+        fingerprint = assignment.reviewed_worship_context_fingerprint
+        if fingerprint is not None and _SHA256_RE.fullmatch(fingerprint) is None:
+            state = SoundTargetState.INVALID_ASSIGNMENT_BLOCKER
+        elif any(not item.membership.is_active for item in members):
+            state = SoundTargetState.EXISTING_ROSTER_BLOCKER
+        elif len(members) > 1:
+            state = SoundTargetState.EXISTING_ROSTER_BLOCKER
+        elif len(members) == 1 and members[0].membership_id == selected_membership_id:
+            state = SoundTargetState.EXACT_NOOP
+        elif assignment.status != TeamAssignment.STATUS_SCHEDULED:
+            state = SoundTargetState.EXISTING_ROSTER_BLOCKER
+        elif not members:
+            state = SoundTargetState.FILL_CANDIDATE
+        elif (
+            members[0].confirmed_at is None
+            and members[0].confirmation_note == ""
+        ):
+            state = SoundTargetState.REPLACE_CANDIDATE
+        else:
+            state = SoundTargetState.EXISTING_ROSTER_BLOCKER
     else:
         state = SoundTargetState.CREATE_CANDIDATE
     return state, current_ids, roster, historical_ids
@@ -872,6 +915,7 @@ def build_sound_assignment_preview(*, mapping_review, selected_mapping, user, no
         current_ids = ()
         roster = ()
         historical_ids = ()
+        current_membership = None
         blocker_detail = None
 
         if source.source_state == SoundSourceState.NO_SOURCE_PROPOSAL:
@@ -899,6 +943,17 @@ def build_sound_assignment_preview(*, mapping_review, selected_mapping, user, no
                 roster,
                 historical_ids,
             ) = _classify_assignment(assignments, selected.membership_id)
+            current = [
+                item
+                for item in assignments
+                if item.status in CURRENT_ASSIGNMENT_STATUSES
+            ]
+            if len(current) == 1:
+                members = list(current[0].assignment_members.all())
+                if len(members) == 1:
+                    current_membership = _membership_candidate(
+                        members[0].membership
+                    )
             if _event_is_historical_for_assignment_import(
                 event, now=classification_now
             ):
@@ -956,6 +1011,7 @@ def build_sound_assignment_preview(*, mapping_review, selected_mapping, user, no
                 current_assignment_ids=current_ids,
                 current_roster_membership_ids=roster,
                 historical_assignment_ids=historical_ids,
+                current_membership=current_membership,
             )
         )
 

@@ -1116,9 +1116,13 @@ preview and separately signed `MO-S.6F.1B` create-only confirmation are both
 implemented/local-verified. 1B creates only the reviewed current/future Sound
 assignment and exact unconfirmed member, safely skips historical, blank, and
 exact-no-op rows, fails the whole apply on any hard blocker, and advances each
-create event exactly once through the expected-revision CAS. It never mutates
-an existing roster or emits a Notification. `MO-S.6F.1C`, additional workbook
-columns, aliases, and durable import history remain deferred.
+create event exactly once through the expected-revision CAS. `MO-S.6F.1C-1A`
+is now implemented/local-verified under a distinct signed contract for the
+frozen empty-roster fill and exact one-member replacement cases. It preserves
+the parent and Worship fingerprint, uses a conditional parent no-op update as
+the SQLite first-write barrier, leaves pure roster-update event revisions
+unchanged, and emits no Notification. Production 1C review/apply, additional
+workbook columns, aliases, and durable import history remain deferred.
 
 ## 18. Permission, privacy, and data invariants
 

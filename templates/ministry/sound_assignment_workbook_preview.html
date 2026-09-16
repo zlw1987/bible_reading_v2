@@ -85,10 +85,12 @@
 <div class="card">
     <h2 class="card-title">{% if language == "zh" %}音控排班分类{% else %}Sound Assignment Classification{% endif %}</h2>
     <p class="status status-warning">
-        <strong>{% if language == "zh" %}请先复核；只有下方另行签名的确认操作可以新建排班。{% else %}Review first; only the separately signed confirmation below can create assignments.{% endif %}</strong>
+        <strong>{% if language == "zh" %}请先复核；只有下方另行签名的确认操作可以新建、填入或替换名单。{% else %}Review first; only the separately signed confirmation below can create, fill, or replace a roster.{% endif %}</strong>
     </p>
     <div class="grid grid-4">
         <p><strong>{{ preview.create_candidate_count }}</strong><br>{% if language == "zh" %}可在未来新建{% else %}Future create candidates{% endif %}</p>
+        <p><strong>{{ preview.fill_candidate_count }}</strong><br>{% if language == "zh" %}可填入空名单{% else %}Empty rosters to fill{% endif %}</p>
+        <p><strong>{{ preview.replace_candidate_count }}</strong><br>{% if language == "zh" %}可替换现有名单{% else %}Existing rosters to replace{% endif %}</p>
         <p><strong>{{ preview.exact_noop_count }}</strong><br>{% if language == "zh" %}完全一致，无需操作{% else %}Exact no-ops{% endif %}</p>
         <p><strong>{{ preview.historical_event_count }}</strong><br>{% if language == "zh" %}历史聚会，安全跳过{% else %}Historical rows skipped{% endif %}</p>
         <p><strong>{{ preview.no_source_count }}</strong><br>{% if language == "zh" %}空白，不提出安排{% else %}Blank / no proposal{% endif %}</p>
@@ -97,7 +99,7 @@
 </div>
 
 <div class="table-wrap">
-<table>
+<table class="sound-preview-table">
     <thead>
         <tr>
             <th>{% if language == "zh" %}来源{% else %}Source{% endif %}</th>
@@ -109,7 +111,7 @@
     <tbody>
     {% for row in preview.rows %}
         <tr>
-            <td>
+            <td data-label="{% if language == 'zh' %}来源{% else %}Source{% endif %}">
                 <strong>{{ row.source.source_cell }}</strong> · {{ row.source.local_date|date:"Y-m-d" }}<br>
                 {% if row.source.normalized_token %}{{ row.source.normalized_token }}{% else %}<span class="muted">{% if language == "zh" %}空白{% else %}Blank{% endif %}</span>{% endif %}<br>
                 <span class="muted">
@@ -120,7 +122,7 @@
                     {% else %}{% if language == "zh" %}不支持的来源文字{% else %}Unsupported source token{% endif %}{% endif %}
                 </span>
             </td>
-            <td>
+            <td data-label="{% if language == 'zh' %}身份{% else %}Identity{% endif %}">
                 {% if row.selected_membership %}
                     {{ row.selected_membership.visible_identity }}<br>
                     <span class="muted">
@@ -133,11 +135,16 @@
                     {% if language == "zh" %}需要选择成员身份{% else %}Membership mapping required{% endif %}
                 {% else %}<span class="muted">—</span>{% endif %}
             </td>
-            <td>
+            <td data-label="{% if language == 'zh' %}目标聚会{% else %}Target event{% endif %}">
                 {% if row.event %}#{{ row.event.id }} · {{ row.event.start_datetime|date:"Y-m-d H:i" }}{% else %}<span class="muted">—</span>{% endif %}
             </td>
-            <td>
+            <td data-label="{% if language == 'zh' %}分类{% else %}Classification{% endif %}">
                 {% if row.target_state.value == "create_candidate" %}<span class="status status-success">{% if language == "zh" %}未来可新建{% else %}Create candidate{% endif %}</span>
+                {% elif row.target_state.value == "fill_candidate" %}<span class="status status-success">{% if language == "zh" %}现有排班名单为空 — 可填入{% else %}Existing assignment has an empty roster — fill candidate{% endif %}</span>
+                {% elif row.target_state.value == "replace_candidate" %}
+                    <span class="status status-warning"><strong>{% if language == "zh" %}替换现有名单{% else %}Replace existing roster{% endif %}</strong></span><br>
+                    <span>{% if language == "zh" %}当前：{% else %}Current:{% endif %} {{ row.current_membership.visible_identity }} · #{% if language == "zh" %}成员记录{% else %}membership{% endif %} {{ row.current_membership.membership_id }}</span><br>
+                    <span><strong>{% if language == "zh" %}工作簿复核替换为：{% else %}Workbook reviewed replacement:{% endif %}</strong> {{ row.selected_membership.visible_identity }} · #{% if language == "zh" %}成员记录{% else %}membership{% endif %} {{ row.selected_membership.membership_id }}</span>
                 {% elif row.target_state.value == "exact_noop" %}<span class="status status-success">{% if language == "zh" %}完全一致，无需操作{% else %}Exact no-op{% endif %}</span>
                 {% elif row.target_state.value == "no_source_proposal" %}<span class="muted">{% if language == "zh" %}不提出安排 / 不写入{% else %}No proposal / no write{% endif %}</span>
                 {% elif row.target_state.value == "existing_roster_blocker" %}<span class="status status-warning">{% if language == "zh" %}现有名单不同，阻止{% else %}Existing roster differs — blocked{% endif %}</span>
@@ -145,6 +152,7 @@
                 {% elif row.target_state.value == "historical_event_blocker" %}<span class="status status-warning">{% if language == "zh" %}历史聚会 — 当前版本不补建排班{% else %}Historical event — backfill not supported{% endif %}</span>
                 {% elif row.target_state.value == "historical_assignment_blocker" %}<span class="status status-warning">{% if language == "zh" %}存在历史排班，阻止{% else %}Historical assignment — blocked{% endif %}</span>
                 {% elif row.target_state.value == "unknown_assignment_blocker" %}<span class="status status-warning">{% if language == "zh" %}存在未知排班状态，阻止{% else %}Unknown assignment state — blocked{% endif %}</span>
+                {% elif row.target_state.value == "invalid_assignment_blocker" %}<span class="status status-warning">{% if language == "zh" %}排班复核指纹无效，阻止{% else %}Assignment review fingerprint is malformed — blocked{% endif %}</span>
                 {% elif row.target_state.value == "identity_blocker" %}<span class="status status-warning">{% if language == "zh" %}身份未复核，阻止{% else %}Identity unresolved — blocked{% endif %}</span>
                 {% elif row.target_state.value == "source_blocker" %}<span class="status status-warning">{% if language == "zh" %}来源不支持，阻止{% else %}Unsupported source — blocked{% endif %}</span>
                 {% elif row.target_state.value == "audience_safety_blocker" %}<span class="status status-warning">{% if language == "zh" %}成员不在聚会受众范围内 — 批量操作不允许越权；如确需安排，请使用正常的手动排班流程{% else %}Member is outside the event audience — bulk override is not allowed; use the normal manual assignment workflow if intentional{% endif %}</span>
@@ -159,25 +167,25 @@
 
 {% if confirmation_proposal %}
 <div class="card">
-    <h2 class="card-title">{% if language == "zh" %}确认新建音控排班{% else %}Confirm Sound Assignment Creation{% endif %}</h2>
+    <h2 class="card-title">{% if confirmation_proposal.is_roster_update %}{% if language == "zh" %}确认音控名单更新{% else %}Confirm Sound Roster Updates{% endif %}{% else %}{% if language == "zh" %}确认新建音控排班{% else %}Confirm Sound Assignment Creation{% endif %}{% endif %}</h2>
     <p class="status status-success">
-        <strong>{% if language == "zh" %}建立 {{ confirmation_proposal.create_count }} 个未来音控排班{% else %}Create {{ confirmation_proposal.create_count }} future Sound assignments{% endif %}</strong>
+        <strong>{% if confirmation_proposal.is_roster_update %}{% if language == "zh" %}新建 {{ confirmation_proposal.create_count }} · 填入 {{ confirmation_proposal.fill_count }} · 替换 {{ confirmation_proposal.replace_count }}{% else %}Create {{ confirmation_proposal.create_count }} · Fill {{ confirmation_proposal.fill_count }} · Replace {{ confirmation_proposal.replace_count }}{% endif %}{% else %}{% if language == "zh" %}建立 {{ confirmation_proposal.create_count }} 个未来音控排班{% else %}Create {{ confirmation_proposal.create_count }} future Sound assignments{% endif %}{% endif %}</strong>
     </p>
     <p>
         {% if language == "zh" %}
-        将新建 {{ confirmation_proposal.create_count }} 个排班；{{ confirmation_proposal.exact_noop_count }} 个完全一致项不变；{{ confirmation_proposal.historical_event_count }} 个历史项跳过；{{ confirmation_proposal.no_source_count }} 个空白项跳过；硬性阻止项为 0。
+        将新建 {{ confirmation_proposal.create_count }} 个排班；填入 {{ confirmation_proposal.fill_count|default:0 }} 个空名单；<strong>替换 {{ confirmation_proposal.replace_count|default:0 }} 个现有名单</strong>；{{ confirmation_proposal.exact_noop_count }} 个完全一致项不变；{{ confirmation_proposal.historical_event_count }} 个历史项跳过；{{ confirmation_proposal.no_source_count }} 个空白项跳过；硬性阻止项为 0。
         {% else %}
-        {{ confirmation_proposal.create_count }} assignments will be created; {{ confirmation_proposal.exact_noop_count }} exact no-ops remain unchanged; {{ confirmation_proposal.historical_event_count }} historical rows are skipped; {{ confirmation_proposal.no_source_count }} blank rows are skipped; hard blockers: 0.
+        Create {{ confirmation_proposal.create_count }} assignments; fill {{ confirmation_proposal.fill_count|default:0 }} empty rosters; <strong>replace {{ confirmation_proposal.replace_count|default:0 }} existing rosters</strong>; {{ confirmation_proposal.exact_noop_count }} exact no-ops remain unchanged; {{ confirmation_proposal.historical_event_count }} historical rows are skipped; {{ confirmation_proposal.no_source_count }} blank rows are skipped; hard blockers: 0.
         {% endif %}
     </p>
     <p class="muted">
-        {% if language == "zh" %}过去的聚会不会补建；空白不会清除任何内容；现有排班不会更改。{% else %}Past rows are not backfilled. Blanks clear nothing. Existing assignments are not changed.{% endif %}
+        {% if confirmation_proposal.is_roster_update %}{% if language == "zh" %}<strong>替换会删除上方明确列出的一个未确认旧成员记录，并建立一个未确认的新成员记录。</strong> 排班本身、状态、备注、时间戳及敬拜复核状态保持不变。{% else %}<strong>Replacement deletes the one explicitly shown unconfirmed old member row and creates one unconfirmed new member row.</strong> The assignment, status, notes, timestamps, and Worship review state remain unchanged.{% endif %}{% else %}{% if language == "zh" %}过去的聚会不会补建；空白不会清除任何内容；现有排班不会更改。{% else %}Past rows are not backfilled. Blanks clear nothing. Existing assignments are not changed.{% endif %}{% endif %}
     </p>
-    <form method="post" action="{% url 'confirm_sound_assignment_workbook' %}">
+    <form method="post" action="{% if confirmation_proposal.is_roster_update %}{% url 'confirm_sound_assignment_roster_update_workbook' %}{% else %}{% url 'confirm_sound_assignment_workbook' %}{% endif %}">
         {% csrf_token %}
         <input type="hidden" name="signed_confirmation" value="{{ confirmation_proposal.signed_payload }}">
         <div class="actions">
-            <button type="submit">{% if language == "zh" %}确认并新建{% else %}Confirm and Create{% endif %}</button>
+            <button type="submit">{% if confirmation_proposal.is_roster_update %}{% if language == "zh" %}确认新建、填入及替换{% else %}Confirm Create, Fill, and Replace{% endif %}{% else %}{% if language == "zh" %}确认并新建{% else %}Confirm and Create{% endif %}{% endif %}</button>
         </div>
     </form>
 </div>

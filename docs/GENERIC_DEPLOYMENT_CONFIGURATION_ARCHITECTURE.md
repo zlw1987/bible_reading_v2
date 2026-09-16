@@ -477,14 +477,21 @@ team, and people resolve only through explicitly reviewed active
 `TeamMembership` rows on that exact team. 1A has separately versioned source,
 mapping, and signed-preview contracts and provides zero-write exact membership
 review: blank means no source proposal, unsupported grammar blocks, and every
-existing different/duplicate/history roster blocks. 1B uses a separate signed
+existing different/duplicate/history roster blocks except for the separately
+approved 1C fill/replacement matrix. 1B uses a separate signed
 create-only confirmation contract, exact local `team_key` and
 `TeamMembership` identities, and the canonical scheduling-revision CAS. It
 creates only reviewed current/future Sound assignment/member rows; completed
 or canonically elapsed events are safe no-write history rows, not backfill
-targets. The adapter adds no generic Sound taxonomy, schema, or dependency and
-never mutates an existing roster. 1C, additional columns, aliases, and external
-identity mapping remain deferred.
+targets. `MO-S.6F.1C-1A` is implemented/local-verified as a second, distinctly
+signed boundary: it fills only an empty `scheduled` roster or replaces exactly
+one active, unconfirmed, blank-note member with the reviewed active exact-team
+membership. Its conditional parent no-op update is the SQLite first-write
+barrier; the parent and Worship fingerprint remain unchanged, pure roster
+updates do not advance event revision, and no Notification is emitted. The
+adapter still adds no generic Sound taxonomy, schema, or dependency.
+Production 1C review/apply, additional columns, aliases, and external identity
+mapping remain deferred.
 
 ## 3. Identity Model
 

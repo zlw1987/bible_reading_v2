@@ -2492,16 +2492,33 @@ def sound_assignment_workbook_preview(request):
             if preview.is_confirmable:
                 from ministry.services.sound_assignment_xlsx_confirmation import (
                     SoundAssignmentConfirmationProposalError,
-                    build_sound_assignment_confirmation_proposal,
                 )
 
                 try:
-                    confirmation_proposal = (
-                        build_sound_assignment_confirmation_proposal(
+                    if (
+                        preview.fill_candidate_count
+                        + preview.replace_candidate_count
+                        > 0
+                    ):
+                        from ministry.services.sound_assignment_xlsx_roster_update import (
+                            build_sound_roster_update_proposal,
+                        )
+
+                        confirmation_proposal = build_sound_roster_update_proposal(
                             preview=preview,
                             user=request.user,
                         )
-                    )
+                    else:
+                        from ministry.services.sound_assignment_xlsx_confirmation import (
+                            build_sound_assignment_confirmation_proposal,
+                        )
+
+                        confirmation_proposal = (
+                            build_sound_assignment_confirmation_proposal(
+                                preview=preview,
+                                user=request.user,
+                            )
+                        )
                 except SoundAssignmentConfirmationProposalError as exc:
                     mapping_form.add_error(
                         None, _sound_preview_error_text(language, exc)
@@ -2568,6 +2585,63 @@ def confirm_sound_assignment_workbook(request):
             f"已建立 {result.created_count} 个未来音控排班。"
             if language == "zh"
             else f"Created {result.created_count} future Sound assignments."
+        ),
+    )
+    return redirect("team_assignment_list")
+
+
+@login_required
+@require_POST
+def confirm_sound_assignment_roster_update_workbook(request):
+    """Apply one distinct signed 1C create/fill/replace proposal."""
+
+    try:
+        require_integration_enabled(ANNUAL_WORKBOOK_INTEGRATION_KEY)
+    except IntegrationDisabled as exc:
+        raise Http404 from exc
+
+    from ministry.services.sound_assignment_xlsx_confirmation import (
+        SoundAssignmentConfirmationError,
+        SoundAssignmentConfirmationProposalError,
+        user_can_confirm_sound_assignments,
+    )
+    from ministry.services.sound_assignment_xlsx_roster_update import (
+        confirm_sound_roster_update,
+        decode_signed_sound_roster_update,
+    )
+
+    if not user_can_confirm_sound_assignments(request.user):
+        raise PermissionDenied
+    language = get_user_language(request)
+    try:
+        payload = decode_signed_sound_roster_update(
+            request.POST.get("signed_confirmation", ""),
+            user=request.user,
+        )
+        result = confirm_sound_roster_update(user=request.user, payload=payload)
+    except (
+        SoundAssignmentConfirmationProposalError,
+        SoundAssignmentConfirmationError,
+    ):
+        messages.error(
+            request,
+            (
+                "确认内容已失效或当前名单已变化。请重新上传并复核工作簿；未写入任何音控排班。"
+                if language == "zh"
+                else "Confirmation is stale or the current roster changed. Upload and review the workbook again; no Sound assignment was changed."
+            ),
+        )
+        return redirect("sound_assignment_workbook_preview")
+
+    messages.success(
+        request,
+        (
+            f"已新建 {result.created_count} 个、填入 {result.filled_count} 个、替换 {result.replaced_count} 个音控排班名单。"
+            if language == "zh"
+            else (
+                f"Created {result.created_count}, filled {result.filled_count}, "
+                f"and replaced {result.replaced_count} Sound assignment rosters."
+            )
         ),
     )
     return redirect("team_assignment_list")

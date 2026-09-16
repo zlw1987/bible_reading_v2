@@ -42,6 +42,11 @@ from .services.sound_assignment_xlsx_preview import (
     build_sound_assignment_preview,
     prepare_sound_assignment_mapping,
 )
+from .services.sound_assignment_xlsx_roster_update import (
+    build_sound_roster_update_proposal,
+    confirm_sound_roster_update,
+    decode_signed_sound_roster_update,
+)
 from .test_sound_assignment_xlsx_preview import SoundAssignmentPreviewTestBase
 
 
@@ -239,7 +244,9 @@ class SoundAssignmentConfirmationTests(SoundAssignmentPreviewTestBase):
             status=TeamAssignment.STATUS_SCHEDULED,
         )
         TeamAssignmentMember.objects.create(
-            assignment=assignment, membership=self.display_only
+            assignment=assignment,
+            membership=self.display_only,
+            confirmation_note="preserve confirmation evidence",
         )
         blocked = self.preview()
         self.assertEqual(
@@ -544,6 +551,202 @@ class FileBackedSQLiteSoundAssignmentConfirmationTests(unittest.TestCase):
         self.assertEqual(TeamAssignment.objects.count(), 0)
         self.assertEqual(TeamAssignmentMember.objects.count(), 0)
         self.assertEqual(LogEntry.objects.count(), 0)
+        self.assertEqual(LogEntry.objects.count(), 0)
+
+    def roster_payload(self, event, *, include_create_event=None):
+        old_membership = TeamMembership.objects.create(
+            team=self.sound, display_name="Old Sound Member"
+        )
+        assignment = TeamAssignment.objects.create(
+            service_event=event,
+            ministry_team=self.sound,
+            status=TeamAssignment.STATUS_SCHEDULED,
+            notes="preserve metadata",
+            reviewed_worship_context_fingerprint="C" * 64,
+        )
+        old_member = TeamAssignmentMember.objects.create(
+            assignment=assignment, membership=old_membership
+        )
+        overrides = {4: "Alice"}
+        if include_create_event is not None:
+            overrides[6] = "Alice"
+        review = prepare_sound_assignment_mapping(
+            content=build_known_workbook(sound_overrides=overrides),
+            filename="annual.xlsx",
+            user=self.staff,
+        )
+        preview = build_sound_assignment_preview(
+            mapping_review=review,
+            selected_mapping={"Alice": self.membership.pk},
+            user=self.staff,
+            now=self.now,
+        )
+        with patch(
+            "ministry.services.sound_assignment_xlsx_roster_update.timezone.now",
+            return_value=self.now,
+        ):
+            proposal = build_sound_roster_update_proposal(
+                preview=preview, user=self.staff
+            )
+        payload = decode_signed_sound_roster_update(
+            proposal.signed_payload, user=self.staff
+        )
+        return payload, assignment, old_member
+
+    def confirm_roster(self, payload):
+        with patch(
+            "ministry.services.sound_assignment_xlsx_roster_update.timezone.now",
+            return_value=self.now,
+        ):
+            return confirm_sound_roster_update(user=self.staff, payload=payload)
+
+    def test_member_only_writer_commits_first_and_roster_proposal_is_stale(self):
+        event = self.event(0)
+        payload, assignment, old_member = self.roster_payload(event)
+        event.refresh_from_db()
+        revision_before = event.scheduling_revision
+        TeamAssignmentMember.objects.using(self.competing_alias).filter(
+            pk=old_member.pk
+        ).update(confirmation_note="competing evidence")
+
+        with self.assertRaises(SoundAssignmentConfirmationError):
+            self.confirm_roster(payload)
+
+        event.refresh_from_db()
+        self.assertEqual(event.scheduling_revision, revision_before)
+        self.assertEqual(
+            TeamAssignmentMember.objects.get(pk=old_member.pk).confirmation_note,
+            "competing evidence",
+        )
+        self.assertEqual(LogEntry.objects.count(), 0)
+
+    def test_roster_barrier_wins_and_member_writer_cannot_interleave(self):
+        event = self.event(0)
+        payload, assignment, old_member = self.roster_payload(event)
+        from .services import sound_assignment_xlsx_roster_update as service
+
+        original = service._load_current_truth
+        competing_busy = []
+
+        def load_after_competing_attempt(*args, **kwargs):
+            try:
+                TeamAssignmentMember.objects.using(self.competing_alias).filter(
+                    pk=old_member.pk
+                ).update(confirmation_note="race")
+            except OperationalError:
+                competing_busy.append(True)
+            return original(*args, **kwargs)
+
+        with patch.object(
+            service, "_load_current_truth", side_effect=load_after_competing_attempt
+        ):
+            result = self.confirm_roster(payload)
+
+        self.assertEqual(competing_busy, [True])
+        self.assertEqual(result.replaced_assignment_ids, (assignment.pk,))
+        self.assertFalse(TeamAssignmentMember.objects.filter(pk=old_member.pk).exists())
+        current = TeamAssignmentMember.objects.get(assignment=assignment)
+        self.assertEqual(current.membership_id, self.membership.pk)
+        self.assertEqual(
+            TeamAssignmentMember.objects.using(self.competing_alias)
+            .get(pk=current.pk)
+            .membership_id,
+            self.membership.pk,
+        )
+
+    def test_parent_metadata_and_destination_identity_races_fail_closed(self):
+        event = self.event(0)
+        payload, assignment, old_member = self.roster_payload(event)
+        TeamAssignment.objects.using(self.competing_alias).filter(
+            pk=assignment.pk
+        ).update(notes="competing metadata")
+        with self.assertRaises(SoundAssignmentConfirmationError):
+            self.confirm_roster(payload)
+        self.assertTrue(TeamAssignmentMember.objects.filter(pk=old_member.pk).exists())
+        self.assertEqual(LogEntry.objects.count(), 0)
+
+        TeamAssignment.objects.filter(pk=assignment.pk).update(
+            notes="preserve metadata"
+        )
+        TeamAssignment.objects.using(self.competing_alias).filter(
+            pk=assignment.pk
+        ).update(status=TeamAssignment.STATUS_CONFIRMED)
+        with self.assertRaises(SoundAssignmentConfirmationError):
+            self.confirm_roster(payload)
+        TeamAssignment.objects.filter(pk=assignment.pk).update(
+            status=TeamAssignment.STATUS_SCHEDULED
+        )
+        review = prepare_sound_assignment_mapping(
+            content=build_known_workbook(sound_overrides={4: "Alice"}),
+            filename="annual.xlsx",
+            user=self.staff,
+        )
+        preview = build_sound_assignment_preview(
+            mapping_review=review,
+            selected_mapping={"Alice": self.membership.pk},
+            user=self.staff,
+            now=self.now,
+        )
+        with patch(
+            "ministry.services.sound_assignment_xlsx_roster_update.timezone.now",
+            return_value=self.now,
+        ):
+            proposal = build_sound_roster_update_proposal(
+                preview=preview, user=self.staff
+            )
+        payload = decode_signed_sound_roster_update(
+            proposal.signed_payload, user=self.staff
+        )
+        TeamMembership.objects.using(self.competing_alias).filter(
+            pk=self.membership.pk
+        ).update(is_active=False)
+        with self.assertRaises(SoundAssignmentConfirmationError):
+            self.confirm_roster(payload)
+        TeamMembership.objects.filter(pk=self.membership.pk).update(is_active=True)
+
+        relinked = User.objects.create_user("file_sound_relinked")
+        TeamMembership.objects.using(self.competing_alias).filter(
+            pk=self.membership.pk
+        ).update(user_id=relinked.pk)
+        with self.assertRaises(SoundAssignmentConfirmationError):
+            self.confirm_roster(payload)
+        TeamMembership.objects.filter(pk=self.membership.pk).update(
+            user_id=self.alice.pk
+        )
+
+        TeamMembership.objects.using(self.competing_alias).filter(
+            pk=self.membership.pk
+        ).update(display_name="Alice relinked identity")
+        with self.assertRaises(SoundAssignmentConfirmationError):
+            self.confirm_roster(payload)
+        self.assertTrue(TeamAssignmentMember.objects.filter(pk=old_member.pk).exists())
+        self.assertEqual(LogEntry.objects.count(), 0)
+
+    def test_mixed_create_replace_stale_member_rolls_back_revision_and_all_writes(self):
+        replace_event = self.event(0)
+        create_event = self.event(1)
+        payload, assignment, old_member = self.roster_payload(
+            replace_event, include_create_event=create_event
+        )
+        replace_event.refresh_from_db()
+        replace_revision = replace_event.scheduling_revision
+        TeamAssignmentMember.objects.using(self.competing_alias).filter(
+            pk=old_member.pk
+        ).update(confirmation_note="race wins")
+
+        with self.assertRaises(SoundAssignmentConfirmationError):
+            self.confirm_roster(payload)
+
+        replace_event.refresh_from_db()
+        create_event.refresh_from_db()
+        self.assertEqual(replace_event.scheduling_revision, replace_revision)
+        self.assertEqual(create_event.scheduling_revision, 0)
+        self.assertEqual(TeamAssignment.objects.count(), 1)
+        self.assertEqual(TeamAssignmentMember.objects.count(), 1)
+        self.assertEqual(
+            TeamAssignmentMember.objects.get(pk=old_member.pk).confirmation_note,
+            "race wins",
+        )
         self.assertEqual(LogEntry.objects.count(), 0)
 
 

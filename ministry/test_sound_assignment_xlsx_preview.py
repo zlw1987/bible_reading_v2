@@ -473,18 +473,21 @@ class SoundAssignmentClassificationTests(SoundAssignmentPreviewTestBase):
             before,
         )
 
-    def test_empty_and_different_current_rosters_block(self):
+    def test_empty_and_safe_different_current_rosters_are_fill_and_replace(self):
         self._assignment()
         self.assertEqual(
             self.preview().rows[0].target_state,
-            SoundTargetState.EXISTING_ROSTER_BLOCKER,
+            SoundTargetState.FILL_CANDIDATE,
         )
         TeamAssignment.objects.all().delete()
         ServiceEvent.objects.all().delete()
-        self._assignment(member=self.display_only)
+        assignment = self._assignment(member=self.display_only)
+        TeamAssignmentMember.objects.filter(assignment=assignment).update(
+            confirmation_note=""
+        )
         self.assertEqual(
             self.preview().rows[0].target_state,
-            SoundTargetState.EXISTING_ROSTER_BLOCKER,
+            SoundTargetState.REPLACE_CANDIDATE,
         )
 
     def test_duplicate_current_assignments_block(self):

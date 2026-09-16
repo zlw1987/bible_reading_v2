@@ -121,6 +121,10 @@ class SoundAssignmentConfirmationProposal:
     def signed_payload_bytes(self):
         return len(self.signed_payload.encode("utf-8"))
 
+    @property
+    def is_roster_update(self):
+        return False
+
 
 @dataclass(frozen=True)
 class SoundAssignmentConfirmationResult:

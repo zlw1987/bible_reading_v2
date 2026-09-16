@@ -230,8 +230,9 @@ migration, dependency, other-column, audience, RequiredTeam, Worship-selection,
 User, or membership change. Production apply and the fresh exact-no-op
 verification are complete.
 
-Docs/read-only `MO-S.6F.1C-0A` now freezes—but does not implement—the optional
-existing-Sound-roster update boundary. A future V1 may fill one `scheduled`
+Docs/read-only `MO-S.6F.1C-0A` froze the optional existing-Sound-roster update
+boundary, and `MO-S.6F.1C-1A` is now **IMPLEMENTED / LOCAL VERIFIED** for that
+narrow boundary. It may fill one `scheduled`
 assignment only when it has zero total member rows, or replace its one active,
 unconfirmed, blank-confirmation-note member with the one reviewed new Sound
 membership. Exact one-member matches are no-ops in any current status;
@@ -244,6 +245,10 @@ notification is emitted. Pure roster changes do not broaden or advance
 the SQLite first-write barrier, followed by complete signed-baseline
 recomputation, exact-row delete/insert, privacy-bounded shared-operation audit,
 postcondition proof, and whole-workbook rollback on any stale/conflicting row.
+The 1C authority is separately versioned from the unchanged create-only 1B
+token; mixed create/update batches retain `N -> N+1` only for create events,
+emit no Notification, and add no schema, migration, dependency, other column,
+or production data mutation. Production review/apply remains unperformed.
 
 `MO-S.REQUIRED.0A` is **EFFECTIVE REQUIRED-TEAM SEMANTICS / EVENT WORSHIP
 ENTRY AUDIT COMPLETE**. `MO-S.REQUIRED.1A` is **IMPLEMENTED / LOCAL VERIFIED /
@@ -1739,7 +1744,8 @@ Short next-candidate list:
   `MO-S.6F.1A`. Its separate create-only atomic confirmation and bounded audit
   are production verified through `MO-S.6F.1B`. Docs/read-only
   `MO-S.6F.1C-0A` freezes the narrow existing-Sound-roster fill/replacement
-  contract, but its runtime remains unimplemented and separately gated;
+  contract, and `MO-S.6F.1C-1A` implements it with local verification only;
+  production review/apply remains separately gated;
   additional columns, annual-import notifications, arbitrary workbooks, and
   durable import history remain separately unapproved;
 - MO-S.6E.1A Worship-context staleness review is implemented, local verified,

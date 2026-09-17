@@ -2984,8 +2984,8 @@ MO-S.6F.2A is IMPLEMENTED / LOCAL VERIFIED in current HEAD as a zero-write
 Projection prototype. Its historical one/two-person grammar is superseded by
 MO-S.6F.GENERAL.0A and remains refactor evidence only. It is not
 production-ready and must not gain write authority before refactoring onto the
-generic 1..N roster architecture. It is not part of current HEAD, is not production-ready,
-and must not be committed in its current one/two-person form. It first runs the unchanged strict
+generic 1..N roster architecture. It is not production-ready and must not gain write authority in its
+historical one/two-person form. It first runs the unchanged strict
 annual-workbook parser, then reads only `All 930` Column E and resolves only the
 exact active assignable `main.cm.digital.projection` team. A nonblank source is
 supported only as one literal person token, or exactly two nonblank person
@@ -3034,7 +3034,8 @@ generic architecture below; it is not production-ready.
 #### MO-S.6F.GENERAL.0A — Generic Team Roster Workbook Import architecture
 
 Status: **READ-ONLY REPOSITORY AUDIT + ARCHITECTURE COMPLETE;
-GENERAL.1A/1B/1C/1D/1E ZERO-WRITE FOUNDATION IMPLEMENTED / LOCAL VERIFIED**.
+GENERAL.1A/1B/1C/1D/1E ZERO-WRITE FOUNDATION IMPLEMENTED / LOCAL VERIFIED;
+GENERAL.1F-0A DOCS / READ-ONLY WRITER CONTRACT COMPLETE; WRITER UNIMPLEMENTED**.
 
 MO-S.6F.GENERAL.1A is IMPLEMENTED / LOCAL VERIFIED for the writer-free generic
 domain foundation: TEAM_ROSTER_CELL_V1, typed cell input, TeamRosterColumnHint,
@@ -3155,6 +3156,182 @@ is read-only evidence and is **not** confirmation/write authority. The route
 renders the bilingual Assignment Preview with no Confirm control. GENERAL.1F,
 all assignment/member mutation, scheduling-revision CAS, LogEntry, and
 Notification behavior remain unimplemented.
+
+##### MO-S.6F.GENERAL.1F-0A generic confirmation-writer contract
+
+`MO-S.6F.GENERAL.1F-0A` is **DOCS / READ-ONLY WRITER CONTRACT COMPLETE**.
+It implements no writer, Confirm route/control, model, migration, dependency,
+data mutation, or production command. The future writer has a distinct,
+expiring, user-bound, strict-schema `TEAM_ROSTER_CONFIRMATION_V1` authority and
+must never treat `TEAM_ROSTER_ASSIGNMENT_PREVIEW_V1` itself as write authority.
+Only `CREATE_CANDIDATE` and `ROSTER_UPDATE_CANDIDATE` may appear as writable
+rows. `NO_SOURCE_PROPOSAL`, `EXACT_NOOP`, and `HISTORICAL_EVENT_SKIP` are
+permanent no-write states and do not suppress otherwise safe work. No
+confirmation authority may be minted when `hard_blocker_count > 0` or when
+`create_count + update_count == 0`.
+
+The confirmation state binds the exact actor ID; integration, adapter, cell,
+person-contract, preview-contract, confirmation-contract, and writable-row
+tuple versions; workbook SHA-256; exact SHA-256 values of the still-required
+signed person-review and assignment-preview tokens; exact team ID + `team_key`
+identities; operation UUID and counts; and a complete deterministic writable-
+row projection. Each writable-row tuple binds source cell, event ID, team ID,
+classification, assignment ID or create-absence marker, expected create-event
+revision where applicable, complete reviewed/preserved/add/remove membership
+ID sets, and exact preserved/removed `TeamAssignmentMember` IDs. The complete
+event, team, membership/User, audience, governance, assignment-parent, member-
+row, confirmation, note-digest, and fingerprint baselines remain in the
+separately carried strict preview token and are incorporated into confirmation
+authority by its exact token SHA-256. They are not redundantly copied. The
+writer must receive all three tokens, strictly decode and fully recompute the
+person and preview states, require their hashes and the newly derived writable-
+row projection to equal the confirmation state exactly, and then use those
+complete preview baselines for every conditional predicate. This transitive
+binding is bounded authority, not reuse of preview evidence as write authority;
+it requires neither a second workbook upload nor server/session persistence.
+
+The unchanged confirmation-state limit is 16,384 bytes. A read-only synthetic
+sizing run used the real compressed Django signing format with 52 events, seven
+mapped teams, every event/team pair populated by a three-person roster, and a
+round-robin 121 CREATE / 122 UPDATE / 121 NOOP distribution. It produced 364
+mapped pairs, 243 writable rows, 485 member additions, and 122 removals. The
+normalized JSON was 25,940 bytes and the signed compressed
+`TEAM_ROSTER_CONFIRMATION_V1` state was **8,474 bytes**, leaving 7,910 bytes of
+headroom. A deliberately duplicative row-local copy of all baselines measured
+123,163 signed bytes and would not fit; therefore the exact prior-token hash
+plus strict re-decode/reprojection is part of the frozen contract. The limit is
+not enlarged, and the measurement is a dense supported-case result, not
+permission to truncate rows or bypass the existing 16-member-per-cell resource
+bound.
+
+One outer `transaction.atomic()` owns the whole workbook. Its deterministic
+order is frozen as follows:
+
+1. Strictly decode the confirmation, person-review, and assignment-preview
+   states; reload the actor; require the exact active staff-or-superuser gate
+   and enabled integration; and derive the exact confirmation projection.
+2. Claim the distinct event IDs containing at least one `CREATE_CANDIDATE`, in
+   ascending event-ID order, with `claim_scheduling_revisions()` and each
+   previewed revision `N`. This is the first SQLite writer boundary whenever
+   creates exist.
+3. Establish a value-preserving conditional `TeamAssignment` UPDATE for every
+   `ROSTER_UPDATE_CANDIDATE`, in ascending assignment-ID order. In an update-
+   only batch, the first such UPDATE is the first SQLite writer boundary.
+4. After that first write, reload and reauthorize the actor, recheck the
+   integration, and reload/recompute the **complete** generic preview truth.
+   Require exact equivalence to the reviewed confirmation, allowing only this
+   transaction's expected `N -> N+1` change on every preview fact for an event
+   claimed because any team on it has CREATE work.
+5. Create parents in `(event_id, team_id)` order, remove exact through rows in
+   through-row-ID order, add members in `(assignment_id, membership_id)` order,
+   write audits in changed-assignment-ID order, recompute exact postconditions,
+   and commit.
+
+Create-event CAS therefore precedes update-assignment barriers in a mixed
+batch. This intentionally supersedes Sound 1C's update-barrier-first ordering:
+Sound proved the SQLite value-preserving UPDATE pattern, but its one-team
+contract could not exercise multiple CREATE/UPDATE pairs on the same event.
+Each distinct event with one or more creates advances exactly once, regardless
+of how many teams are created. An event with CREATE and UPDATE work advances
+once because of the create; its update assignment still receives its own
+barrier. An update-only event does not advance. Multiple create rows on one
+event all consume the same successful `N -> N+1` claim. Any later failure rolls
+back every claim, barrier, parent/member mutation, and `LogEntry`. No
+`select_for_update()` row-lock claim is made for SQLite.
+
+The conditional update barrier covers every mutable or identity-bearing parent
+field: assignment PK, event ID, team ID, status, creator ID, `created_at`,
+`updated_at`, notes, and `reviewed_worship_context_fingerprint`. The signed
+preview contains a notes digest rather than private raw notes. Immediately
+before the barrier, the writer loads the current raw notes, requires their
+digest to equal the signed digest, and uses that exact raw value in the UPDATE
+`WHERE`; NULL fingerprints use an `IS NULL` predicate and non-NULL canonical
+fingerprints use exact equality. The `SET` is a non-auto-updated field assigned
+to its own `F()` value, so the operation changes no parent value or timestamp,
+and rowcount must be exactly one. Full truth is reloaded after serialization;
+this is a conditional writer barrier, not a row lock.
+
+For each create, absence of every current and historical destination assignment
+must remain true. Create exactly one `scheduled` `TeamAssignment` for the exact
+event/team with `created_by=actor`, blank notes, and
+`reviewed_worship_context_fingerprint=NULL`, followed by every reviewed member
+as an exact `TeamAssignmentMember` with `confirmed_at=NULL` and blank
+`confirmation_note`. Use
+`assignment.save(force_insert=True, _skip_scheduling_revision=True)`: this
+suppresses only the already-claimed second revision bump while retaining the
+model transaction, current-event reload, `full_clean()`, assignability check,
+and canonical Worship write guard. Save each member normally/with
+`force_insert=True` so exact-team, active-membership, and uniqueness validation
+still run. No partial create is allowed.
+
+For each roster update, preserve the parent PK, event, team, status
+(`scheduled`), notes, creator, `created_at`, `updated_at`, and existing reviewed
+Worship fingerprint byte-for-byte. Preserve each signed retained through row,
+its ID, `created_at`, `confirmed_at`, and `confirmation_note` without saving it.
+Delete only each exact signed through-row ID with its assignment/membership,
+unconfirmed, exactly blank-note, active, exact-team predicates, and require the
+exact per-row and aggregate delete counts. Insert only exact missing additions,
+unconfirmed with blank notes. Add-only, remove-only, mixed, and empty-current-
+to-populated scheduled rosters are allowed by the same contract. Do not call
+`sync_assignment_members()`, delete-all/recreate-all, touch preserved rows, or
+advance an event solely for roster changes.
+
+After the first-write boundary, any added/deleted through row, changed
+confirmation timestamp/note, membership activity/team/identity change, linked-
+User inactivity, or reviewed selection change makes the full recomputation
+stale. Protected truth is never removed from an old preview. Canonical Worship
+inspection must still permit every exact create target and the ownership of
+every existing Worship update parent. The model guard remains active on
+creates. The writer never changes `rotation_anchor_team`, repairs conflicts,
+infers Worship from names/keys/IDs, or marks context reviewed; existing valid
+fingerprints are preserved and new parents start NULL.
+
+GENERAL.1E's canonical audience-readiness baseline still participates in full
+recomputation. Every linked User in a create roster or update `add_ids` must
+currently match the event audience. A display-name-only addition has no User
+grant to check; preserved existing members receive no new grant; and a remove-
+only update performs no member audience-grant check. Nothing changes
+`ServiceEventAudienceScope` or `ChurchStructureMembership`.
+
+The batch emits no `Notification`. One shared operation UUID identifies one
+bounded `LogEntry` per changed assignment: `ADDITION` for CREATE and `CHANGE`
+for UPDATE. Its canonical JSON contains only contract/version, operation UUID,
+workbook SHA-256, source cell, classification/action, event/assignment/team ID,
+team key, and exact preserved/added/removed membership IDs. It excludes source
+person tokens/names, display names, contacts, raw assignment or confirmation
+notes, and private profile/member notes. Audit failure aborts the whole batch.
+
+Postconditions reload the complete reviewed assignment surface. Every CREATE
+must be one exact scheduled parent with the complete reviewed roster, new
+unconfirmed/blank-note through rows, and NULL fingerprint. Every UPDATE must
+retain the exact parent and preserved-row IDs/state, contain the exact reviewed
+roster, omit only signed removals, and contain only exact unconfirmed/blank-note
+additions. Original blank/no-op/history pair assignment/member surfaces remain
+unchanged; on a same event, only the one authorized shared create-event revision
+claim may differ. No duplicate current assignment may exist. A fresh complete
+workflow after success must classify every changed pair `EXACT_NOOP` and expose
+no Confirm action. The old confirmation token is stale: creates changed event
+revision and assignment truth, while updates changed complete member truth.
+
+The bulk authority remains active staff or superuser only, checked before the
+first write and again after serialization before any `TeamAssignment`,
+`TeamAssignmentMember`, or `LogEntry` business write. It is not granted to
+global assignment managers, team leads/coordinators, planners, audience
+members, `TeamMembership`, or Church Structure membership. Busy translation is
+limited to `SchedulingRevisionBusyError` and SQLite locked/table-locked
+`OperationalError`; users receive a retry result after rollback. Stale revision,
+`SchedulingMutationStaleError`, conditional rowcount, strict-recompute,
+delete-count, validation/integrity, audit, or postcondition failure receives a
+bounded stale/review-again failure after rollback. Unrelated `OperationalError`
+is not mislabeled and propagates after rollback.
+
+The future UI may render Confirm only when `preview.has_changes` and not
+`preview.has_hard_blockers`. It must show exact assignment-create,
+roster-update, member-add, and member-remove counts and require one explicit
+POST. It must not auto-apply after preview. The still-current signed person and
+preview evidence accompany the confirmation POST, so no second workbook upload
+is required. This is a future UI contract only; GENERAL.1F-0A adds no control or
+route.
 
 This decision supersedes the former current-direction statements that Sound is
 exactly one person, Projection is at most two people, Video is exactly three
@@ -3374,26 +3551,26 @@ complete reviewed membership-ID set, and exact preserved/add/remove diff. Never
 sign or persist raw contact data or private note/confirmation text.
 
 For a batch with creates, the canonical `ServiceEvent.scheduling_revision` CAS
-remains each create event's exact once-only `N -> N+1` claim. For roster updates,
-do not broaden event revision: conditionally self-update a non-auto-updated
-`TeamAssignment` value in deterministic assignment-ID order, binding the signed
-parent predicates, and require exactly one row as SQLite's first-writer boundary.
-For mixed create/update, establish the lowest deterministic update barrier first,
-then remaining update barriers and ascending create-event CAS claims inside one
-outer transaction. If there are no updates, the first create CAS remains the
-writer boundary. Reload the actor and integration gate after the first-write
-boundary and before any `TeamAssignment`, `TeamAssignmentMember`, or `LogEntry`
-write; then recompute all material and safe-no-write truth. Any stale, busy,
-duplicate, invalid, delete-count, insert, audit, or postcondition failure rolls
-back every barrier, revision claim, parent/member write, and audit row. Do not
-claim `select_for_update()` provides the SQLite guarantee.
+remains each distinct create event's exact once-only `N -> N+1` claim. For
+roster updates, do not broaden event revision: conditionally self-update a non-
+auto-updated `TeamAssignment` value in deterministic assignment-ID order,
+binding every signed parent predicate, and require exactly one row. GENERAL.1F-
+0A freezes mixed-batch order as ascending distinct create-event CAS claims
+first, followed by ascending update-assignment barriers. If there are no
+creates, the first update barrier is the SQLite first-writer boundary. Reload
+the actor and integration gate after the first-write boundary and before any
+`TeamAssignment`, `TeamAssignmentMember`, or `LogEntry` business write; then
+recompute all material and safe-no-write truth. Any stale, busy, duplicate,
+invalid, delete-count, insert, audit, or postcondition failure rolls back every
+barrier, revision claim, parent/member write, and audit row. Do not claim
+`select_for_update()` provides the SQLite guarantee.
 
 Continue zero `Notification`. Emit one bounded `ADDITION` or `CHANGE` `LogEntry`
-per changed assignment with a shared operation UUID and only contract/source key,
-workbook SHA-256, event/assignment/team IDs and team key, added/removed membership
-IDs, and action. Preserved IDs need not be logged because they are unchanged and
-remain in the signed baseline. Omit filenames, source tokens/names, display
-names, users, email, phone, assignment notes, confirmation text, and note digests.
+per changed assignment with a shared operation UUID and only contract/source
+cell, workbook SHA-256, event/assignment/team IDs and team key, preserved/added/
+removed membership IDs, and classification/action. Omit filenames, source
+tokens/names, display names, users, email, phone, assignment notes, confirmation
+text, and note digests.
 
 ##### Sound, Projection, Video, UI, and implementation sequence
 
@@ -3453,7 +3630,8 @@ Implementation should proceed only in separately approved slices:
    parsing, per-team membership review, and bounded signed person authority;
 5. **implemented in GENERAL.1E:** generic zero-write assignment preview,
    complete-roster diff, strict signed revalidation, and read-only UI;
-6. new generic confirmation writer with file-backed SQLite race/rollback tests;
+6. **contract frozen in GENERAL.1F-0A; runtime still separately gated:** new
+   generic confirmation writer with file-backed SQLite race/rollback tests;
 7. Sound cutover/legacy-token expiry and focused regression/browser QA; and
 8. separately approve any additional adapter/workbook family or event-column
    identification UX. Lighting stays outside identity authority.

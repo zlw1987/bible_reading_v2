@@ -250,9 +250,10 @@ token; mixed create/update batches retain `N -> N+1` only for create events,
 emit no Notification, and add no schema, migration, dependency, other column,
 or production data mutation. Production review/apply remains unperformed.
 
-MO-S.6F.2A has a LOCALLY IMPLEMENTED / LOCAL VERIFIED, UNCOMMITTED
-zero-write Projection prototype preserved in the current worktree as
-refactor evidence. It is not part of current HEAD, is not production-ready,
+MO-S.6F.2A is IMPLEMENTED / LOCAL VERIFIED in current HEAD as a zero-write
+Projection prototype retained as historical/refactor evidence. Its one/two-
+person grammar is superseded by the generic 1..N architecture. It is not
+production-ready and has no write authority. It is not part of current HEAD, is not production-ready,
 and must not be committed in its current one/two-person form. Its independently versioned source grammar accepts
 only one literal person token or exactly two nonblank distinct tokens separated
 by one ASCII slash, with Unicode NFC plus outer trim only. Exact active
@@ -270,8 +271,10 @@ milestone roster completeness still awaited product confirmation.** Production v
 deferred; no schema, migration, dependency, production command, or write path
 was added.
 
-`MO-S.6F.GENERAL.0A` is now **DOCS/READ-ONLY ARCHITECTURE COMPLETE; GENERIC
-RUNTIME UNIMPLEMENTED**. Product-owner clarification supersedes the former
+MO-S.6F.GENERAL.0A is DOCS/READ-ONLY ARCHITECTURE COMPLETE;
+GENERAL.1A–1E are IMPLEMENTED / LOCAL VERIFIED as the generic zero-write
+workflow foundation; GENERAL.1F-0A is DOCS / READ-ONLY WRITER CONTRACT
+COMPLETE; the generic confirmation writer remains unimplemented. Product-owner clarification supersedes the former
 current-direction count assumptions: any configured team-assignment cell is a
 complete 1..N roster, every ASCII-slash segment is one actual serving person, and blank
 is no proposal/no write. Sound-one, Projection-one/two, and Video-three remain
@@ -306,6 +309,29 @@ may be a hint but is not itself authority. Formula-derived Lighting remains
 non-authoritative, and Speaker/BB & Offering/Worship roster are out of scope.
 No runtime file, model, migration, dependency, production command, or data was
 changed by GENERAL.0A.
+
+`MO-S.6F.GENERAL.1F-0A` is **DOCS / READ-ONLY WRITER CONTRACT COMPLETE;
+WRITER UNIMPLEMENTED**. The separate `TEAM_ROSTER_CONFIRMATION_V1` authority is
+available in the frozen design only when the complete generic preview has zero
+hard blockers and at least one CREATE or roster UPDATE. It binds the exact
+person/preview token hashes, actor/version/workbook/team identities, complete
+writable row/diff/through-row identities, and operation counts; all three
+tokens must be strictly decoded and the full current preview recomputed inside
+one transaction. The mixed-batch order is distinct CREATE-event revision CAS
+claims by event ID, then value-preserving UPDATE-parent barriers by assignment
+ID. Each event with any CREATE advances once `N -> N+1`, including same-event
+multi-team CREATE+UPDATE work; update-only events do not advance. Creates retain
+normal model/Worship validation while skipping only the already claimed second
+revision bump. Updates preserve parents and retained through rows, remove only
+exact safe signed rows, and add only unconfirmed blank-note rows. Audience and
+Worship rules are rechecked after serialization; the batch is whole-workbook
+atomic, emits no Notification, writes one privacy-bounded audit row per changed
+assignment, proves exact postconditions, and makes old state-changing authority
+stale. A dense 52-event/seven-team/three-person synthetic case measured 8,474
+bytes against the unchanged 16,384-byte confirmation limit by binding full
+baselines through the exact strictly re-decoded preview-token hash rather than
+duplicating them. This slice adds no Confirm UI, runtime writer, schema,
+migration, dependency, production command, or data mutation.
 
 `MO-S.REQUIRED.0A` is **EFFECTIVE REQUIRED-TEAM SEMANTICS / EVENT WORSHIP
 ENTRY AUDIT COMPLETE**. `MO-S.REQUIRED.1A` is **IMPLEMENTED / LOCAL VERIFIED /

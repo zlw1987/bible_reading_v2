@@ -621,8 +621,43 @@ strict decoder reloads and recomputes the full preview and rejects any mismatch.
 The rendered bilingual preview exposes summary counts and privacy-safe rosters
 while stating ZERO WRITE, no schedule change, and no confirmation writer. No
 assignment/member, ServiceEvent revision, RequiredTeam, audience, rotation
-anchor, LogEntry, or Notification write exists, and GENERAL.1F remains
+anchor, LogEntry, or Notification write exists, and GENERAL.1F runtime remains
 unimplemented.
+
+`MO-S.6F.GENERAL.1F-0A` is **DOCS / READ-ONLY WRITER CONTRACT COMPLETE**; the
+generic writer and Confirm UI remain unimplemented. The distinct, expiring,
+user-bound, strict-schema `TEAM_ROSTER_CONFIRMATION_V1` may be minted only for
+zero blockers and at least one `CREATE_CANDIDATE` or
+`ROSTER_UPDATE_CANDIDATE`. It binds exact SHA-256 values for the still-carried
+person-review and assignment-preview tokens plus exact writable identities,
+diffs, through-row IDs, actor/version/workbook/team authority, and operation
+counts. The writer must strictly re-decode and fully recompute both prior tokens
+inside one transaction and require its derived writable projection to equal the
+confirmation state; the preview is bound evidence, never reused as write
+authority.
+
+The frozen mixed-batch SQLite order is ascending distinct CREATE-event revision
+claims first, then ascending update-assignment value-preserving barriers,
+followed by complete post-first-write recomputation. Every event with one or
+more creates advances exactly once `N -> N+1`; an event containing both CREATE
+and UPDATE still advances only once, and update-only events do not advance.
+Creates use the normal validated/Worship-guarded `TeamAssignment.save()` with
+only `_skip_scheduling_revision=True` to prevent a second bump. Updates preserve
+the complete parent and retained through rows, delete only exact signed safe
+rows, and insert only exact unconfirmed/blank-note additions; they never use
+`sync_assignment_members()`. Audience applies to linked-User additions,
+canonical Worship governance remains mandatory, no Notification is sent, and
+one privacy-bounded ADDITION/CHANGE `LogEntry` per changed assignment shares the
+operation UUID. Stale, busy, blocker, audit, or postcondition failure rolls back
+the entire workbook.
+
+The unchanged 16,384-byte confirmation limit was measured with a dense
+52-event/seven-team/three-person synthetic population: 364 mapped pairs, 121
+creates, 122 updates, 121 no-ops, and 243 writable rows produced an 8,474-byte
+compressed signed confirmation state (7,910 bytes headroom). Full baselines are
+cryptographically incorporated through the exact preview-token hash and strict
+re-decode rather than duplicated. No limit, server persistence, runtime file,
+route, model, migration, dependency, or data changed in GENERAL.1F-0A.
 
 ## 3. Identity Model
 

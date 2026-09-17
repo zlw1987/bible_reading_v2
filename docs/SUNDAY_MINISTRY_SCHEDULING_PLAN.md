@@ -3033,8 +3033,8 @@ generic architecture below; it is not production-ready.
 
 #### MO-S.6F.GENERAL.0A — Generic Team Roster Workbook Import architecture
 
-Status: **READ-ONLY REPOSITORY AUDIT + DOCS-ONLY ARCHITECTURE COMPLETE;
-GENERIC RUNTIME UNIMPLEMENTED**.
+Status: **READ-ONLY REPOSITORY AUDIT + ARCHITECTURE COMPLETE;
+GENERAL.1A/1B/1C ZERO-WRITE FOUNDATION IMPLEMENTED / LOCAL VERIFIED**.
 
 MO-S.6F.GENERAL.1A is IMPLEMENTED / LOCAL VERIFIED for the writer-free generic
 domain foundation: TEAM_ROSTER_CELL_V1, typed cell input, TeamRosterColumnHint,
@@ -3057,6 +3057,30 @@ case/spacing, and fuzzy lookalikes receive no hint. This inventory performs no
 membership or assignment lookup, signing, session persistence, preview, or
 write. Column-name flexibility never relaxes the exact ServiceProfile or
 ServiceEvent identity boundary.
+
+MO-S.6F.GENERAL.1C adds the first staff-facing generic Team Roster workflow at
+`assignments/import/team-roster/`: upload, then explicit A:O column-mapping
+review, then a truthful person-mapping placeholder. It reuses GENERAL.1B as the
+only column/scope/header-hint inventory source. A/B are visible and locked, C:I
+may map to Ignore or any signed-and-current active, assignable Ministry Team
+with a canonical `team_key`, and J:O are visible but not mappable for the
+Bethany target profile. Exact `projector`/`Sound`/`Video` hints may prefill only
+their exact current eligible `team_key`; missing, inactive, nonassignable, or
+drifted hints stay unresolved with no fallback. Duplicate destination teams
+block. Posted team IDs are checked against the upload-time ID+key option
+identity and current DB truth before a distinct reviewed-column-mapping state
+is minted.
+
+GENERAL.1C remains ZERO WRITE: it does not read roster cells, resolve people,
+query `TeamMembership`/`TeamAssignment`/`TeamAssignmentMember`, persist session
+or temp-file proposal state, or mutate scheduling/domain/audit/notification
+rows. Its expiring Django-signed states are user/workbook/adapter/profile/event
+bound, contain exact A:O header/scope/hint evidence and no person cell content,
+and are size-bounded. The selected event-target gate is diagnostic-but-
+fail-closed: blocked exact target evidence may render the column inventory, but
+only 52 currently exact, lifecycle-valid, audience-ready target matches may
+mint the reviewed state. Person mapping, assignment preview, confirmation, and
+all writers remain unimplemented in this slice.
 
 This decision supersedes the former current-direction statements that Sound is
 exactly one person, Projection is at most two people, Video is exactly three
@@ -3349,12 +3373,13 @@ Implementation should proceed only in separately approved slices:
    parameterized zero-write tests;
 2. named-adapter extraction, observed-column inventory, exact-header hinting,
    and adapter tests;
-3. generic column mapping, separate person mapping, preview, signatures, one
-   route/form/template workflow, and
-   refactor of local Projection evidence with zero writes;
-4. new generic confirmation writer with file-backed SQLite race/rollback tests;
-5. Sound cutover/legacy-token expiry and focused regression/browser QA; and
-6. separately approve any additional adapter/workbook family or event-column
+3. **implemented in GENERAL.1C:** generic signed column mapping in one
+   route/form/template workflow, stopping before person-cell parsing;
+4. separately approve generic person mapping, zero-write assignment preview,
+   and refactoring of local Projection evidence;
+5. new generic confirmation writer with file-backed SQLite race/rollback tests;
+6. Sound cutover/legacy-token expiry and focused regression/browser QA; and
+7. separately approve any additional adapter/workbook family or event-column
    identification UX. Lighting stays outside identity authority.
 
 Generic tests must be parameterized across reviewed mappings and cover 1, 2, 3,

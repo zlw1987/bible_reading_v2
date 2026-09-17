@@ -21,6 +21,11 @@ urlpatterns = [
         name="sound_assignment_workbook_preview",
     ),
     path(
+        "assignments/import/team-roster/",
+        views.team_roster_column_mapping_review,
+        name="team_roster_column_mapping_review",
+    ),
+    path(
         "assignments/import/projection-preview/",
         views.projection_assignment_workbook_preview,
         name="projection_assignment_workbook_preview",

@@ -50,6 +50,8 @@ from .forms import (
     ProjectionAssignmentWorkbookUploadForm,
     SoundAssignmentMappingForm,
     SoundAssignmentWorkbookUploadForm,
+    TeamRosterColumnMappingForm,
+    TeamRosterWorkbookUploadForm,
     TeamAssignmentConfirmForm,
     TeamAssignmentForm,
     TeamScheduleAssignmentForm,
@@ -2272,6 +2274,231 @@ def confirm_bible_study_role_serving(request, meeting_id):
     return redirect("my_serving")
 
 
+def _team_roster_column_mapping_error_text(language, error):
+    from ministry.services.worship_xlsx_preview import (
+        TargetServiceProfileError,
+        WorkbookContractError,
+    )
+
+    if isinstance(error, WorkbookContractError):
+        return (
+            f"工作簿不符合已支持的年度模板：{error.code.value}"
+            if language == "zh"
+            else (
+                "Workbook does not match the supported annual contract: "
+                f"{error.code.value}"
+            )
+        )
+    if isinstance(error, TargetServiceProfileError):
+        return (
+            "目标聚会配置目前不可用于团队名单列复核。"
+            if language == "zh"
+            else "The target Service Profile is not available for column review."
+        )
+    return (
+        "列映射复核无效、已过期或当前配置已更改；请重新上传工作簿。"
+        if language == "zh"
+        else (
+            "Column-mapping review is invalid, expired, or stale. "
+            "Upload the workbook again."
+        )
+    )
+
+
+def _team_roster_column_mapping_context(
+    *,
+    language,
+    upload_form=None,
+    mapping_review=None,
+    mapping_form=None,
+    reviewed_mapping=None,
+    state_error=None,
+):
+    mapping_rows = []
+    if mapping_review is not None:
+        for row in mapping_review.columns:
+            mapping_rows.append(
+                {
+                    "review": row,
+                    "field": (
+                        mapping_form[f"mapping_{row.column}"]
+                        if mapping_form is not None and row.is_candidate
+                        else None
+                    ),
+                }
+            )
+    return {
+        "language": language,
+        "upload_form": upload_form
+        or TeamRosterWorkbookUploadForm(language=language),
+        "mapping_review": mapping_review,
+        "mapping_form": mapping_form,
+        "mapping_rows": mapping_rows,
+        "reviewed_mapping": reviewed_mapping,
+        "state_error": state_error,
+    }
+
+
+@login_required
+@require_http_methods(["GET", "POST"])
+def team_roster_column_mapping_review(request):
+    """Staff-only upload -> column mapping review, with zero domain writes."""
+
+    try:
+        require_integration_enabled(ANNUAL_WORKBOOK_INTEGRATION_KEY)
+    except IntegrationDisabled as exc:
+        raise Http404 from exc
+
+    from ministry.services.team_roster_column_mapping import (
+        TeamRosterColumnMappingStateError,
+        TeamRosterColumnMappingTargetBlocked,
+        TeamRosterColumnMappingValidationError,
+        decode_team_roster_column_mapping_review,
+        finalize_team_roster_column_mapping,
+        prepare_team_roster_column_mapping_review,
+        user_can_review_team_roster_columns,
+    )
+    from ministry.services.worship_xlsx_preview import (
+        TargetServiceProfileError,
+        WorkbookContractError,
+    )
+
+    if not user_can_review_team_roster_columns(request.user):
+        raise PermissionDenied
+    language = get_user_language(request)
+    if request.method == "GET":
+        return render(
+            request,
+            "ministry/team_roster_column_mapping_review.html",
+            _team_roster_column_mapping_context(language=language),
+        )
+
+    if request.FILES:
+        upload_form = TeamRosterWorkbookUploadForm(
+            request.POST, request.FILES, language=language
+        )
+        if not upload_form.is_valid():
+            return render(
+                request,
+                "ministry/team_roster_column_mapping_review.html",
+                _team_roster_column_mapping_context(
+                    language=language, upload_form=upload_form
+                ),
+            )
+        uploaded = upload_form.cleaned_data["workbook"]
+        try:
+            mapping_review = prepare_team_roster_column_mapping_review(
+                content=uploaded.read(),
+                filename=uploaded.name,
+                user=request.user,
+                language=language,
+            )
+        except (
+            WorkbookContractError,
+            TargetServiceProfileError,
+            TeamRosterColumnMappingStateError,
+        ) as exc:
+            upload_form.add_error(
+                "workbook", _team_roster_column_mapping_error_text(language, exc)
+            )
+            return render(
+                request,
+                "ministry/team_roster_column_mapping_review.html",
+                _team_roster_column_mapping_context(
+                    language=language, upload_form=upload_form
+                ),
+            )
+        mapping_form = TeamRosterColumnMappingForm(
+            language=language,
+            mapping_review=mapping_review,
+            initial={
+                "signed_column_inventory_state": (
+                    mapping_review.signed_inventory_state
+                )
+            },
+        )
+        return render(
+            request,
+            "ministry/team_roster_column_mapping_review.html",
+            _team_roster_column_mapping_context(
+                language=language,
+                upload_form=upload_form,
+                mapping_review=mapping_review,
+                mapping_form=mapping_form,
+            ),
+        )
+
+    signed_state = request.POST.get("signed_column_inventory_state", "")
+    try:
+        mapping_review = decode_team_roster_column_mapping_review(
+            signed_state, user=request.user, language=language
+        )
+    except (TeamRosterColumnMappingStateError, TargetServiceProfileError) as exc:
+        upload_form = TeamRosterWorkbookUploadForm(language=language)
+        return render(
+            request,
+            "ministry/team_roster_column_mapping_review.html",
+            _team_roster_column_mapping_context(
+                language=language,
+                upload_form=upload_form,
+                state_error=_team_roster_column_mapping_error_text(language, exc),
+            ),
+        )
+
+    mapping_form = TeamRosterColumnMappingForm(
+        request.POST,
+        language=language,
+        mapping_review=mapping_review,
+    )
+    reviewed_mapping = None
+    if mapping_form.is_valid():
+        try:
+            reviewed_mapping = finalize_team_roster_column_mapping(
+                review=mapping_review,
+                selected_team_ids=mapping_form.selected_team_ids(),
+                user=request.user,
+                language=language,
+            )
+        except TeamRosterColumnMappingTargetBlocked:
+            mapping_form.add_error(
+                None,
+                (
+                    "精确目标聚会证据仍有阻止项，因此未建立下一阶段权限。"
+                    if language == "zh"
+                    else (
+                        "Exact target-event evidence is blocked, so no "
+                        "next-stage authority was minted."
+                    )
+                ),
+            )
+        except (
+            TeamRosterColumnMappingValidationError,
+            TeamRosterColumnMappingStateError,
+            TargetServiceProfileError,
+        ):
+            mapping_form.add_error(
+                None,
+                (
+                    "列映射无效或当前团队/聚会身份已更改；请重新上传并复核。"
+                    if language == "zh"
+                    else (
+                        "The mapping is invalid or current team/event identity "
+                        "changed. Upload and review the workbook again."
+                    )
+                ),
+            )
+    return render(
+        request,
+        "ministry/team_roster_column_mapping_review.html",
+        _team_roster_column_mapping_context(
+            language=language,
+            mapping_review=mapping_review,
+            mapping_form=mapping_form,
+            reviewed_mapping=reviewed_mapping,
+        ),
+    )
+
+
 def _sound_preview_error_text(language, error):
     from .services.sound_assignment_xlsx_preview import (
         SoundDestinationTeamError,
@@ -3031,6 +3258,11 @@ def team_assignment_list(request):
                 and is_integration_enabled(ANNUAL_WORKBOOK_INTEGRATION_KEY)
             ),
             "can_preview_projection_assignment_workbook": bool(
+                request.user.is_active
+                and (request.user.is_staff or request.user.is_superuser)
+                and is_integration_enabled(ANNUAL_WORKBOOK_INTEGRATION_KEY)
+            ),
+            "can_review_team_roster_columns": bool(
                 request.user.is_active
                 and (request.user.is_staff or request.user.is_superuser)
                 and is_integration_enabled(ANNUAL_WORKBOOK_INTEGRATION_KEY)

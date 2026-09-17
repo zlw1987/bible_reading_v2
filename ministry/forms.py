@@ -1194,6 +1194,98 @@ class SoundAssignmentWorkbookUploadForm(WorshipWorkbookUploadForm):
         )
 
 
+class TeamRosterWorkbookUploadForm(WorshipWorkbookUploadForm):
+    """Bounded upload form for the generic zero-write column-review step."""
+
+    def __init__(self, *args, language="en", **kwargs):
+        super().__init__(*args, language=language, **kwargs)
+        self.fields["workbook"].label = (
+            "上传年度团队名单工作簿"
+            if language == "zh"
+            else "Upload annual Team Roster workbook"
+        )
+
+
+class TeamRosterColumnMappingForm(forms.Form):
+    signed_column_inventory_state = forms.CharField(widget=forms.HiddenInput)
+
+    def __init__(self, *args, language="en", mapping_review, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.language = language
+        self.mapping_review = mapping_review
+        choices = [
+            (
+                "",
+                "忽略（安全默认）" if language == "zh" else "Ignore (safe default)",
+            ),
+            *[
+                (str(option.team_id), option.display_name)
+                for option in mapping_review.destination_options
+            ],
+        ]
+        for row in mapping_review.columns:
+            if not row.is_candidate:
+                continue
+            field_name = f"mapping_{row.column}"
+            self.fields[field_name] = forms.ChoiceField(
+                required=False,
+                choices=choices,
+                label=(
+                    f"{row.column} 列团队映射"
+                    if language == "zh"
+                    else f"Column {row.column} team mapping"
+                ),
+            )
+            if not self.is_bound and row.prefill_team_id is not None:
+                self.initial[field_name] = str(row.prefill_team_id)
+
+    def clean(self):
+        cleaned = super().clean()
+        expected_fields = {
+            f"mapping_{row.column}"
+            for row in self.mapping_review.columns
+            if row.is_candidate
+        }
+        posted_mapping_fields = {
+            key for key in self.data.keys() if key.startswith("mapping_")
+        }
+        if posted_mapping_fields - expected_fields:
+            raise forms.ValidationError(
+                "不能映射锁定列、其他聚会列或未知列坐标。"
+                if self.language == "zh"
+                else (
+                    "Locked, other-service, and unknown column coordinates "
+                    "cannot be mapped."
+                )
+            )
+        selected = [
+            cleaned.get(field_name)
+            for field_name in expected_fields
+            if cleaned.get(field_name)
+        ]
+        if len(selected) != len(set(selected)):
+            raise forms.ValidationError(
+                "同一个目标团队最多只能由一个工作簿列选择；请解决重复映射。"
+                if self.language == "zh"
+                else (
+                    "A destination team may be selected by only one workbook "
+                    "column. Resolve the duplicate mapping."
+                )
+            )
+        return cleaned
+
+    def selected_team_ids(self):
+        return {
+            row.column: (
+                int(self.cleaned_data[f"mapping_{row.column}"])
+                if self.cleaned_data.get(f"mapping_{row.column}")
+                else None
+            )
+            for row in self.mapping_review.columns
+            if row.is_candidate
+        }
+
+
 class SoundAssignmentMappingForm(forms.Form):
     signed_mapping_state = forms.CharField(widget=forms.HiddenInput)
 

@@ -12,11 +12,18 @@
     <p class="page-subtitle">
         {% if language == "zh" %}手动安排事工团队成员参与聚会服事{% else %}Manual ministry team assignments for service events{% endif %}
     </p>
-    {% if can_show_new_assignment %}
+    {% if can_show_new_assignment or can_review_team_roster_columns %}
     <div class="actions assignment-page-actions">
+        {% if can_show_new_assignment %}
         <a class="button" href="{% url 'create_team_assignment' %}">
             {% if language == "zh" %}新增排班{% else %}New Assignment{% endif %}
         </a>
+        {% endif %}
+        {% if can_review_team_roster_columns %}
+        <a class="button" href="{% url 'team_roster_column_mapping_review' %}">
+            {% if language == "zh" %}团队名单列映射{% else %}Team Roster Column Mapping{% endif %}
+        </a>
+        {% endif %}
         {% if can_preview_sound_assignment_workbook %}
         <a class="button button-secondary" href="{% url 'sound_assignment_workbook_preview' %}">
             {% if language == "zh" %}音控工作簿预览{% else %}Sound Workbook Preview{% endif %}

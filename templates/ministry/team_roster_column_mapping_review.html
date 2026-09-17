@@ -1,0 +1,142 @@
+{% extends "base.html" %}
+
+{% block title %}{% if language == "zh" %}团队名单列映射复核{% else %}Team Roster Column Mapping Review{% endif %} | {{ ui.site_title }}{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1 class="page-title">{% if language == "zh" %}团队名单列映射复核{% else %}Team Roster Column Mapping Review{% endif %}</h1>
+    <p class="page-subtitle">
+        {% if language == "zh" %}上传工作簿 → 列映射复核 → 下一步（本阶段尚未实现人员映射）{% else %}Upload workbook → Column mapping review → Next step (person mapping is not implemented in this slice){% endif %}
+    </p>
+</div>
+
+<div class="card">
+    <p class="status status-warning"><strong>ZERO WRITE</strong> — {% if language == "zh" %}上传和列映射不会建立或更改任何排班、团队或成员资料。{% else %}Upload and column mapping do not create or change assignments, teams, or membership data.{% endif %}</p>
+    <p>{% if language == "zh" %}自动匹配只是建议，仍必须由你看见并复核。选择“忽略”是安全默认；未知列名可以保留为忽略，也可以手动映射到任何当前有效且可排班的团队。{% else %}Automatic matches are suggestions only and remain visible for review. Ignore is the safe default. An unknown header may stay ignored or be mapped manually to any current active, assignable team.{% endif %}</p>
+    <p class="muted">{% if language == "zh" %}本步骤不会打开名单单元格、解析人员姓名或查询团队成员；也不会生成排班预览或确认。{% else %}This step does not open roster cells, parse person names, or query team memberships. It does not generate an assignment preview or confirmation.{% endif %}</p>
+</div>
+
+<div class="card">
+    <h2 class="card-title">{% if language == "zh" %}1. 上传工作簿{% else %}1. Upload Workbook{% endif %}</h2>
+    {% if state_error %}<p class="status status-warning">{{ state_error }}</p>{% endif %}
+    <form method="post" enctype="multipart/form-data">
+        {% csrf_token %}
+        {{ upload_form.non_field_errors }}
+        {% for field in upload_form %}
+        <div class="form-row">
+            {{ field.label_tag }}{{ field }}{{ field.errors }}
+            {% if field.help_text %}<p class="help-text">{{ field.help_text }}</p>{% endif %}
+        </div>
+        {% endfor %}
+        <div class="actions"><button type="submit">{% if language == "zh" %}上传并查看列映射{% else %}Upload and Review Columns{% endif %}</button></div>
+    </form>
+</div>
+
+{% if mapping_review %}
+<div class="card">
+    <h2 class="card-title">{% if language == "zh" %}2. 复核列映射{% else %}2. Review Column Mapping{% endif %}</h2>
+    <p><strong>{% if language == "zh" %}文件：{% else %}File:{% endif %}</strong> {{ mapping_review.filename }} · <strong>{% if language == "zh" %}工作表：{% else %}Sheet:{% endif %}</strong> {{ mapping_review.sheet_name }}</p>
+    {% if mapping_review.target_gate_ready %}
+    <p class="status status-good">{% if language == "zh" %}精确目标聚会证据已就绪。{% else %}Exact target-event evidence is ready.{% endif %}</p>
+    {% else %}
+    <p class="status status-warning">{% if language == "zh" %}可查看列清单用于诊断，但 {{ mapping_review.target_blocker_count }} 个精确目标聚会条件尚未就绪；本页不会建立下一阶段权限。{% else %}The column inventory remains visible for diagnosis, but {{ mapping_review.target_blocker_count }} exact target-event conditions are blocked. This page will not mint next-stage authority.{% endif %}</p>
+    <p class="muted">
+        {% for state, count in mapping_review.target_state_counts %}{{ state }}: {{ count }}{% if not forloop.last %} · {% endif %}{% endfor %}
+    </p>
+    {% endif %}
+
+    {% if not reviewed_mapping %}
+    <form method="post">
+        {% csrf_token %}
+        {{ mapping_form.signed_column_inventory_state }}
+        {{ mapping_form.non_field_errors }}
+        <div class="table-wrap">
+            <table class="sound-preview-table">
+                <thead>
+                    <tr>
+                        <th>{% if language == "zh" %}列{% else %}Column{% endif %}</th>
+                        <th>{% if language == "zh" %}工作簿表头{% else %}Workbook Header{% endif %}</th>
+                        <th>{% if language == "zh" %}范围{% else %}Scope{% endif %}</th>
+                        <th>{% if language == "zh" %}团队映射{% else %}Team Mapping{% endif %}</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in mapping_rows %}
+                    {% with row=item.review %}
+                    <tr>
+                        <td data-label="{% if language == 'zh' %}列{% else %}Column{% endif %}"><strong>{{ row.column }}</strong></td>
+                        <td data-label="{% if language == 'zh' %}工作簿表头{% else %}Workbook Header{% endif %}">
+                            {% if row.observed_header %}{{ row.observed_header }}{% else %}<span class="muted">{% if language == "zh" %}（空白）{% else %}(blank){% endif %}</span>{% endif %}
+                        </td>
+                        <td data-label="{% if language == 'zh' %}范围{% else %}Scope{% endif %}">
+                            {% if row.scope.value == "structural_event_identity" %}
+                                <span class="status status-muted">{% if language == "zh" %}聚会身份{% else %}Event identity{% endif %}</span><br>
+                                <span class="muted">{% if language == "zh" %}负责日期及目标聚会身份{% else %}Owns date and target-event identity{% endif %}</span>
+                            {% elif row.scope.value == "structural_worship_identity" %}
+                                <span class="status status-muted">{% if language == "zh" %}敬拜身份{% else %}Worship identity{% endif %}</span><br>
+                                <span class="muted">{% if language == "zh" %}由现有敬拜轮值流程负责{% else %}Owned by the existing Worship rotation flow{% endif %}</span>
+                            {% elif row.scope.value == "target_profile_review_candidate" %}
+                                <span class="status status-good">{% if language == "zh" %}Bethany 09:30{% else %}Bethany 09:30{% endif %}</span>
+                            {% else %}
+                                <span class="status status-warning">{% if language == "zh" %}其他聚会/配置{% else %}Other service/profile{% endif %}</span><br>
+                                <span class="muted">{% if language == "zh" %}不能在本次 Bethany 导入中映射{% else %}Not mappable in this Bethany import{% endif %}</span>
+                            {% endif %}
+                        </td>
+                        <td data-label="{% if language == 'zh' %}团队映射{% else %}Team Mapping{% endif %}">
+                            {% if item.field %}
+                                {{ item.field }}{{ item.field.errors }}
+                                {% if row.prefill_team_id %}
+                                <p class="help-text">{% if language == "zh" %}已按完全一致的表头预填；这只是建议，请明确复核。{% else %}Prefilled from an exact header match. This is only a suggestion; review it explicitly.{% endif %}</p>
+                                {% elif row.hint_warning %}
+                                <p class="help-text status-warning">{% if language == "zh" %}完全一致的表头建议目前不可用（{{ row.hint_warning }}）；未选择替代团队。{% else %}The exact-header suggestion is unavailable ({{ row.hint_warning }}); no fallback team was selected.{% endif %}</p>
+                                {% elif row.hint_team_key %}
+                                <p class="help-text">{% if language == "zh" %}完全一致的表头建议未选择团队。{% else %}The exact-header hint did not select a team.{% endif %}</p>
+                                {% else %}
+                                <p class="help-text">{% if language == "zh" %}未知或未提示的表头默认忽略；也可手动选择团队。{% else %}Unknown or unhinted headers default to Ignore and may be mapped manually.{% endif %}</p>
+                                {% endif %}
+                            {% elif row.scope.value == "out_of_target_profile_scope" %}
+                                <strong>{% if language == "zh" %}此处不可用{% else %}Not available here{% endif %}</strong>
+                            {% else %}
+                                <strong>{% if language == "zh" %}已锁定{% else %}Locked{% endif %}</strong>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endwith %}
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        <p class="muted">{% if language == "zh" %}每个目标团队最多只能由一个列选择。忽略的列不参与此规则。{% else %}Each destination team may be selected by at most one column. Ignored columns do not participate in this rule.{% endif %}</p>
+        <div class="actions">
+            <button type="submit" {% if not mapping_review.target_gate_ready %}disabled aria-disabled="true"{% endif %}>
+                {% if language == "zh" %}完成列映射复核{% else %}Complete Column Mapping Review{% endif %}
+            </button>
+        </div>
+    </form>
+    {% endif %}
+</div>
+{% endif %}
+
+{% if reviewed_mapping %}
+<div class="card">
+    <h2 class="card-title">{% if language == "zh" %}列映射已复核{% else %}Column Mapping Reviewed{% endif %}</h2>
+    <p class="status status-good">{% if language == "zh" %}列映射已复核。人员映射尚未在本阶段实现。{% else %}Column mapping reviewed. Person mapping is not implemented in this slice.{% endif %}</p>
+    <p>{% if language == "zh" %}已映射 {{ reviewed_mapping.mapped_count }} 列；已忽略 {{ reviewed_mapping.ignored_count }} 列。没有任何排班发生更改。{% else %}Mapped {{ reviewed_mapping.mapped_count }} columns and ignored {{ reviewed_mapping.ignored_count }} columns. No schedule was changed.{% endif %}</p>
+    <div class="table-wrap">
+        <table class="sound-preview-table">
+            <thead><tr><th>{% if language == "zh" %}列{% else %}Column{% endif %}</th><th>{% if language == "zh" %}表头{% else %}Header{% endif %}</th><th>{% if language == "zh" %}复核结果{% else %}Reviewed Result{% endif %}</th></tr></thead>
+            <tbody>
+            {% for choice in reviewed_mapping.choices %}
+                <tr>
+                    <td data-label="{% if language == 'zh' %}列{% else %}Column{% endif %}"><strong>{{ choice.column }}</strong></td>
+                    <td data-label="{% if language == 'zh' %}表头{% else %}Header{% endif %}">{% if choice.observed_header %}{{ choice.observed_header }}{% else %}<span class="muted">{% if language == "zh" %}（空白）{% else %}(blank){% endif %}</span>{% endif %}</td>
+                    <td data-label="{% if language == 'zh' %}复核结果{% else %}Reviewed Result{% endif %}">{% if choice.is_ignored %}<span class="muted">{% if language == "zh" %}忽略{% else %}Ignore{% endif %}</span>{% else %}{{ choice.destination_display_name }}{% endif %}</td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    <p class="muted">{% if language == "zh" %}下一步占位：未来的人员映射必须使用此新复核状态；上传阶段状态本身不授权人员映射。{% else %}Next-step placeholder: future person mapping must consume the new reviewed state; the upload-stage state alone grants no person-mapping authority.{% endif %}</p>
+</div>
+{% endif %}
+{% endblock %}

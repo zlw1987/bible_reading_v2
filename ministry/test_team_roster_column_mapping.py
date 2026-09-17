@@ -341,7 +341,7 @@ class TeamRosterColumnMappingTests(WorshipWorkbookDomainTestBase):
         self.assertEqual(result.mapped_count, 0)
         self.assertEqual(result.ignored_count, 7)
         self.assertContains(complete, "Column mapping reviewed")
-        self.assertContains(complete, "Person mapping is not implemented")
+        self.assertContains(complete, "Re-upload the same workbook to continue")
 
     def test_sounder_and_arbitrary_candidate_can_be_mapped_manually(self):
         _response, review = self.upload_review(f3="sounder")

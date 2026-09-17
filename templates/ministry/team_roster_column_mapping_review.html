@@ -6,16 +6,17 @@
 <div class="page-header">
     <h1 class="page-title">{% if language == "zh" %}团队名单列映射复核{% else %}Team Roster Column Mapping Review{% endif %}</h1>
     <p class="page-subtitle">
-        {% if language == "zh" %}上传工作簿 → 列映射复核 → 下一步（本阶段尚未实现人员映射）{% else %}Upload workbook → Column mapping review → Next step (person mapping is not implemented in this slice){% endif %}
+        {% if language == "zh" %}上传工作簿 → 列映射复核 → 重新上传同一工作簿 → 人员/团队成员映射复核{% else %}Upload workbook → Column mapping review → Re-upload the same workbook → Person / Team Membership mapping review{% endif %}
     </p>
 </div>
 
 <div class="card">
     <p class="status status-warning"><strong>ZERO WRITE</strong> — {% if language == "zh" %}上传和列映射不会建立或更改任何排班、团队或成员资料。{% else %}Upload and column mapping do not create or change assignments, teams, or membership data.{% endif %}</p>
     <p>{% if language == "zh" %}自动匹配只是建议，仍必须由你看见并复核。选择“忽略”是安全默认；未知列名可以保留为忽略，也可以手动映射到任何当前有效且可排班的团队。{% else %}Automatic matches are suggestions only and remain visible for review. Ignore is the safe default. An unknown header may stay ignored or be mapped manually to any current active, assignable team.{% endif %}</p>
-    <p class="muted">{% if language == "zh" %}本步骤不会打开名单单元格、解析人员姓名或查询团队成员；也不会生成排班预览或确认。{% else %}This step does not open roster cells, parse person names, or query team memberships. It does not generate an assignment preview or confirmation.{% endif %}</p>
+    <p class="muted">{% if language == "zh" %}列映射步骤不会打开名单单元格或查询团队成员。只有在列映射复核后重新上传完全相同的工作簿，人员映射步骤才会解析已映射列并读取其精确团队的有效成员。不会查询或更改排班。{% else %}Column review does not open roster cells or query memberships. Only after the reviewed workbook is re-uploaded byte-for-byte will person mapping parse mapped columns and read active memberships from their exact teams. Assignments are neither queried nor changed.{% endif %}</p>
 </div>
 
+{% if not reviewed_column_state and not person_review and not reviewed_person_mapping %}
 <div class="card">
     <h2 class="card-title">{% if language == "zh" %}1. 上传工作簿{% else %}1. Upload Workbook{% endif %}</h2>
     {% if state_error %}<p class="status status-warning">{{ state_error }}</p>{% endif %}
@@ -31,6 +32,7 @@
         <div class="actions"><button type="submit">{% if language == "zh" %}上传并查看列映射{% else %}Upload and Review Columns{% endif %}</button></div>
     </form>
 </div>
+{% endif %}
 
 {% if mapping_review %}
 <div class="card">
@@ -120,7 +122,7 @@
 {% if reviewed_mapping %}
 <div class="card">
     <h2 class="card-title">{% if language == "zh" %}列映射已复核{% else %}Column Mapping Reviewed{% endif %}</h2>
-    <p class="status status-good">{% if language == "zh" %}列映射已复核。人员映射尚未在本阶段实现。{% else %}Column mapping reviewed. Person mapping is not implemented in this slice.{% endif %}</p>
+    <p class="status status-good">{% if language == "zh" %}列映射已复核。{% else %}Column mapping reviewed.{% endif %}</p>
     <p>{% if language == "zh" %}已映射 {{ reviewed_mapping.mapped_count }} 列；已忽略 {{ reviewed_mapping.ignored_count }} 列。没有任何排班发生更改。{% else %}Mapped {{ reviewed_mapping.mapped_count }} columns and ignored {{ reviewed_mapping.ignored_count }} columns. No schedule was changed.{% endif %}</p>
     <div class="table-wrap">
         <table class="sound-preview-table">
@@ -136,7 +138,84 @@
             </tbody>
         </table>
     </div>
-    <p class="muted">{% if language == "zh" %}下一步占位：未来的人员映射必须使用此新复核状态；上传阶段状态本身不授权人员映射。{% else %}Next-step placeholder: future person mapping must consume the new reviewed state; the upload-stage state alone grants no person-mapping authority.{% endif %}</p>
+    <p class="muted">{% if language == "zh" %}此复核状态仅授权列/团队映射。人员映射仍需重新上传完全相同的工作簿；系统不会保存工作簿、人员单元格或临时会话状态。{% else %}This reviewed state authorizes only the column/team mapping. Person mapping still requires the exact same workbook again; the workbook, person cells, and temporary session state were not retained.{% endif %}</p>
+</div>
+{% endif %}
+
+{% if reviewed_column_state and not person_review and not reviewed_person_mapping %}
+<div class="card">
+    <h2 class="card-title">{% if language == "zh" %}3. 重新上传同一工作簿以继续{% else %}3. Re-upload the same workbook to continue{% endif %}</h2>
+    {% if person_state_error %}<p class="status status-warning">{{ person_state_error }}</p>{% endif %}
+    <p>{% if language == "zh" %}系统不会保留工作簿。重新上传文件的 SHA-256 必须与刚才复核的工作簿完全一致；即使表头相同，不同文件也会被拒绝并要求重新进行列映射复核。{% else %}The workbook is intentionally not retained. The re-uploaded file's SHA-256 must exactly match the workbook already reviewed. A different file is rejected even when its headers look identical, and requires a new Column Mapping Review.{% endif %}</p>
+    <form method="post" enctype="multipart/form-data">
+        {% csrf_token %}
+        <input type="hidden" name="signed_reviewed_column_state" value="{{ reviewed_column_state }}">
+        {{ upload_form.non_field_errors }}
+        {% for field in upload_form %}
+        <div class="form-row">
+            {{ field.label_tag }}{{ field }}{{ field.errors }}
+            {% if field.help_text %}<p class="help-text">{{ field.help_text }}</p>{% endif %}
+        </div>
+        {% endfor %}
+        <div class="actions"><button type="submit">{% if language == "zh" %}重新上传并复核人员映射{% else %}Re-upload and Review Person Mapping{% endif %}</button></div>
+    </form>
+</div>
+{% endif %}
+
+{% if person_review %}
+<div class="card">
+    <h2 class="card-title">{% if language == "zh" %}4. 复核人员 / 团队成员映射{% else %}4. Review Person / Team Membership Mapping{% endif %}</h2>
+    <p class="status status-good">{% if language == "zh" %}已确认重新上传的是完全相同的工作簿。仅解析了 {{ person_review.mapped_count }} 个已映射列；忽略列、A/B 及 J:O 均未作为团队名单解析。{% else %}The re-upload is the exact same workbook. Only {{ person_review.mapped_count }} mapped columns were parsed; ignored columns, A/B, and J:O were not opened as Team Roster cells.{% endif %}</p>
+    <p>{% if language == "zh" %}完全一致的姓名仅用于预填。最终权限来自你明确复核的精确团队成员记录 ID；不使用大小写折叠、音译、别名、子字符串、模糊或邮箱匹配。{% else %}An exact visible-name match is prefill convenience only. Authority comes from the exact Team Membership ID you explicitly review—never case folding, transliteration, aliases, substring, fuzzy, or email matching.{% endif %}</p>
+    <p class="muted">{% if language == "zh" %}已关联但 Django 用户无效的成员记录不能选择。仅显示名称的有效团队成员记录可以选择。{% else %}A membership linked to an inactive Django User cannot be selected. An active display-name-only Team Membership remains eligible.{% endif %}</p>
+    {% if person_review.source_blocker_count %}<p class="status status-warning">{% if language == "zh" %}{{ person_review.source_blocker_count }} 个已映射单元格不符合通用 1..N 名单语法；证据会保留给下一阶段，但本阶段不会分类排班。{% else %}{{ person_review.source_blocker_count }} mapped cells are outside the generic 1..N roster grammar. Their evidence is preserved for the next stage, but assignments are not classified here.{% endif %}</p>{% endif %}
+
+    {% if not reviewed_person_mapping %}
+    <form method="post">
+        {% csrf_token %}
+        {{ person_form.signed_reviewed_column_state }}
+        {{ person_form.signed_person_mapping_input_state }}
+        {{ person_form.non_field_errors }}
+        {% for item in person_groups %}
+        {% with group=item.group %}
+        <section class="mapping-group">
+            <h3>{{ group.team_display_name }}</h3>
+            {% if group.diagnostic_inactive_user_count %}<p class="muted">{% if language == "zh" %}{{ group.diagnostic_inactive_user_count }} 个有效成员记录因关联用户无效而不可选择。{% else %}{{ group.diagnostic_inactive_user_count }} active membership record(s) are not selectable because their linked User is inactive.{% endif %}</p>{% endif %}
+            {% if item.token_rows %}
+            <div class="table-wrap">
+                <table class="sound-preview-table">
+                    <thead><tr><th>{% if language == "zh" %}来源姓名{% else %}Source Token{% endif %}</th><th>{% if language == "zh" %}出现次数{% else %}Occurrences{% endif %}</th><th>{% if language == "zh" %}来源位置{% else %}Source Coordinates{% endif %}</th><th>{% if language == "zh" %}明确复核的团队成员{% else %}Explicit Reviewed Membership{% endif %}</th></tr></thead>
+                    <tbody>
+                    {% for token_item in item.token_rows %}
+                    <tr>
+                        <td data-label="{% if language == 'zh' %}来源姓名{% else %}Source Token{% endif %}"><strong>{{ token_item.review.token }}</strong></td>
+                        <td data-label="{% if language == 'zh' %}出现次数{% else %}Occurrences{% endif %}">{{ token_item.review.occurrence_count }}</td>
+                        <td data-label="{% if language == 'zh' %}来源位置{% else %}Source Coordinates{% endif %}">{% for cell in token_item.review.source_cells|slice:":6" %}{{ cell }}{% if not forloop.last %}, {% endif %}{% endfor %}{% if token_item.review.source_cells|length > 6 %} …{% endif %}</td>
+                        <td data-label="{% if language == 'zh' %}明确复核的团队成员{% else %}Explicit Reviewed Membership{% endif %}">
+                            {{ token_item.field }}{{ token_item.field.errors }}
+                            {% if token_item.review.prefill_membership_id %}<p class="help-text">{% if language == "zh" %}已按同一团队内唯一、完全一致的可见身份预填；仍需明确复核。{% else %}Prefilled from one unique exact visible identity on this team; explicit review is still required.{% endif %}</p>{% elif token_item.review.review_state == "ambiguous_manual_review_required" %}<p class="help-text status-warning">{% if language == "zh" %}多个完全一致候选；必须手动选择。{% else %}Multiple exact candidates; manual review is required.{% endif %}</p>{% else %}<p class="help-text">{% if language == "zh" %}没有唯一完全一致候选；必须手动选择。{% else %}No unique exact candidate; manual review is required.{% endif %}</p>{% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}<p class="muted">{% if language == "zh" %}该已映射团队没有需要人员映射的有效来源姓名。{% else %}This mapped team has no supported source person tokens to review.{% endif %}</p>{% endif %}
+        </section>
+        {% endwith %}
+        {% endfor %}
+        <p class="muted">{% if language == "zh" %}同一团队/日期名单中的两个不同来源姓名不能映射到同一个成员记录。{% else %}Two distinct source tokens in one team/date roster cannot map to the same membership record.{% endif %}</p>
+        <div class="actions"><button type="submit">{% if language == "zh" %}完成人员映射复核{% else %}Complete Person Mapping Review{% endif %}</button></div>
+    </form>
+    {% endif %}
+</div>
+{% endif %}
+
+{% if reviewed_person_mapping %}
+<div class="card">
+    <h2 class="card-title">{% if language == "zh" %}人员映射已复核{% else %}Person Mapping Reviewed{% endif %}</h2>
+    <p class="status status-good">{% if language == "zh" %}人员映射已复核。排班预览尚未在本阶段实现。{% else %}Person mapping reviewed. Assignment preview is not implemented in this slice.{% endif %}</p>
+    <p>{% if language == "zh" %}已复核 {{ reviewed_person_mapping.mapped_column_count }} 个映射列、{{ reviewed_person_mapping.reviewed_token_count }} 个精确团队/来源姓名映射。没有查询或更改任何排班。{% else %}Reviewed {{ reviewed_person_mapping.mapped_column_count }} mapped columns and {{ reviewed_person_mapping.reviewed_token_count }} exact team/source-token mappings. No assignment was queried or changed.{% endif %}</p>
 </div>
 {% endif %}
 {% endblock %}

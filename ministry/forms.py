@@ -1286,6 +1286,85 @@ class TeamRosterColumnMappingForm(forms.Form):
         }
 
 
+class TeamRosterPersonMappingForm(forms.Form):
+    signed_reviewed_column_state = forms.CharField(widget=forms.HiddenInput)
+    signed_person_mapping_input_state = forms.CharField(widget=forms.HiddenInput)
+
+    def __init__(self, *args, language="en", person_review, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.language = language
+        self.person_review = person_review
+        self._field_pairs = {}
+        for group_index, group in enumerate(person_review.groups):
+            choices = []
+            for candidate in group.candidates:
+                if language == "zh":
+                    state_label = (
+                        "已关联用户"
+                        if candidate.linked_state == "linked"
+                        else "仅显示名称"
+                    )
+                    label = (
+                        f"{candidate.visible_identity} — "
+                        f"成员记录 #{candidate.membership_id} — {state_label}"
+                    )
+                else:
+                    state_label = (
+                        "linked"
+                        if candidate.linked_state == "linked"
+                        else "display-name-only"
+                    )
+                    label = (
+                        f"{candidate.visible_identity} — "
+                        f"membership #{candidate.membership_id} — {state_label}"
+                    )
+                choices.append((str(candidate.membership_id), label))
+            for token_index, token_review in enumerate(group.token_reviews):
+                field_name = f"person_{group_index}_{token_index}"
+                self._field_pairs[field_name] = (group.team_id, token_review.token)
+                self.fields[field_name] = forms.ChoiceField(
+                    required=True,
+                    choices=[
+                        (
+                            "",
+                            "请选择成员记录"
+                            if language == "zh"
+                            else "Select a Team Membership",
+                        ),
+                        *choices,
+                    ],
+                    label=token_review.token,
+                )
+                if (
+                    not self.is_bound
+                    and token_review.prefill_membership_id is not None
+                ):
+                    self.initial[field_name] = str(
+                        token_review.prefill_membership_id
+                    )
+
+    def clean(self):
+        cleaned = super().clean()
+        unexpected = {
+            key
+            for key in self.data
+            if key.startswith("person_") and key not in self._field_pairs
+        }
+        if unexpected:
+            raise forms.ValidationError(
+                "提交的人员映射坐标无效。"
+                if self.language == "zh"
+                else "Submitted person-mapping coordinates are invalid."
+            )
+        return cleaned
+
+    def selected_membership_ids(self):
+        return {
+            pair: int(self.cleaned_data[field_name])
+            for field_name, pair in self._field_pairs.items()
+        }
+
+
 class SoundAssignmentMappingForm(forms.Form):
     signed_mapping_state = forms.CharField(widget=forms.HiddenInput)
 

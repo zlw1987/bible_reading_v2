@@ -14,6 +14,7 @@ nonblank header is trimmed, normalized, or otherwise rewritten.
 """
 
 from dataclasses import dataclass
+from datetime import date
 from enum import StrEnum
 from io import BytesIO
 
@@ -22,6 +23,8 @@ from openpyxl.utils import get_column_letter
 
 from ministry.services.team_roster_workbook import (
     ObservedTeamRosterColumn,
+    ReviewedTeamRosterColumn,
+    TeamRosterCellInput,
     TeamRosterColumnHint,
     resolve_exact_team_roster_column_hint,
     validate_team_roster_column_hints,
@@ -98,6 +101,22 @@ class SvcaBethany2026TeamRosterColumnInventory:
     target_matches: tuple[TargetMatch, ...]
 
 
+@dataclass(frozen=True, slots=True)
+class SvcaBethany2026MappedRosterCell:
+    """One mapped C:I cell extracted without touching ignored roster columns."""
+
+    source_row: int
+    source_cell: str
+    local_date: date
+    date_kind: str
+    sheet_name: str
+    column: str
+    observed_header: str
+    destination_team_id: int
+    destination_team_key: str
+    cell_input: TeamRosterCellInput
+
+
 def _inventory_headers(content):
     workbook = load_workbook(
         BytesIO(content), data_only=False, read_only=True, keep_links=False
@@ -150,3 +169,62 @@ def inventory_team_roster_columns(content, *, filename="workbook.xlsx"):
         parsed_workbook=parsed,
         target_matches=target_matches,
     )
+
+
+def _classify_mapped_cell(cell):
+    if cell.data_type == "f":
+        return TeamRosterCellInput.formula()
+    if cell.data_type == "e":
+        return TeamRosterCellInput.error()
+    if cell.value is None:
+        return TeamRosterCellInput.blank()
+    if isinstance(cell.value, str):
+        return TeamRosterCellInput.text(cell.value)
+    return TeamRosterCellInput.non_text()
+
+
+def read_reviewed_team_roster_cells(content, *, parsed_workbook, mapped_columns):
+    """Extract only explicitly mapped C:I roster cells from the exact upload.
+
+    Workbook hash continuity is enforced by the caller before this function is
+    entered.  This adapter never opens A/B or J:O as roster cells, and it never
+    opens an ignored C:I column.
+    """
+
+    mapped_columns = tuple(mapped_columns)
+    if any(
+        type(item) is not ReviewedTeamRosterColumn
+        or item.sheet_name != SUPPORTED_SHEET
+        or item.column not in "CDEFGHI"
+        for item in mapped_columns
+    ):
+        raise ValueError("Mapped roster columns are outside the adapter contract.")
+    if len({item.column for item in mapped_columns}) != len(mapped_columns):
+        raise ValueError("A mapped roster column is duplicated.")
+
+    workbook = load_workbook(
+        BytesIO(content), data_only=False, read_only=True, keep_links=False
+    )
+    try:
+        sheet = workbook[SUPPORTED_SHEET]
+        rows = []
+        for parsed_row in parsed_workbook.rows:
+            for mapped in mapped_columns:
+                cell = sheet[f"{mapped.column}{parsed_row.source_row}"]
+                rows.append(
+                    SvcaBethany2026MappedRosterCell(
+                        source_row=parsed_row.source_row,
+                        source_cell=f"{mapped.column}{parsed_row.source_row}",
+                        local_date=parsed_row.local_date,
+                        date_kind=parsed_row.date_kind,
+                        sheet_name=mapped.sheet_name,
+                        column=mapped.column,
+                        observed_header=mapped.observed_header,
+                        destination_team_id=mapped.destination_team_id,
+                        destination_team_key=mapped.destination_team_key,
+                        cell_input=_classify_mapped_cell(cell),
+                    )
+                )
+        return tuple(rows)
+    finally:
+        workbook.close()

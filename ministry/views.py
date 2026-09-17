@@ -51,6 +51,7 @@ from .forms import (
     SoundAssignmentMappingForm,
     SoundAssignmentWorkbookUploadForm,
     TeamRosterColumnMappingForm,
+    TeamRosterPersonMappingForm,
     TeamRosterWorkbookUploadForm,
     TeamAssignmentConfirmForm,
     TeamAssignmentForm,
@@ -2312,6 +2313,11 @@ def _team_roster_column_mapping_context(
     mapping_review=None,
     mapping_form=None,
     reviewed_mapping=None,
+    reviewed_column_state=None,
+    person_review=None,
+    person_form=None,
+    reviewed_person_mapping=None,
+    person_state_error=None,
     state_error=None,
 ):
     mapping_rows = []
@@ -2327,6 +2333,18 @@ def _team_roster_column_mapping_context(
                     ),
                 }
             )
+    person_groups = []
+    if person_review is not None:
+        for group_index, group in enumerate(person_review.groups):
+            token_rows = []
+            for token_index, token_review in enumerate(group.token_reviews):
+                token_rows.append(
+                    {
+                        "review": token_review,
+                        "field": person_form[f"person_{group_index}_{token_index}"],
+                    }
+                )
+            person_groups.append({"group": group, "token_rows": token_rows})
     return {
         "language": language,
         "upload_form": upload_form
@@ -2335,8 +2353,50 @@ def _team_roster_column_mapping_context(
         "mapping_form": mapping_form,
         "mapping_rows": mapping_rows,
         "reviewed_mapping": reviewed_mapping,
+        "reviewed_column_state": reviewed_column_state,
+        "person_review": person_review,
+        "person_form": person_form,
+        "person_groups": person_groups,
+        "reviewed_person_mapping": reviewed_person_mapping,
+        "person_state_error": person_state_error,
         "state_error": state_error,
     }
+
+
+def _team_roster_person_mapping_error_text(language, error):
+    from ministry.services.team_roster_person_mapping import (
+        TeamRosterPersonMappingStateTooLarge,
+        TeamRosterWorkbookMismatch,
+    )
+
+    if isinstance(error, TeamRosterWorkbookMismatch):
+        return (
+            "重新上传的工作簿与已复核的工作簿并非完全相同；请返回列映射复核。"
+            if language == "zh"
+            else (
+                "The re-uploaded workbook is not the exact workbook already "
+                "reviewed. Start a new Column Mapping Review."
+            )
+        )
+    if isinstance(error, TeamRosterPersonMappingStateTooLarge):
+        return (
+            f"人员映射签名证据为 {error.actual_bytes} 字节，超过现有 "
+            f"{error.maximum_bytes} 字节上限；未扩大上限或新增服务器存储。"
+            if language == "zh"
+            else (
+                f"Person-mapping signed evidence measured {error.actual_bytes} "
+                f"bytes, above the existing {error.maximum_bytes}-byte bound. "
+                "The limit was not raised and no server persistence was added."
+            )
+        )
+    return (
+        "人员映射复核无效、已过期或当前团队/成员/聚会事实已更改；请重新上传同一工作簿。"
+        if language == "zh"
+        else (
+            "Person-mapping review is invalid, expired, or current team, "
+            "membership, or event truth changed. Re-upload the same workbook."
+        )
+    )
 
 
 @login_required
@@ -2362,6 +2422,13 @@ def team_roster_column_mapping_review(request):
         TargetServiceProfileError,
         WorkbookContractError,
     )
+    from ministry.services.team_roster_person_mapping import (
+        TeamRosterPersonMappingStateError,
+        TeamRosterPersonMappingValidationError,
+        decode_team_roster_person_mapping_input,
+        finalize_team_roster_person_mapping,
+        prepare_team_roster_person_mapping,
+    )
 
     if not user_can_review_team_roster_columns(request.user):
         raise PermissionDenied
@@ -2371,6 +2438,70 @@ def team_roster_column_mapping_review(request):
             request,
             "ministry/team_roster_column_mapping_review.html",
             _team_roster_column_mapping_context(language=language),
+        )
+
+    if request.FILES and request.POST.get("signed_reviewed_column_state"):
+        reviewed_column_state = request.POST.get(
+            "signed_reviewed_column_state", ""
+        )
+        upload_form = TeamRosterWorkbookUploadForm(
+            request.POST, request.FILES, language=language
+        )
+        if not upload_form.is_valid():
+            return render(
+                request,
+                "ministry/team_roster_column_mapping_review.html",
+                _team_roster_column_mapping_context(
+                    language=language,
+                    upload_form=upload_form,
+                    reviewed_column_state=reviewed_column_state,
+                ),
+            )
+        uploaded = upload_form.cleaned_data["workbook"]
+        try:
+            person_review = prepare_team_roster_person_mapping(
+                content=uploaded.read(),
+                filename=uploaded.name,
+                reviewed_column_state=reviewed_column_state,
+                user=request.user,
+                language=language,
+            )
+        except TeamRosterPersonMappingStateError as exc:
+            upload_form.add_error(
+                "workbook", _team_roster_person_mapping_error_text(language, exc)
+            )
+            return render(
+                request,
+                "ministry/team_roster_column_mapping_review.html",
+                _team_roster_column_mapping_context(
+                    language=language,
+                    upload_form=upload_form,
+                    reviewed_column_state=reviewed_column_state,
+                    person_state_error=_team_roster_person_mapping_error_text(
+                        language, exc
+                    ),
+                ),
+            )
+        person_form = TeamRosterPersonMappingForm(
+            language=language,
+            person_review=person_review,
+            initial={
+                "signed_reviewed_column_state": reviewed_column_state,
+                "signed_person_mapping_input_state": (
+                    person_review.signed_input_state
+                ),
+            },
+        )
+        return render(
+            request,
+            "ministry/team_roster_column_mapping_review.html",
+            _team_roster_column_mapping_context(
+                language=language,
+                upload_form=upload_form,
+                reviewed_column_state=reviewed_column_state,
+                person_review=person_review,
+                person_form=person_form,
+            ),
         )
 
     if request.FILES:
@@ -2425,6 +2556,66 @@ def team_roster_column_mapping_review(request):
                 upload_form=upload_form,
                 mapping_review=mapping_review,
                 mapping_form=mapping_form,
+            ),
+        )
+
+    if request.POST.get("signed_person_mapping_input_state"):
+        reviewed_column_state = request.POST.get(
+            "signed_reviewed_column_state", ""
+        )
+        input_state = request.POST.get("signed_person_mapping_input_state", "")
+        try:
+            person_review = decode_team_roster_person_mapping_input(
+                input_state,
+                reviewed_column_state=reviewed_column_state,
+                user=request.user,
+                language=language,
+            )
+        except TeamRosterPersonMappingStateError as exc:
+            return render(
+                request,
+                "ministry/team_roster_column_mapping_review.html",
+                _team_roster_column_mapping_context(
+                    language=language,
+                    reviewed_column_state=reviewed_column_state,
+                    person_state_error=_team_roster_person_mapping_error_text(
+                        language, exc
+                    ),
+                ),
+            )
+        person_form = TeamRosterPersonMappingForm(
+            request.POST,
+            language=language,
+            person_review=person_review,
+        )
+        reviewed_person_mapping = None
+        if person_form.is_valid():
+            try:
+                reviewed_person_mapping = finalize_team_roster_person_mapping(
+                    input_state=input_state,
+                    reviewed_column_state=reviewed_column_state,
+                    selected_membership_ids=(
+                        person_form.selected_membership_ids()
+                    ),
+                    user=request.user,
+                    language=language,
+                )
+            except (
+                TeamRosterPersonMappingStateError,
+                TeamRosterPersonMappingValidationError,
+            ) as exc:
+                person_form.add_error(
+                    None, _team_roster_person_mapping_error_text(language, exc)
+                )
+        return render(
+            request,
+            "ministry/team_roster_column_mapping_review.html",
+            _team_roster_column_mapping_context(
+                language=language,
+                reviewed_column_state=reviewed_column_state,
+                person_review=person_review,
+                person_form=person_form,
+                reviewed_person_mapping=reviewed_person_mapping,
             ),
         )
 
@@ -2495,6 +2686,11 @@ def team_roster_column_mapping_review(request):
             mapping_review=mapping_review,
             mapping_form=mapping_form,
             reviewed_mapping=reviewed_mapping,
+            reviewed_column_state=(
+                reviewed_mapping.signed_reviewed_state
+                if reviewed_mapping is not None
+                else None
+            ),
         ),
     )
 

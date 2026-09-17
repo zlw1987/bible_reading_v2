@@ -539,10 +539,12 @@ explicitly to any currently active, assignable `MinistryTeam`; exact destination
 ID and `team_key` are bound together and revalidated. One observed column maps
 to at most one team, and one destination team may be selected by at most one
 roster column per import; duplicate destination choices block until explicitly
-resolved and are never merged. Column mapping is separate from the later person-
-token mapping, which remains exact active `TeamMembership.id` authority on the
-chosen team. No fuzzy header/name, hierarchy, `team_kind`, role-profile, or PK
-inference grants authority.
+resolved and are never merged. Column mapping is separate from the implemented
+GENERAL.1D person-token review, which uses exact active `TeamMembership.id`
+authority on the chosen team. A unique exact privacy-safe visible identity is
+prefill convenience only; staff review of the membership ID is authority. No
+fuzzy header/name, case folding, transliteration, hierarchy, `team_kind`,
+role-profile, cross-team membership, or global User lookup grants authority.
 
 The generic parser uses NFC plus outer trim, ASCII `/` only, nonempty distinct
 literal tokens, and technical bounds of 16 members, 120 characters per token,
@@ -563,9 +565,38 @@ allowlist. A changed header such as `sounder` stays visible and unmapped rather
 than failing the workbook or being fuzzily authorized. Formula-derived Lighting
 is not identity authority, and Speaker/BB & Offering/Worship roster semantics
 remain outside scope. The known event-row structure and exact ServiceProfile/
-ServiceEvent matching remain unchanged and fail closed. No generic runtime,
-route, model, migration, dependency, production command, or data mutation is
-implemented here.
+ServiceEvent matching remain unchanged and fail closed. At the GENERAL.0A
+architecture milestone no generic runtime or route existed. GENERAL.1C/1D now
+provide the staff-facing zero-write route through reviewed column and person
+mapping, but add no model, migration, dependency, production command,
+assignment query, or data mutation.
+
+`MO-S.6F.GENERAL.1D` requires the exact workbook bytes to be re-uploaded after
+column review because GENERAL.1C retains no workbook, person cells, session, or
+temporary proposal state. The SHA-256 must equal the hash in the strictly
+decoded `TEAM_ROSTER_REVIEWED_COLUMN_MAPPING_V1` state; a different workbook
+fails closed even when headers match. Only explicitly mapped C:I cells are
+opened as roster cells. Ignored C:I columns and structural/parallel A:B/J:O
+columns produce no roster tokens, membership candidate lookup, or blocker.
+
+Every mapped cell is passed through the unchanged `TEAM_ROSTER_CELL_V1` 1..N
+grammar. Distinct identity-review keys are exact destination team plus exact
+normalized source token. Candidate choices are active memberships from that
+team only, using stored display name, otherwise linked-user full name/username,
+with no email/contact fallback. A membership linked to an inactive Django User
+is diagnostic-only and cannot be selected; an active display-name-only
+membership remains eligible. Two tokens occurring together in one team/date
+roster must resolve to distinct membership IDs.
+
+The separate bounded `TEAM_ROSTER_PERSON_MAPPING_REVIEW_V1` state binds mapped
+columns, workbook hash, parsed source cells/tokens, current exact team and
+membership baselines, explicit selections, and target-event evidence. It holds
+no contact details, notes, assignment evidence, session/temp reference, or
+server persistence. Its 16,384-byte bound was retained and measured against a
+52-row/seven-team synthetic full-column shape; overflow fails closed with the
+measured size rather than enlarging the limit. GENERAL.1D stops at the truthful
+message that assignment preview is not implemented; classification,
+reconciliation, confirmation, and every writer remain deferred.
 
 ## 3. Identity Model
 

@@ -168,6 +168,25 @@ class ReviewedTeamRosterColumnMapping:
         return sum(choice.is_ignored for choice in self.choices)
 
 
+@dataclass(frozen=True, slots=True)
+class DecodedReviewedTeamRosterColumnMapping:
+    """Strictly decoded GENERAL.1C authority for the next workflow step.
+
+    This is deliberately separate from the display-oriented result returned by
+    ``finalize_team_roster_column_mapping``.  Later stages must start from the
+    signed token and current database truth, never from a previously rendered
+    dataclass.
+    """
+
+    filename: str
+    workbook_sha256: str
+    sheet_name: str
+    choices: tuple[ReviewedTeamRosterColumnChoice, ...]
+    target_evidence: tuple[TeamRosterTargetEvidence, ...]
+    parsed_workbook: object
+    signed_reviewed_state: str
+
+
 def user_can_review_team_roster_columns(user):
     return bool(
         getattr(user, "is_authenticated", False)
@@ -757,4 +776,196 @@ def finalize_team_roster_column_mapping(
         choices=tuple(choices),
         signed_reviewed_state=signed_reviewed_state,
         signed_state_bytes=len(signed_reviewed_state.encode("utf-8")),
+    )
+
+
+def _loads_reviewed(token, *, user, max_age):
+    try:
+        payload = signing.loads(
+            token,
+            salt=REVIEWED_SIGNING_SALT,
+            max_age=max_age,
+        )
+    except signing.BadSignature as exc:
+        raise TeamRosterColumnMappingStateError(
+            "Reviewed column mapping is invalid or expired."
+        ) from exc
+    required = {
+        "contract_version",
+        "state_type",
+        "integration_key",
+        "adapter_contract_revision",
+        "generated_at",
+        "user_id",
+        "filename",
+        "workbook_sha256",
+        "supported_sheet",
+        "parsed_workbook_state",
+        "columns",
+        "target_evidence",
+        "reviewed_mappings",
+    }
+    if (
+        not isinstance(payload, dict)
+        or set(payload) != required
+        or payload.get("contract_version")
+        != TEAM_ROSTER_REVIEWED_COLUMN_MAPPING_V1
+        or payload.get("state_type") != REVIEWED_STATE_TYPE
+        or payload.get("integration_key") != INTEGRATION_KEY
+        or payload.get("adapter_contract_revision") != CONTRACT_REVISION
+        or payload.get("user_id") != getattr(user, "pk", None)
+        or not isinstance(payload.get("generated_at"), str)
+        or not isinstance(payload.get("filename"), str)
+        or payload["filename"].replace("\\", "/").rsplit("/", 1)[-1]
+        != payload["filename"]
+        or not isinstance(payload.get("workbook_sha256"), str)
+        or _SHA256_RE.fullmatch(payload["workbook_sha256"]) is None
+        or payload.get("supported_sheet") != SUPPORTED_SHEET
+        or not isinstance(payload.get("parsed_workbook_state"), str)
+    ):
+        raise TeamRosterColumnMappingStateError(
+            "Reviewed column mapping is malformed."
+        )
+    try:
+        datetime.fromisoformat(payload["generated_at"])
+    except ValueError as exc:
+        raise TeamRosterColumnMappingStateError(
+            "Reviewed column-mapping timestamp is malformed."
+        ) from exc
+    return payload
+
+
+def _validate_reviewed_mappings(value, *, columns, teams, language):
+    if not isinstance(value, list) or len(value) != len(_CANDIDATE_COLUMNS):
+        raise TeamRosterColumnMappingStateError(
+            "Reviewed column mappings are malformed."
+        )
+    columns_by_name = {item["column"]: item for item in columns}
+    team_by_id = {team.pk: team for team in teams}
+    choices = []
+    mapped_ids = []
+    mapped_keys = []
+    for expected_column, item in zip(_CANDIDATE_COLUMNS, value, strict=True):
+        if not isinstance(item, dict) or set(item) != {
+            "sheet",
+            "column",
+            "header",
+            "destination_team_id",
+            "destination_team_key",
+        }:
+            raise TeamRosterColumnMappingStateError(
+                "Reviewed column mappings are malformed."
+            )
+        column_evidence = columns_by_name.get(expected_column)
+        team_id = item["destination_team_id"]
+        team_key = item["destination_team_key"]
+        identity_is_ignored = team_id is None and team_key is None
+        identity_is_mapped = (
+            type(team_id) is int
+            and team_id > 0
+            and _is_canonical_team_key(team_key)
+        )
+        if (
+            item["sheet"] != SUPPORTED_SHEET
+            or item["column"] != expected_column
+            or column_evidence is None
+            or item["header"] != column_evidence["header"]
+            or not (identity_is_ignored or identity_is_mapped)
+        ):
+            raise TeamRosterColumnMappingStateError(
+                "Reviewed column mappings are malformed."
+            )
+        team = None
+        if identity_is_mapped:
+            team = team_by_id.get(team_id)
+            if (
+                team is None
+                or not _eligible_team(team)
+                or team.team_key != team_key
+            ):
+                raise TeamRosterColumnMappingStateError(
+                    "A reviewed destination team is no longer current."
+                )
+            mapped_ids.append(team_id)
+            mapped_keys.append(team_key)
+        choices.append(
+            ReviewedTeamRosterColumnChoice(
+                sheet_name=item["sheet"],
+                column=item["column"],
+                observed_header=item["header"],
+                destination_team_id=team_id,
+                destination_team_key=team_key,
+                destination_display_name=(
+                    _team_display_name(team, language) if team is not None else None
+                ),
+            )
+        )
+    if (
+        len(mapped_ids) != len(set(mapped_ids))
+        or len(mapped_keys) != len(set(mapped_keys))
+    ):
+        raise TeamRosterColumnMappingStateError(
+            "A destination team is mapped from more than one column."
+        )
+    return tuple(choices)
+
+
+def decode_reviewed_team_roster_column_mapping(
+    token, *, user, language="en", max_age=SIGNING_MAX_AGE_SECONDS
+):
+    """Decode and revalidate the exact GENERAL.1C reviewed authority."""
+
+    payload = _loads_reviewed(token, user=user, max_age=max_age)
+    try:
+        parsed = decode_parsed_workbook(
+            payload["parsed_workbook_state"], user=user, max_age=max_age
+        )
+    except Exception as exc:
+        raise TeamRosterColumnMappingStateError(
+            "The reviewed workbook evidence is invalid, expired, or stale."
+        ) from exc
+    if (
+        parsed.filename != payload["filename"]
+        or parsed.sha256 != payload["workbook_sha256"]
+    ):
+        raise TeamRosterColumnMappingStateError(
+            "Reviewed workbook identity evidence is inconsistent."
+        )
+    columns = _validate_columns(payload["columns"])
+    signed_target_evidence = _validate_target_evidence(
+        payload["target_evidence"], parsed
+    )
+    current_matches = _require_current_target_evidence(
+        parsed, signed_target_evidence
+    )
+    if any(
+        match.state != TargetMatchState.EXACT_TARGET_MATCHED
+        for match in current_matches
+    ):
+        raise TeamRosterColumnMappingStateError(
+            "Exact target-event evidence is no longer ready."
+        )
+    teams = _all_teams()
+    choices = _validate_reviewed_mappings(
+        payload["reviewed_mappings"],
+        columns=columns,
+        teams=teams,
+        language=language,
+    )
+    return DecodedReviewedTeamRosterColumnMapping(
+        filename=payload["filename"],
+        workbook_sha256=payload["workbook_sha256"],
+        sheet_name=payload["supported_sheet"],
+        choices=choices,
+        target_evidence=tuple(
+            TeamRosterTargetEvidence(
+                source_row=item["source_row"],
+                state=item["state"],
+                event_id=item["event_id"],
+                exact_target_ids=tuple(item["exact_target_ids"]),
+            )
+            for item in signed_target_evidence
+        ),
+        parsed_workbook=parsed,
+        signed_reviewed_state=token,
     )

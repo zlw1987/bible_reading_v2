@@ -3034,7 +3034,7 @@ generic architecture below; it is not production-ready.
 #### MO-S.6F.GENERAL.0A — Generic Team Roster Workbook Import architecture
 
 Status: **READ-ONLY REPOSITORY AUDIT + ARCHITECTURE COMPLETE;
-GENERAL.1A/1B/1C ZERO-WRITE FOUNDATION IMPLEMENTED / LOCAL VERIFIED**.
+GENERAL.1A/1B/1C/1D ZERO-WRITE FOUNDATION IMPLEMENTED / LOCAL VERIFIED**.
 
 MO-S.6F.GENERAL.1A is IMPLEMENTED / LOCAL VERIFIED for the writer-free generic
 domain foundation: TEAM_ROSTER_CELL_V1, typed cell input, TeamRosterColumnHint,
@@ -3081,6 +3081,37 @@ fail-closed: blocked exact target evidence may render the column inventory, but
 only 52 currently exact, lifecycle-valid, audience-ready target matches may
 mint the reviewed state. Person mapping, assignment preview, confirmation, and
 all writers remain unimplemented in this slice.
+
+MO-S.6F.GENERAL.1D continues that route with the next zero-write boundary. The
+strict decoder for `TEAM_ROSTER_REVIEWED_COLUMN_MAPPING_V1` rejects malformed,
+extra/missing, wrong-user, expired, drifted-team, or drifted-target evidence
+and never trusts the GENERAL.1C display dataclass. Because no workbook or person
+cells were retained, the user must re-upload the exact same bytes; SHA-256 must
+equal the signed reviewed-column hash before mapped roster cells are opened. A
+different workbook fails closed and requires a new column review.
+
+Only reviewed mapped C:I columns are passed through `TEAM_ROSTER_CELL_V1` for
+all 52 supported Sunday rows. Ignored C:I columns and A:B/J:O are not roster-
+parsed and cause no membership candidate query. Each identity-review key is
+exact destination team plus exact normalized source token. Candidates come
+only from active `TeamMembership` rows on that exact team. Stored
+`display_name`, otherwise linked-user full name/username, is the privacy-safe
+visible identity; no contact fallback exists. Unique exact matching is prefill
+convenience only, while explicit reviewed membership ID is authority. Inactive
+linked Users are not selectable; active display-name-only memberships remain
+valid. Two tokens in one team/date roster cannot select the same membership.
+
+The bounded `TEAM_ROSTER_PERSON_MAPPING_REVIEW_V1` state binds exact mapped
+columns, parser/adapter/user/workbook identities, source cells/dates/states/
+tokens, team and candidate baselines, explicit selections, and target events.
+It contains no email/contact/notes/private-profile or assignment evidence and
+uses no session/temp/server persistence. The unchanged 16,384-byte bound is
+measured by a 52-row/seven-team test and fails closed with measured size on
+overflow. No `TeamAssignment` or `TeamAssignmentMember` query is made. The page
+then truthfully reports: "Person mapping reviewed. Assignment preview is not
+implemented in this slice." Assignment classification, reconciliation,
+confirmation, audit, notification, scheduling revision, and all writes remain
+deferred to GENERAL.1E or later.
 
 This decision supersedes the former current-direction statements that Sound is
 exactly one person, Projection is at most two people, Video is exactly three
@@ -3375,11 +3406,13 @@ Implementation should proceed only in separately approved slices:
    and adapter tests;
 3. **implemented in GENERAL.1C:** generic signed column mapping in one
    route/form/template workflow, stopping before person-cell parsing;
-4. separately approve generic person mapping, zero-write assignment preview,
-   and refactoring of local Projection evidence;
-5. new generic confirmation writer with file-backed SQLite race/rollback tests;
-6. Sound cutover/legacy-token expiry and focused regression/browser QA; and
-7. separately approve any additional adapter/workbook family or event-column
+4. **implemented in GENERAL.1D:** exact-workbook re-upload, mapped-cell 1..N
+   parsing, per-team membership review, and bounded signed person authority;
+5. separately approve the zero-write assignment preview and refactoring of
+   local Projection evidence;
+6. new generic confirmation writer with file-backed SQLite race/rollback tests;
+7. Sound cutover/legacy-token expiry and focused regression/browser QA; and
+8. separately approve any additional adapter/workbook family or event-column
    identification UX. Lighting stays outside identity authority.
 
 Generic tests must be parameterized across reviewed mappings and cover 1, 2, 3,

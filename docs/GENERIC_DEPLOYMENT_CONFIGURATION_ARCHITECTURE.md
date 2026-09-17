@@ -566,10 +566,10 @@ than failing the workbook or being fuzzily authorized. Formula-derived Lighting
 is not identity authority, and Speaker/BB & Offering/Worship roster semantics
 remain outside scope. The known event-row structure and exact ServiceProfile/
 ServiceEvent matching remain unchanged and fail closed. At the GENERAL.0A
-architecture milestone no generic runtime or route existed. GENERAL.1C/1D now
-provide the staff-facing zero-write route through reviewed column and person
-mapping, but add no model, migration, dependency, production command,
-assignment query, or data mutation.
+architecture milestone no generic runtime or route existed. GENERAL.1C/1D/1E
+now provide the staff-facing zero-write route through reviewed column mapping,
+person mapping, and assignment-state/roster-diff preview, but add no model,
+migration, dependency, production command, or data mutation.
 
 `MO-S.6F.GENERAL.1D` requires the exact workbook bytes to be re-uploaded after
 column review because GENERAL.1C retains no workbook, person cells, session, or
@@ -594,9 +594,35 @@ membership baselines, explicit selections, and target-event evidence. It holds
 no contact details, notes, assignment evidence, session/temp reference, or
 server persistence. Its 16,384-byte bound was retained and measured against a
 52-row/seven-team synthetic full-column shape; overflow fails closed with the
-measured size rather than enlarging the limit. GENERAL.1D stops at the truthful
-message that assignment preview is not implemented; classification,
-reconciliation, confirmation, and every writer remain deferred.
+measured size rather than enlarging the limit. At the GENERAL.1D milestone the
+workflow stopped before assignment reads; GENERAL.1E now owns that separately
+authorized boundary.
+
+`MO-S.6F.GENERAL.1E` is **IMPLEMENTED / LOCAL VERIFIED** as the first generic
+assignment-reading slice. The GENERAL.1D person token is re-decoded and
+revalidated before any assignment query. The service then reads only reviewed
+event/team assignment pairs, prefetches their exact through rows and
+membership/User truth, and consumes canonical audience and batched Worship
+governance helpers. It produces one immutable row per mapped event/team pair
+using the frozen generic states and `compute_team_roster_diff()` complete-roster
+set semantics. Blank is always no proposal/no clear; nonblank history is a safe
+skip; confirmed/prepared differences and protected removals block; exact
+equality is a no-op in every current status. Audience checks apply only to
+additions, and canonical Worship ownership plus the lowercase-or-NULL persisted
+fingerprint contract fail closed without changing rotation ownership or marking
+context reviewed.
+
+The new `TEAM_ROSTER_ASSIGNMENT_PREVIEW_V1` state binds its exact person-token
+SHA-256, actor/integration/adapter/workbook identity, event/team/membership and
+governance baselines, complete relevant assignment/member rows,
+classifications, diffs, and preserved through-row IDs. Assignment and
+confirmation notes are represented only by deterministic SHA-256 digests. The
+strict decoder reloads and recomputes the full preview and rejects any mismatch.
+The rendered bilingual preview exposes summary counts and privacy-safe rosters
+while stating ZERO WRITE, no schedule change, and no confirmation writer. No
+assignment/member, ServiceEvent revision, RequiredTeam, audience, rotation
+anchor, LogEntry, or Notification write exists, and GENERAL.1F remains
+unimplemented.
 
 ## 3. Identity Model
 

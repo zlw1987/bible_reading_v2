@@ -3034,7 +3034,7 @@ generic architecture below; it is not production-ready.
 #### MO-S.6F.GENERAL.0A — Generic Team Roster Workbook Import architecture
 
 Status: **READ-ONLY REPOSITORY AUDIT + ARCHITECTURE COMPLETE;
-GENERAL.1A/1B/1C/1D ZERO-WRITE FOUNDATION IMPLEMENTED / LOCAL VERIFIED**.
+GENERAL.1A/1B/1C/1D/1E ZERO-WRITE FOUNDATION IMPLEMENTED / LOCAL VERIFIED**.
 
 MO-S.6F.GENERAL.1A is IMPLEMENTED / LOCAL VERIFIED for the writer-free generic
 domain foundation: TEAM_ROSTER_CELL_V1, typed cell input, TeamRosterColumnHint,
@@ -3107,11 +3107,54 @@ tokens, team and candidate baselines, explicit selections, and target events.
 It contains no email/contact/notes/private-profile or assignment evidence and
 uses no session/temp/server persistence. The unchanged 16,384-byte bound is
 measured by a 52-row/seven-team test and fails closed with measured size on
-overflow. No `TeamAssignment` or `TeamAssignmentMember` query is made. The page
-then truthfully reports: "Person mapping reviewed. Assignment preview is not
-implemented in this slice." Assignment classification, reconciliation,
-confirmation, audit, notification, scheduling revision, and all writes remain
-deferred to GENERAL.1E or later.
+overflow. No `TeamAssignment` or `TeamAssignmentMember` query is made in
+GENERAL.1D. At that milestone the page truthfully reported that assignment
+preview was not implemented. GENERAL.1E now implements the read-only
+classification boundary below; confirmation, audit, notification, scheduling
+revision, and all writes remain deferred.
+
+MO-S.6F.GENERAL.1E adds the first generic assignment-reading slice and remains
+strictly **ZERO WRITE**. Its only proposal authority is the strictly decoded
+`TEAM_ROSTER_PERSON_MAPPING_REVIEW_V1` token; stale person, team, membership,
+event, profile, or audience evidence fails the whole preview before assignment
+classification. Assignments are loaded only for the reviewed event/team pairs,
+with assignment-member membership/User truth prefetched, while the canonical
+batch Worship ownership inspection supplies the special-team governance facts.
+
+Each mapped event/team pair is classified deterministically as
+`NO_SOURCE_PROPOSAL`, `HISTORICAL_EVENT_SKIP`, `CREATE_CANDIDATE`,
+`EXACT_NOOP`, `ROSTER_UPDATE_CANDIDATE`, or one of the typed source, target,
+audience, governance, duplicate, historical, unknown, invalid-assignment, or
+unsafe-update blockers. Blank never clears or changes an existing assignment;
+nonblank historical rows are intentionally skipped before source-grammar
+blocking. Current reviewed rosters are complete exact membership-ID sets and
+reuse `compute_team_roster_diff()` for preserve/add/remove evidence. Exact set
+equality is a no-op for scheduled, confirmed, and prepared parents. A differing
+confirmed/prepared parent blocks; scheduled removals are candidates only when
+the exact through row is unconfirmed, has an exactly blank confirmation note,
+and retains valid active exact-team membership/User truth. Preserved through
+rows and all confirmation state are explicit future-writer baselines and are
+never delete/recreate proposals.
+
+Audience matching applies only to linked Users in create/update `add_ids`;
+display-name-only additions grant no User visibility, and preserved members do
+not receive or require a new audience grant. Worship legality comes from the
+canonical ownership/governance inspection rather than names or team keys.
+Persisted `reviewed_worship_context_fingerprint` accepts only `NULL` or the
+canonical 64-character lowercase hexadecimal format and is preserved exactly.
+
+The distinct bounded `TEAM_ROSTER_ASSIGNMENT_PREVIEW_V1` signature binds the
+exact person-token digest, actor/integration/adapter/workbook identity, current
+event/team/membership/governance truth, complete relevant assignment/member
+surface, classification, roster diff, and exact preserved through-row IDs.
+Assignment and confirmation text participate only through deterministic
+SHA-256 digests; raw notes, confirmation text, contact, and private profile data
+are absent. Its strict decoder re-decodes GENERAL.1D, reloads current truth,
+recomputes the complete preview, and requires exact equality. The signed preview
+is read-only evidence and is **not** confirmation/write authority. The route
+renders the bilingual Assignment Preview with no Confirm control. GENERAL.1F,
+all assignment/member mutation, scheduling-revision CAS, LogEntry, and
+Notification behavior remain unimplemented.
 
 This decision supersedes the former current-direction statements that Sound is
 exactly one person, Projection is at most two people, Video is exactly three
@@ -3408,8 +3451,8 @@ Implementation should proceed only in separately approved slices:
    route/form/template workflow, stopping before person-cell parsing;
 4. **implemented in GENERAL.1D:** exact-workbook re-upload, mapped-cell 1..N
    parsing, per-team membership review, and bounded signed person authority;
-5. separately approve the zero-write assignment preview and refactoring of
-   local Projection evidence;
+5. **implemented in GENERAL.1E:** generic zero-write assignment preview,
+   complete-roster diff, strict signed revalidation, and read-only UI;
 6. new generic confirmation writer with file-backed SQLite race/rollback tests;
 7. Sound cutover/legacy-token expiry and focused regression/browser QA; and
 8. separately approve any additional adapter/workbook family or event-column

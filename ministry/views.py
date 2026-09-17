@@ -2317,6 +2317,8 @@ def _team_roster_column_mapping_context(
     person_review=None,
     person_form=None,
     reviewed_person_mapping=None,
+    assignment_preview=None,
+    assignment_preview_error=None,
     person_state_error=None,
     state_error=None,
 ):
@@ -2358,6 +2360,8 @@ def _team_roster_column_mapping_context(
         "person_form": person_form,
         "person_groups": person_groups,
         "reviewed_person_mapping": reviewed_person_mapping,
+        "assignment_preview": assignment_preview,
+        "assignment_preview_error": assignment_preview_error,
         "person_state_error": person_state_error,
         "state_error": state_error,
     }
@@ -2399,6 +2403,32 @@ def _team_roster_person_mapping_error_text(language, error):
     )
 
 
+def _team_roster_assignment_preview_error_text(language, error):
+    from ministry.services.team_roster_assignment_preview import (
+        TeamRosterAssignmentPreviewStateTooLarge,
+    )
+
+    if isinstance(error, TeamRosterAssignmentPreviewStateTooLarge):
+        return (
+            f"排班预览签名证据为 {error.actual_bytes} 字节，超过现有 "
+            f"{error.maximum_bytes} 字节上限；未扩大上限或新增服务器存储。"
+            if language == "zh"
+            else (
+                f"Assignment-preview signed evidence measured {error.actual_bytes} "
+                f"bytes, above the existing {error.maximum_bytes}-byte bound. "
+                "The limit was not raised and no server persistence was added."
+            )
+        )
+    return (
+        "排班预览无效、已过期或当前聚会、团队、成员或排班事实已更改；请重新开始复核。"
+        if language == "zh"
+        else (
+            "Assignment preview is invalid, expired, or current event, team, "
+            "membership, or assignment truth changed. Start the review again."
+        )
+    )
+
+
 @login_required
 @require_http_methods(["GET", "POST"])
 def team_roster_column_mapping_review(request):
@@ -2428,6 +2458,10 @@ def team_roster_column_mapping_review(request):
         decode_team_roster_person_mapping_input,
         finalize_team_roster_person_mapping,
         prepare_team_roster_person_mapping,
+    )
+    from ministry.services.team_roster_assignment_preview import (
+        TeamRosterAssignmentPreviewError,
+        build_team_roster_assignment_preview,
     )
 
     if not user_can_review_team_roster_columns(request.user):
@@ -2589,6 +2623,8 @@ def team_roster_column_mapping_review(request):
             person_review=person_review,
         )
         reviewed_person_mapping = None
+        assignment_preview = None
+        assignment_preview_error = None
         if person_form.is_valid():
             try:
                 reviewed_person_mapping = finalize_team_roster_person_mapping(
@@ -2600,12 +2636,23 @@ def team_roster_column_mapping_review(request):
                     user=request.user,
                     language=language,
                 )
+                assignment_preview = build_team_roster_assignment_preview(
+                    reviewed_person_state=(
+                        reviewed_person_mapping.signed_reviewed_state
+                    ),
+                    user=request.user,
+                    language=language,
+                )
             except (
                 TeamRosterPersonMappingStateError,
                 TeamRosterPersonMappingValidationError,
             ) as exc:
                 person_form.add_error(
                     None, _team_roster_person_mapping_error_text(language, exc)
+                )
+            except TeamRosterAssignmentPreviewError as exc:
+                assignment_preview_error = (
+                    _team_roster_assignment_preview_error_text(language, exc)
                 )
         return render(
             request,
@@ -2616,6 +2663,8 @@ def team_roster_column_mapping_review(request):
                 person_review=person_review,
                 person_form=person_form,
                 reviewed_person_mapping=reviewed_person_mapping,
+                assignment_preview=assignment_preview,
+                assignment_preview_error=assignment_preview_error,
             ),
         )
 

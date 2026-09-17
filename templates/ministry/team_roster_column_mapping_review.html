@@ -214,8 +214,70 @@
 {% if reviewed_person_mapping %}
 <div class="card">
     <h2 class="card-title">{% if language == "zh" %}人员映射已复核{% else %}Person Mapping Reviewed{% endif %}</h2>
-    <p class="status status-good">{% if language == "zh" %}人员映射已复核。排班预览尚未在本阶段实现。{% else %}Person mapping reviewed. Assignment preview is not implemented in this slice.{% endif %}</p>
-    <p>{% if language == "zh" %}已复核 {{ reviewed_person_mapping.mapped_column_count }} 个映射列、{{ reviewed_person_mapping.reviewed_token_count }} 个精确团队/来源姓名映射。没有查询或更改任何排班。{% else %}Reviewed {{ reviewed_person_mapping.mapped_column_count }} mapped columns and {{ reviewed_person_mapping.reviewed_token_count }} exact team/source-token mappings. No assignment was queried or changed.{% endif %}</p>
+    {% if assignment_preview %}
+    <p class="status status-good">{% if language == "zh" %}人员映射已复核。已生成只读排班预览。{% else %}Person mapping reviewed. A read-only Assignment Preview was generated.{% endif %}</p>
+    {% else %}
+    <p class="status status-warning">{% if language == "zh" %}人员映射已复核，但未生成排班预览。{% else %}Person mapping was reviewed, but an Assignment Preview was not generated.{% endif %}</p>
+    {% endif %}
+    <p>{% if language == "zh" %}已复核 {{ reviewed_person_mapping.mapped_column_count }} 个映射列、{{ reviewed_person_mapping.reviewed_token_count }} 个精确团队/来源姓名映射。{% else %}Reviewed {{ reviewed_person_mapping.mapped_column_count }} mapped columns and {{ reviewed_person_mapping.reviewed_token_count }} exact team/source-token mappings.{% endif %}</p>
+</div>
+{% endif %}
+
+{% if assignment_preview_error %}
+<div class="card">
+    <h2 class="card-title">{% if language == "zh" %}排班预览不可用{% else %}Assignment Preview Unavailable{% endif %}</h2>
+    <p class="status status-warning">{{ assignment_preview_error }}</p>
+</div>
+{% endif %}
+
+{% if assignment_preview %}
+<div class="card">
+    <h2 class="card-title">{% if language == "zh" %}5. 排班状态 / 名单差异预览{% else %}5. Assignment State / Roster Diff Preview{% endif %}</h2>
+    <p class="status status-warning"><strong>ZERO WRITE</strong> — {% if language == "zh" %}没有任何排班发生更改。本阶段未实现确认写入。{% else %}NO SCHEDULE HAS CHANGED. THE CONFIRMATION WRITER IS NOT IMPLEMENTED IN THIS SLICE.{% endif %}</p>
+    <p>{% if language == "zh" %}共 {{ assignment_preview.mapped_row_count }} 个聚会/团队预览：新建候选 {{ assignment_preview.create_count }}，完全无变化 {{ assignment_preview.exact_noop_count }}，名单更新候选 {{ assignment_preview.update_count }}，无来源提议 {{ assignment_preview.no_source_proposal_count }}，历史跳过 {{ assignment_preview.historical_event_skip_count }}，硬性阻止 {{ assignment_preview.hard_blocker_count }}。{% else %}{{ assignment_preview.mapped_row_count }} event/team rows: {{ assignment_preview.create_count }} create candidate(s), {{ assignment_preview.exact_noop_count }} exact no-op(s), {{ assignment_preview.update_count }} roster update candidate(s), {{ assignment_preview.no_source_proposal_count }} no-source proposal(s), {{ assignment_preview.historical_event_skip_count }} historical skip(s), and {{ assignment_preview.hard_blocker_count }} hard blocker(s).{% endif %}</p>
+    <p class="muted">{% if language == "zh" %}签名预览证据：{{ assignment_preview.signed_state_bytes }} / 16384 字节。此证据只用于验证只读预览，不是写入权限。{% else %}Signed preview evidence: {{ assignment_preview.signed_state_bytes }} / 16,384 bytes. This evidence validates the read-only preview; it is not write authority.{% endif %}</p>
+    <div class="table-wrap">
+        <table class="sound-preview-table">
+            <thead>
+                <tr>
+                    <th>{% if language == "zh" %}日期{% else %}Date{% endif %}</th>
+                    <th>{% if language == "zh" %}团队{% else %}Team{% endif %}</th>
+                    <th>{% if language == "zh" %}工作簿名单{% else %}Workbook Roster{% endif %}</th>
+                    <th>{% if language == "zh" %}CMS 当前名单{% else %}Current CMS Roster{% endif %}</th>
+                    <th>{% if language == "zh" %}结果{% else %}Result{% endif %}</th>
+                </tr>
+            </thead>
+            <tbody>
+            {% for row in assignment_preview.rows %}
+                <tr>
+                    <td data-label="{% if language == 'zh' %}日期{% else %}Date{% endif %}"><strong>{{ row.local_date|date:"Y-m-d" }}</strong><br><span class="muted">{{ row.source_cell }}</span></td>
+                    <td data-label="{% if language == 'zh' %}团队{% else %}Team{% endif %}">{{ row.team_display_name }}</td>
+                    <td data-label="{% if language == 'zh' %}工作簿名单{% else %}Workbook Roster{% endif %}">
+                        {% if row.workbook_roster %}{% for name in row.workbook_roster %}{{ name }}{% if not forloop.last %} / {% endif %}{% endfor %}{% else %}<span class="muted">—</span>{% endif %}
+                    </td>
+                    <td data-label="{% if language == 'zh' %}CMS 当前名单{% else %}Current CMS Roster{% endif %}">
+                        {% if row.current_memberships %}{% for member in row.current_memberships %}{{ member.visible_identity }}{% if not forloop.last %} / {% endif %}{% endfor %}{% else %}<span class="muted">—</span>{% endif %}
+                        {% if row.current_assignment_status %}<br><span class="muted">{{ row.current_assignment_status }}</span>{% endif %}
+                    </td>
+                    <td data-label="{% if language == 'zh' %}结果{% else %}Result{% endif %}">
+                        {% if row.state.value == "create_candidate" %}<span class="status status-good">{% if language == "zh" %}新建候选{% else %}CREATE CANDIDATE{% endif %}</span>
+                        {% elif row.state.value == "exact_noop" %}<span class="status status-good">{% if language == "zh" %}完全无变化{% else %}EXACT NO-OP{% endif %}</span>
+                        {% elif row.state.value == "roster_update_candidate" %}<span class="status status-good">{% if language == "zh" %}名单更新候选{% else %}ROSTER UPDATE{% endif %}</span>
+                        {% elif row.state.value == "historical_event_skip" %}<span class="status status-muted">{% if language == "zh" %}历史记录 — 不会尝试导入{% else %}HISTORICAL — no import will be attempted{% endif %}</span>
+                        {% elif row.state.value == "no_source_proposal" %}<span class="status status-muted">{% if language == "zh" %}无来源提议 — 现有 CMS 排班（如有）保持不变{% else %}NO SOURCE PROPOSAL — existing CMS assignment, if any, is left untouched{% endif %}</span>
+                        {% else %}<span class="status status-warning">{{ row.state.value|upper }}</span>{% if row.reason_code %}<br><span class="muted">{{ row.reason_code }}</span>{% endif %}{% endif %}
+                        {% if row.diff %}
+                            {% if row.preserved_memberships %}<br><span class="muted">{% if language == "zh" %}保留{% else %}Keep{% endif %}: {% for member in row.preserved_memberships %}{{ member.visible_identity }}{% if not forloop.last %}, {% endif %}{% endfor %}</span>{% endif %}
+                            {% if row.added_memberships %}<br><span class="muted">{% if language == "zh" %}新增{% else %}Add{% endif %}: {% for member in row.added_memberships %}{{ member.visible_identity }}{% if not forloop.last %}, {% endif %}{% endfor %}</span>{% endif %}
+                            {% if row.removed_memberships %}<br><span class="muted">{% if language == "zh" %}移除{% else %}Remove{% endif %}: {% for member in row.removed_memberships %}{{ member.visible_identity }}{% if not forloop.last %}, {% endif %}{% endfor %}</span>{% endif %}
+                        {% endif %}
+                    </td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    <p class="status status-warning"><strong>{% if language == "zh" %}没有确认按钮，也没有写入操作。{% else %}There is no Confirm button and no write operation.{% endif %}</strong></p>
 </div>
 {% endif %}
 {% endblock %}

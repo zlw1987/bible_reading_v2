@@ -619,13 +619,12 @@ classifications, diffs, and preserved through-row IDs. Assignment and
 confirmation notes are represented only by deterministic SHA-256 digests. The
 strict decoder reloads and recomputes the full preview and rejects any mismatch.
 The rendered bilingual preview exposes summary counts and privacy-safe rosters
-while stating ZERO WRITE, no schedule change, and no confirmation writer. No
-assignment/member, ServiceEvent revision, RequiredTeam, audience, rotation
-anchor, LogEntry, or Notification write exists, and GENERAL.1F runtime remains
-unimplemented.
+while stating ZERO WRITE and no schedule change. At the GENERAL.1E milestone no
+confirmation writer existed; GENERAL.1F-1A now implements the separately
+authorized service/test writer core without changing this read-only preview UI.
 
-`MO-S.6F.GENERAL.1F-0A` is **DOCS / READ-ONLY WRITER CONTRACT COMPLETE**; the
-generic writer and Confirm UI remain unimplemented. The distinct, expiring,
+`MO-S.6F.GENERAL.1F-0A` is **DOCS / READ-ONLY WRITER CONTRACT COMPLETE**. The
+distinct, expiring,
 user-bound, strict-schema `TEAM_ROSTER_CONFIRMATION_V1` may be minted only for
 zero blockers and at least one `CREATE_CANDIDATE` or
 `ROSTER_UPDATE_CANDIDATE`. It binds exact SHA-256 values for the still-carried
@@ -658,6 +657,33 @@ compressed signed confirmation state (7,910 bytes headroom). Full baselines are
 cryptographically incorporated through the exact preview-token hash and strict
 re-decode rather than duplicated. No limit, server persistence, runtime file,
 route, model, migration, dependency, or data changed in GENERAL.1F-0A.
+
+`MO-S.6F.GENERAL.1F-1A` is **IMPLEMENTED / LOCAL VERIFIED** for the generic
+confirmation authority and atomic service writer core. Pre-write processing
+strictly decodes and recomputes the person, preview, and confirmation
+authorities. After distinct ascending CREATE-event CAS claims and ascending
+UPDATE-parent conditional barriers establish SQLite serialization, a private
+writer-aware recomputation permits only those exact claimed revisions to be
+`N+1`; every other event and every team, membership/User, audience, governance,
+assignment, member, note-digest, and fingerprint fact must still match.
+Deterministic validated creates and row-preserving updates are followed by
+exact postconditions and one privacy-bounded admin `LogEntry` per changed
+assignment, with no Notification.
+
+Five temporary file-backed two-connection SQLite tests cover competing event
+and update-parent writers, generic-first serialization, same-event
+CREATE+UPDATE, and late whole-batch rollback. The implemented dense
+52-event/seven-team/three-person fixture has 121 creates, 122 updates, 121
+no-ops, 243 writable rows, 485 additions, and 122 removals; its real signed
+confirmation authority is 5,892 bytes, within the unchanged 16,384-byte bound.
+This is an isolated confirmation-encoding proof. The same complete database
+fixture measured 28,268 bytes as a GENERAL.1E signed preview and therefore
+fails closed at GENERAL.1E's independent 16,384-byte preview bound. Neither
+limit was changed; end-to-end support for this maximum dense shape needs a
+separate compact-preview/limit decision.
+GENERAL.1F-1A adds no route, form, Confirm control, schema, migration,
+dependency, or production/local data apply and does not cut over or retire the
+older Sound/Projection routes.
 
 ## 3. Identity Model
 

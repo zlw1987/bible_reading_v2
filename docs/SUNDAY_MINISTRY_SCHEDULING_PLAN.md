@@ -3035,7 +3035,9 @@ generic architecture below; it is not production-ready.
 
 Status: **READ-ONLY REPOSITORY AUDIT + ARCHITECTURE COMPLETE;
 GENERAL.1A/1B/1C/1D/1E ZERO-WRITE FOUNDATION IMPLEMENTED / LOCAL VERIFIED;
-GENERAL.1F-0A DOCS / READ-ONLY WRITER CONTRACT COMPLETE; WRITER UNIMPLEMENTED**.
+GENERAL.1F-0A DOCS / READ-ONLY WRITER CONTRACT COMPLETE;
+GENERAL.1F-1A CONFIRMATION WRITER CORE IMPLEMENTED / LOCAL VERIFIED; CONFIRM UI
+NOT YET IMPLEMENTED**.
 
 MO-S.6F.GENERAL.1A is IMPLEMENTED / LOCAL VERIFIED for the writer-free generic
 domain foundation: TEAM_ROSTER_CELL_V1, typed cell input, TeamRosterColumnHint,
@@ -3332,6 +3334,41 @@ POST. It must not auto-apply after preview. The still-current signed person and
 preview evidence accompany the confirmation POST, so no second workbook upload
 is required. This is a future UI contract only; GENERAL.1F-0A adds no control or
 route.
+
+##### MO-S.6F.GENERAL.1F-1A generic confirmation-writer core
+
+`MO-S.6F.GENERAL.1F-1A` is **IMPLEMENTED / LOCAL VERIFIED** at the generic
+service/test boundary. The distinct strict-schema, expiring, user-bound
+`TEAM_ROSTER_CONFIRMATION_V1` authority binds the exact person-review and
+assignment-preview token SHA-256 values plus the deterministic writable
+projection. Its atomic apply strictly recomputes all pre-write truth, claims
+each distinct CREATE event once in ascending event-ID order, establishes every
+UPDATE parent barrier in ascending assignment-ID order, reauthorizes the actor
+and integration, and then performs a writer-aware complete recomputation that
+permits only this transaction's exact `N -> N+1` CREATE-event consequence.
+
+Creates use the validated model/Worship-guard path while suppressing only the
+already-claimed second revision bump. Updates preserve the parent and retained
+through rows exactly, delete only signed safe rows, and insert only exact
+unconfirmed/blank-note additions. Current audience, membership/User, team,
+assignment/member, and canonical Worship truth remains mandatory. Exact domain
+postconditions precede one privacy-bounded `LogEntry` per changed assignment;
+there is no `Notification`. Five temporary file-backed two-connection SQLite
+tests prove competing event and assignment writes, first-writer serialization,
+mixed same-event CREATE+UPDATE, and whole-batch rollback. The real implemented
+dense 52-event/seven-team/three-person confirmation projection measured 5,892
+signed compressed bytes against the unchanged 16,384-byte bound.
+That isolated confirmation measurement does not enlarge or bypass GENERAL.1E's
+separate production preview bound: the same full 121-CREATE / 122-UPDATE /
+121-NOOP database fixture measured 28,268 signed preview bytes and therefore
+fails closed before confirmation under the existing 16,384-byte preview limit.
+Compact dense-preview encoding or a changed preview limit requires a separate
+approved decision before claiming end-to-end support for that maximum shape.
+
+This slice adds no form, view, URL, Confirm button, schema, migration,
+dependency, production command, or production/local data apply. Existing
+Sound and Projection routes are not cut over or retired; GENERAL.1F-1B remains
+the separately approved UI/POST wiring boundary.
 
 This decision supersedes the former current-direction statements that Sound is
 exactly one person, Projection is at most two people, Video is exactly three
@@ -3630,8 +3667,8 @@ Implementation should proceed only in separately approved slices:
    parsing, per-team membership review, and bounded signed person authority;
 5. **implemented in GENERAL.1E:** generic zero-write assignment preview,
    complete-roster diff, strict signed revalidation, and read-only UI;
-6. **contract frozen in GENERAL.1F-0A; runtime still separately gated:** new
-   generic confirmation writer with file-backed SQLite race/rollback tests;
+6. **implemented in GENERAL.1F-1A at service/test level:** generic confirmation
+   authority and atomic writer core with file-backed SQLite race/rollback tests;
 7. Sound cutover/legacy-token expiry and focused regression/browser QA; and
 8. separately approve any additional adapter/workbook family or event-column
    identification UX. Lighting stays outside identity authority.

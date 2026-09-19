@@ -538,7 +538,14 @@ def _loads(token, *, salt, max_age, expected_version, expected_type, user):
     return payload
 
 
-def _validate_common_payload(payload, *, expected_keys, user, language):
+def _validate_common_payload(
+    payload,
+    *,
+    expected_keys,
+    user,
+    language,
+    allowed_event_revision_advances=(),
+):
     if (
         set(payload) != expected_keys
         or payload.get("reviewed_column_contract_version")
@@ -682,7 +689,18 @@ def _validate_common_payload(payload, *, expected_keys, user, language):
         .prefetch_related("audience_scope_links__unit")
         .in_bulk(event_ids)
     )
-    if len(events) != len(event_ids) or target_events != [
+    allowed_revision_ids = frozenset(allowed_event_revision_advances)
+    if not allowed_revision_ids.issubset(event_ids):
+        raise TeamRosterPersonMappingStateError("Target-event evidence changed.")
+    expected_current_events = [
+        {
+            **item,
+            "scheduling_revision": item["scheduling_revision"]
+            + (1 if item["event_id"] in allowed_revision_ids else 0),
+        }
+        for item in target_events
+    ]
+    if len(events) != len(event_ids) or expected_current_events != [
         _event_payload(events[event_id]) for event_id in event_ids
     ]:
         raise TeamRosterPersonMappingStateError("Target-event evidence changed.")
@@ -996,7 +1014,12 @@ _REVIEWED_KEYS = (_INPUT_KEYS - {"contract_version", "state_type"}) | {
 
 
 def decode_reviewed_team_roster_person_mapping(
-    token, *, user, language="en", max_age=SIGNING_MAX_AGE_SECONDS
+    token,
+    *,
+    user,
+    language="en",
+    max_age=SIGNING_MAX_AGE_SECONDS,
+    _allowed_event_revision_advances=(),
 ):
     """Revalidate final zero-write person authority against current truth."""
 
@@ -1010,7 +1033,11 @@ def decode_reviewed_team_roster_person_mapping(
         user=user,
     )
     choices, cells, groups, _teams, _candidates = _validate_common_payload(
-        payload, expected_keys=_REVIEWED_KEYS, user=user, language=language
+        payload,
+        expected_keys=_REVIEWED_KEYS,
+        user=user,
+        language=language,
+        allowed_event_revision_advances=_allowed_event_revision_advances,
     )
     selections = payload.get("reviewed_selections")
     expected_pairs = {

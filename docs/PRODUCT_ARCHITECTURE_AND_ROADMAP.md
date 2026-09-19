@@ -274,7 +274,9 @@ was added.
 MO-S.6F.GENERAL.0A is DOCS/READ-ONLY ARCHITECTURE COMPLETE;
 GENERAL.1A–1E are IMPLEMENTED / LOCAL VERIFIED as the generic zero-write
 workflow foundation; GENERAL.1F-0A is DOCS / READ-ONLY WRITER CONTRACT
-COMPLETE; the generic confirmation writer remains unimplemented. Product-owner clarification supersedes the former
+COMPLETE; GENERAL.1F-1A is IMPLEMENTED / LOCAL VERIFIED for the generic
+confirmation authority and atomic service writer core, while Confirm UI/POST
+wiring remains unimplemented. Product-owner clarification supersedes the former
 current-direction count assumptions: any configured team-assignment cell is a
 complete 1..N roster, every ASCII-slash segment is one actual serving person, and blank
 is no proposal/no write. Sound-one, Projection-one/two, and Video-three remain
@@ -310,9 +312,9 @@ non-authoritative, and Speaker/BB & Offering/Worship roster are out of scope.
 No runtime file, model, migration, dependency, production command, or data was
 changed by GENERAL.0A.
 
-`MO-S.6F.GENERAL.1F-0A` is **DOCS / READ-ONLY WRITER CONTRACT COMPLETE;
-WRITER UNIMPLEMENTED**. The separate `TEAM_ROSTER_CONFIRMATION_V1` authority is
-available in the frozen design only when the complete generic preview has zero
+`MO-S.6F.GENERAL.1F-0A` is **DOCS / READ-ONLY WRITER CONTRACT COMPLETE**. The
+separate `TEAM_ROSTER_CONFIRMATION_V1` authority is available only when the
+complete generic preview has zero
 hard blockers and at least one CREATE or roster UPDATE. It binds the exact
 person/preview token hashes, actor/version/workbook/team identities, complete
 writable row/diff/through-row identities, and operation counts; all three
@@ -332,6 +334,24 @@ bytes against the unchanged 16,384-byte confirmation limit by binding full
 baselines through the exact strictly re-decoded preview-token hash rather than
 duplicating them. This slice adds no Confirm UI, runtime writer, schema,
 migration, dependency, production command, or data mutation.
+
+`MO-S.6F.GENERAL.1F-1A` is **IMPLEMENTED / LOCAL VERIFIED** at service/test
+level. It realizes the distinct token authority, pre-write strict three-token
+decode/recompute, distinct CREATE-event CAS claims, complete UPDATE-parent
+conditional barriers, post-serialization actor/integration reauthorization,
+and writer-aware full current-truth recomputation. It then performs validated
+creates and exact preserve/add/safe-remove updates, proves exact postconditions,
+and emits one privacy-bounded admin audit row per changed assignment. Five
+temporary file-backed two-connection SQLite cases prove the required race and
+rollback semantics. The implemented dense 52-event/seven-team/three-person
+confirmation state measured 5,892 bytes against the fixed 16,384-byte limit.
+The same complete fixture measured 28,268 bytes under GENERAL.1E's separate
+signed-preview format and still fails closed at its unchanged 16,384-byte
+preview limit; this 1F confirmation measurement is not an end-to-end dense
+capacity claim or authorization to change either limit.
+No Confirm route/button, schema, migration, dependency, production apply, or
+legacy Sound/Projection cutover is included; UI wiring remains a separate
+GENERAL.1F-1B slice.
 
 `MO-S.REQUIRED.0A` is **EFFECTIVE REQUIRED-TEAM SEMANTICS / EVENT WORSHIP
 ENTRY AUDIT COMPLETE**. `MO-S.REQUIRED.1A` is **IMPLEMENTED / LOCAL VERIFIED /

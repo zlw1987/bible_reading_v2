@@ -697,6 +697,7 @@ def _build_preview(
     now,
     generated_at,
     signed_token=None,
+    allowed_event_revision_advances=(),
 ):
     try:
         authority = decode_reviewed_team_roster_person_mapping(
@@ -704,6 +705,7 @@ def _build_preview(
             user=user,
             language=language,
             max_age=max_age,
+            _allowed_event_revision_advances=allowed_event_revision_advances,
         )
     except TeamRosterPersonMappingStateError as exc:
         raise TeamRosterAssignmentPreviewError(

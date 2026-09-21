@@ -1,6 +1,6 @@
 """Focused MO-S.6F.GENERAL.1C zero-write column-mapping tests."""
 
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 import json
 from unittest.mock import patch
 
@@ -15,7 +15,7 @@ from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from django.utils import timezone
 
-from accounts.models import ChurchRoleAssignment
+from accounts.models import ChurchRoleAssignment, ChurchStructureMembership
 from events.models import (
     ServiceEvent,
     ServiceEventAudienceScope,
@@ -123,6 +123,15 @@ class TeamRosterColumnMappingTests(WorshipWorkbookDomainTestBase):
         cls.event_planner = User.objects.create_user(
             "column_planner", password="pw"
         )
+        cls.exact_coordinator = User.objects.create_user(
+            "column_coordinator", password="pw"
+        )
+        cls.membership_only = User.objects.create_user(
+            "column_membership", password="pw"
+        )
+        cls.audience_only = User.objects.create_user(
+            "column_audience", password="pw"
+        )
         cls.role_type = MinistryTeamRoleType.objects.create(
             code=MinistryTeamRoleType.CODE_LEAD,
             name="Lead",
@@ -135,6 +144,27 @@ class TeamRosterColumnMappingTests(WorshipWorkbookDomainTestBase):
             user=cls.exact_lead,
             start_date=date(2026, 1, 1),
             is_active=True,
+        )
+        coordinator_type = MinistryTeamRoleType.objects.create(
+            code=MinistryTeamRoleType.CODE_COORDINATOR,
+            name="Coordinator",
+            name_en="Coordinator",
+            is_active=True,
+        )
+        MinistryTeamRoleAssignment.objects.create(
+            team=cls.sound,
+            role_type=coordinator_type,
+            user=cls.exact_coordinator,
+            start_date=date(2026, 1, 1),
+            is_active=True,
+        )
+        TeamMembership.objects.create(team=cls.sound, user=cls.membership_only)
+        ChurchStructureMembership.objects.create(
+            user=cls.audience_only,
+            unit=cls.cm,
+            status=ChurchStructureMembership.STATUS_ACTIVE,
+            is_primary=True,
+            start_date=timezone.localdate() - timedelta(days=1),
         )
         ChurchRoleAssignment.objects.create(
             user=cls.global_manager,
@@ -246,8 +276,11 @@ class TeamRosterColumnMappingTests(WorshipWorkbookDomainTestBase):
         for user in (
             self.other,
             self.exact_lead,
+            self.exact_coordinator,
             self.global_manager,
             self.event_planner,
+            self.membership_only,
+            self.audience_only,
         ):
             with self.subTest(user=user.username), patch(
                 "ministry.permissions.has_capability", return_value=True
@@ -256,6 +289,18 @@ class TeamRosterColumnMappingTests(WorshipWorkbookDomainTestBase):
                 self.assertEqual(
                     self.client.get(
                         reverse("team_roster_column_mapping_review")
+                    ).status_code,
+                    403,
+                )
+                self.assertEqual(
+                    self.client.post(
+                        reverse("team_roster_column_mapping_review"),
+                        {
+                            "team_roster_action": "confirm",
+                            "signed_reviewed_person_state": "forged",
+                            "signed_assignment_preview_state": "forged",
+                            "signed_confirmation_state": "forged",
+                        },
                     ).status_code,
                     403,
                 )

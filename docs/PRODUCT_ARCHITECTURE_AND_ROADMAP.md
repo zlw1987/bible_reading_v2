@@ -253,8 +253,7 @@ or production data mutation. Production review/apply remains unperformed.
 MO-S.6F.2A is IMPLEMENTED / LOCAL VERIFIED in current HEAD as a zero-write
 Projection prototype retained as historical/refactor evidence. Its one/two-
 person grammar is superseded by the generic 1..N architecture. It is not
-production-ready and has no write authority. It is not part of current HEAD, is not production-ready,
-and must not be committed in its current one/two-person form. Its independently versioned source grammar accepts
+production-ready and has no write authority. Its independently versioned source grammar accepts
 only one literal person token or exactly two nonblank distinct tokens separated
 by one ASCII slash, with Unicode NFC plus outer trim only. Exact active
 Projection `TeamMembership.id` selections are identity authority; a unique
@@ -275,8 +274,9 @@ MO-S.6F.GENERAL.0A is DOCS/READ-ONLY ARCHITECTURE COMPLETE;
 GENERAL.1A–1E are IMPLEMENTED / LOCAL VERIFIED as the generic zero-write
 workflow foundation; GENERAL.1F-0A is DOCS / READ-ONLY WRITER CONTRACT
 COMPLETE; GENERAL.1F-1A is IMPLEMENTED / LOCAL VERIFIED for the generic
-confirmation authority and atomic service writer core, while Confirm UI/POST
-wiring remains unimplemented. Product-owner clarification supersedes the former
+confirmation authority and atomic service writer core; and GENERAL.1F-1B is
+IMPLEMENTED / LOCAL VERIFIED for the explicit Confirm UI/POST adapter.
+Product-owner clarification supersedes the former
 current-direction count assumptions: any configured team-assignment cell is a
 complete 1..N roster, every ASCII-slash segment is one actual serving person, and blank
 is no proposal/no write. Sound-one, Projection-one/two, and Video-three remain
@@ -352,6 +352,26 @@ capacity claim or authorization to change either limit.
 No Confirm route/button, schema, migration, dependency, production apply, or
 legacy Sound/Projection cutover is included; UI wiring remains a separate
 GENERAL.1F-1B slice.
+
+`MO-S.6F.GENERAL.1F-1B` is **IMPLEMENTED / LOCAL VERIFIED**. After a successful
+person-mapping POST, only a GENERAL.1E preview with changes and zero hard
+blockers may produce a final bilingual confirmation summary and control. The
+dedicated form carries only an explicit `confirm` action plus the exact signed
+person, preview, and confirmation states; the final POST delegates those three
+authorities directly to the unchanged GENERAL.1F-1A service, which remains the
+sole mutation and audit owner. Success uses POST/Redirect/GET with exact result
+counts. Stale/proposal failures require a fresh review and retain no Confirm
+control; typed busy failures use separate bounded copy; unexpected database
+errors are not relabeled busy. Exact replay is stale/no-write, and a fresh
+workflow sees no changing rows. The UI does not emit Notification or mutate
+RequiredTeam, audience, Worship selection, rotation anchor, or reviewed
+fingerprint semantics. The independent 16,384-byte person/preview/confirmation
+bounds remain unchanged, including the bounded preview-capacity failure.
+Isolated synthetic browser QA covered English desktop CREATE, UPDATE, mixed,
+confirm, PRG success, and replay, plus Chinese 390x844 confirmation, stale, and
+typed-busy states with no relevant console warnings/errors or observed
+horizontal overflow. This slice adds no schema, migration, dependency,
+production apply, or legacy Sound/Projection cutover.
 
 `MO-S.REQUIRED.0A` is **EFFECTIVE REQUIRED-TEAM SEMANTICS / EVENT WORSHIP
 ENTRY AUDIT COMPLETE**. `MO-S.REQUIRED.1A` is **IMPLEMENTED / LOCAL VERIFIED /

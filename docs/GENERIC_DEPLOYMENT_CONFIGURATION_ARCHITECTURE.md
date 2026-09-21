@@ -685,6 +685,26 @@ GENERAL.1F-1A adds no route, form, Confirm control, schema, migration,
 dependency, or production/local data apply and does not cut over or retire the
 older Sound/Projection routes.
 
+`MO-S.6F.GENERAL.1F-1B` is **IMPLEMENTED / LOCAL VERIFIED** as the thin UI
+adapter over that unchanged writer service. A successful person review builds
+`TEAM_ROSTER_CONFIRMATION_V1` only when the exact GENERAL.1E preview has changes
+and no hard blockers. The bilingual final summary displays create/update and
+member add/remove counts without exposing technical identities, hashes,
+revisions, notes, or private profile data. Its dedicated hidden form carries
+only the explicit `confirm` action and the exact three signed states. The final
+POST calls `apply_team_roster_confirmation(...)` and performs no independent
+domain, audit, or Notification write. Success uses PRG and exact service result
+counts; stale/proposal errors fail closed to a review-again result, typed busy
+errors have separate copy, unexpected `OperationalError` is not classified as
+busy, and exact replay is stale/no-write. Hard blockers, exact no-op, blank-only,
+historical-only, unavailable preview, and preview-capacity failure render no
+Confirm control. Both 16,384-byte bounds remain unchanged. Isolated synthetic
+browser QA covered English desktop CREATE/UPDATE/mixed review, explicit apply,
+success, and replay plus Chinese 390x844 confirmation/stale/typed-busy states,
+with clean checked console output and no observed horizontal overflow. No
+schema, migration, dependency, production apply, or old Sound/Projection route
+cutover is included.
+
 ## 3. Identity Model
 
 | Identity | Meaning | Portability |

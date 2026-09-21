@@ -1365,6 +1365,20 @@ class TeamRosterPersonMappingForm(forms.Form):
         }
 
 
+class TeamRosterConfirmationForm(forms.Form):
+    """Carry only the three signed authorities for an explicit final apply."""
+
+    ACTION_CONFIRM = "confirm"
+
+    team_roster_action = forms.ChoiceField(
+        choices=((ACTION_CONFIRM, ACTION_CONFIRM),),
+        widget=forms.HiddenInput,
+    )
+    signed_reviewed_person_state = forms.CharField(widget=forms.HiddenInput)
+    signed_assignment_preview_state = forms.CharField(widget=forms.HiddenInput)
+    signed_confirmation_state = forms.CharField(widget=forms.HiddenInput)
+
+
 class SoundAssignmentMappingForm(forms.Form):
     signed_mapping_state = forms.CharField(widget=forms.HiddenInput)
 

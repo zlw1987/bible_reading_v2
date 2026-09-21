@@ -51,6 +51,7 @@ from .forms import (
     SoundAssignmentMappingForm,
     SoundAssignmentWorkbookUploadForm,
     TeamRosterColumnMappingForm,
+    TeamRosterConfirmationForm,
     TeamRosterPersonMappingForm,
     TeamRosterWorkbookUploadForm,
     TeamAssignmentConfirmForm,
@@ -2319,6 +2320,10 @@ def _team_roster_column_mapping_context(
     reviewed_person_mapping=None,
     assignment_preview=None,
     assignment_preview_error=None,
+    confirmation_proposal=None,
+    confirmation_form=None,
+    confirmation_error=None,
+    confirmation_error_kind=None,
     person_state_error=None,
     state_error=None,
 ):
@@ -2362,6 +2367,10 @@ def _team_roster_column_mapping_context(
         "reviewed_person_mapping": reviewed_person_mapping,
         "assignment_preview": assignment_preview,
         "assignment_preview_error": assignment_preview_error,
+        "confirmation_proposal": confirmation_proposal,
+        "confirmation_form": confirmation_form,
+        "confirmation_error": confirmation_error,
+        "confirmation_error_kind": confirmation_error_kind,
         "person_state_error": person_state_error,
         "state_error": state_error,
     }
@@ -2410,13 +2419,12 @@ def _team_roster_assignment_preview_error_text(language, error):
 
     if isinstance(error, TeamRosterAssignmentPreviewStateTooLarge):
         return (
-            f"排班预览签名证据为 {error.actual_bytes} 字节，超过现有 "
-            f"{error.maximum_bytes} 字节上限；未扩大上限或新增服务器存储。"
+            "此工作簿产生的排班预览证据超过当前安全导入上限。"
+            "系统没有应用任何变更。"
             if language == "zh"
             else (
-                f"Assignment-preview signed evidence measured {error.actual_bytes} "
-                f"bytes, above the existing {error.maximum_bytes}-byte bound. "
-                "The limit was not raised and no server persistence was added."
+                "This workbook produces more assignment-preview evidence than "
+                "the current safe import limit. No changes were applied."
             )
         )
     return (
@@ -2432,7 +2440,7 @@ def _team_roster_assignment_preview_error_text(language, error):
 @login_required
 @require_http_methods(["GET", "POST"])
 def team_roster_column_mapping_review(request):
-    """Staff-only upload -> column mapping review, with zero domain writes."""
+    """Staff-only reviewed Team Roster workflow and explicit confirmation."""
 
     try:
         require_integration_enabled(ANNUAL_WORKBOOK_INTEGRATION_KEY)
@@ -2463,6 +2471,13 @@ def team_roster_column_mapping_review(request):
         TeamRosterAssignmentPreviewError,
         build_team_roster_assignment_preview,
     )
+    from ministry.services.team_roster_assignment_confirmation import (
+        TeamRosterConfirmationBusyError,
+        TeamRosterConfirmationProposalError,
+        TeamRosterConfirmationStaleError,
+        apply_team_roster_confirmation,
+        build_team_roster_confirmation_proposal,
+    )
 
     if not user_can_review_team_roster_columns(request.user):
         raise PermissionDenied
@@ -2473,6 +2488,91 @@ def team_roster_column_mapping_review(request):
             "ministry/team_roster_column_mapping_review.html",
             _team_roster_column_mapping_context(language=language),
         )
+
+    if request.POST.get("team_roster_action") == TeamRosterConfirmationForm.ACTION_CONFIRM:
+        confirmation_form = TeamRosterConfirmationForm(request.POST)
+        stale_text = (
+            "你复核后排班资料已发生变化。本次确认没有应用任何变更。"
+            "请重新开始并复核当前排班。"
+            if language == "zh"
+            else (
+                "Scheduling changed after your review. Nothing from this "
+                "confirmation was applied. Start again and review the current schedule."
+            )
+        )
+        if not confirmation_form.is_valid():
+            return render(
+                request,
+                "ministry/team_roster_column_mapping_review.html",
+                _team_roster_column_mapping_context(
+                    language=language,
+                    confirmation_error=stale_text,
+                    confirmation_error_kind="stale",
+                ),
+            )
+        try:
+            result = apply_team_roster_confirmation(
+                reviewed_person_state=confirmation_form.cleaned_data[
+                    "signed_reviewed_person_state"
+                ],
+                assignment_preview_state=confirmation_form.cleaned_data[
+                    "signed_assignment_preview_state"
+                ],
+                confirmation_state=confirmation_form.cleaned_data[
+                    "signed_confirmation_state"
+                ],
+                user=request.user,
+                language=language,
+            )
+        except TeamRosterConfirmationBusyError:
+            busy_text = (
+                "排班系统正忙。本次没有应用任何团队名单变更，请稍后重试。"
+                if language == "zh"
+                else (
+                    "Scheduling is busy. No Team Roster changes were applied. "
+                    "Please try again."
+                )
+            )
+            return render(
+                request,
+                "ministry/team_roster_column_mapping_review.html",
+                _team_roster_column_mapping_context(
+                    language=language,
+                    confirmation_error=busy_text,
+                    confirmation_error_kind="busy",
+                ),
+            )
+        except (TeamRosterConfirmationStaleError, TeamRosterConfirmationProposalError):
+            return render(
+                request,
+                "ministry/team_roster_column_mapping_review.html",
+                _team_roster_column_mapping_context(
+                    language=language,
+                    confirmation_error=stale_text,
+                    confirmation_error_kind="stale",
+                ),
+            )
+
+        created_count = len(result.created_assignment_ids)
+        updated_count = len(result.updated_assignment_ids)
+        added_count = len(result.created_assignment_member_ids) + len(
+            result.added_assignment_member_ids
+        )
+        removed_count = len(result.removed_assignment_member_ids)
+        if language == "zh":
+            success_text = (
+                f"团队排班变更已应用：新建 {created_count} 个排班，"
+                f"更新 {updated_count} 个团队名单，新增 {added_count} 名服事人员，"
+                f"移除 {removed_count} 名服事人员。"
+            )
+        else:
+            success_text = (
+                f"Team Roster changes applied: {created_count} assignments created, "
+                f"{updated_count} rosters updated, {added_count} members added, "
+                f"{removed_count} members removed."
+            )
+        messages.success(request, success_text)
+        return redirect("team_roster_column_mapping_review")
 
     if request.FILES and request.POST.get("signed_reviewed_column_state"):
         reviewed_column_state = request.POST.get(
@@ -2625,6 +2725,9 @@ def team_roster_column_mapping_review(request):
         reviewed_person_mapping = None
         assignment_preview = None
         assignment_preview_error = None
+        confirmation_proposal = None
+        confirmation_form = None
+        confirmation_error = None
         if person_form.is_valid():
             try:
                 reviewed_person_mapping = finalize_team_roster_person_mapping(
@@ -2643,6 +2746,37 @@ def team_roster_column_mapping_review(request):
                     user=request.user,
                     language=language,
                 )
+                if (
+                    assignment_preview.has_changes
+                    and not assignment_preview.has_hard_blockers
+                ):
+                    confirmation_proposal = build_team_roster_confirmation_proposal(
+                        reviewed_person_state=(
+                            reviewed_person_mapping.signed_reviewed_state
+                        ),
+                        assignment_preview_state=(
+                            assignment_preview.signed_preview_state
+                        ),
+                        user=request.user,
+                        language=language,
+                    )
+                    if confirmation_proposal is not None:
+                        confirmation_form = TeamRosterConfirmationForm(
+                            initial={
+                                "team_roster_action": (
+                                    TeamRosterConfirmationForm.ACTION_CONFIRM
+                                ),
+                                "signed_reviewed_person_state": (
+                                    reviewed_person_mapping.signed_reviewed_state
+                                ),
+                                "signed_assignment_preview_state": (
+                                    assignment_preview.signed_preview_state
+                                ),
+                                "signed_confirmation_state": (
+                                    confirmation_proposal.signed_confirmation_state
+                                ),
+                            }
+                        )
             except (
                 TeamRosterPersonMappingStateError,
                 TeamRosterPersonMappingValidationError,
@@ -2653,6 +2787,17 @@ def team_roster_column_mapping_review(request):
             except TeamRosterAssignmentPreviewError as exc:
                 assignment_preview_error = (
                     _team_roster_assignment_preview_error_text(language, exc)
+                )
+            except TeamRosterConfirmationProposalError:
+                confirmation_error = (
+                    "排班资料在最终确认建立前已发生变化。没有应用任何变更；"
+                    "请重新开始并复核当前排班。"
+                    if language == "zh"
+                    else (
+                        "Scheduling changed before final confirmation could be "
+                        "prepared. No changes were applied. Start again and review "
+                        "the current schedule."
+                    )
                 )
         return render(
             request,
@@ -2665,6 +2810,10 @@ def team_roster_column_mapping_review(request):
                 reviewed_person_mapping=reviewed_person_mapping,
                 assignment_preview=assignment_preview,
                 assignment_preview_error=assignment_preview_error,
+                confirmation_proposal=confirmation_proposal,
+                confirmation_form=confirmation_form,
+                confirmation_error=confirmation_error,
+                confirmation_error_kind=("stale" if confirmation_error else None),
             ),
         )
 

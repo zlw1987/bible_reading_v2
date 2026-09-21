@@ -1,4 +1,4 @@
-"""Focused MO-S.6F.GENERAL.1F-1A generic confirmation-writer tests."""
+"""Focused GENERAL.1F generic confirmation service and UI tests."""
 
 import copy
 from copy import deepcopy
@@ -7,6 +7,7 @@ from io import BytesIO
 import json
 import os
 import tempfile
+from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 from zipfile import ZIP_DEFLATED, ZipFile
@@ -15,10 +16,12 @@ from xml.etree import ElementTree
 from django.contrib.admin.models import ADDITION, CHANGE, LogEntry
 from django.contrib.auth.models import User
 from django.core import signing
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.core.management import call_command
 from django.db import OperationalError, connections
 from django.db.models import F
 from django.test import override_settings
+from django.urls import reverse
 from django.utils import timezone
 
 from accounts.models import ChurchStructureUnit
@@ -36,6 +39,7 @@ from .services.team_roster_assignment_confirmation import (
     TEAM_ROSTER_CONFIRMATION_SIGNING_SALT,
     TEAM_ROSTER_CONFIRMATION_V1,
     TeamRosterConfirmationAuditError,
+    TeamRosterConfirmationBusyError,
     TeamRosterConfirmationError,
     TeamRosterConfirmationProposalError,
     TeamRosterConfirmationStaleError,
@@ -240,6 +244,63 @@ class TeamRosterAssignmentConfirmationTests(WorshipWorkbookDomainTestBase):
             now=self.now,
         )
 
+    def route_workflow(self, content, *, mapped=None):
+        mapped = mapped or {"F": self.sound}
+        url = reverse("team_roster_column_mapping_review")
+        self.client.force_login(self.staff)
+        session = self.client.session
+        session["language"] = "en"
+        session.save()
+        upload = SimpleUploadedFile(
+            "generic.xlsx",
+            content,
+            content_type=(
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            ),
+        )
+        response = self.client.post(url, {"workbook": upload})
+        review = response.context["mapping_review"]
+        mapping_post = {
+            "signed_column_inventory_state": review.signed_inventory_state,
+        }
+        for row in review.columns:
+            if row.is_candidate:
+                team = mapped.get(row.column)
+                mapping_post[f"mapping_{row.column}"] = str(team.pk) if team else ""
+        response = self.client.post(url, mapping_post)
+        reviewed_column_state = response.context["reviewed_column_state"]
+        response = self.client.post(
+            url,
+            {
+                "signed_reviewed_column_state": reviewed_column_state,
+                "workbook": SimpleUploadedFile("same.xlsx", content),
+            },
+        )
+        person_form = response.context["person_form"]
+        person_post = {
+            "signed_reviewed_column_state": reviewed_column_state,
+            "signed_person_mapping_input_state": response.context[
+                "person_review"
+            ].signed_input_state,
+        }
+        for field_name in person_form._field_pairs:
+            person_post[field_name] = str(person_form[field_name].value())
+        with (
+            patch(
+                "ministry.services.team_roster_assignment_preview.timezone.now",
+                return_value=self.now,
+            ),
+            patch(
+                "ministry.services.team_roster_assignment_confirmation.timezone.now",
+                return_value=self.now,
+            ),
+        ):
+            return self.client.post(url, person_post)
+
+    def confirmation_post_data(self, response):
+        form = response.context["confirmation_form"]
+        return {name: form[name].value() for name in form.fields}
+
     def snapshot(self):
         return {
             "events": list(
@@ -292,6 +353,313 @@ class TeamRosterAssignmentConfirmationTests(WorshipWorkbookDomainTestBase):
                 now=self.now,
             )
         )
+
+    def test_route_renders_create_confirmation_summary_and_exact_hidden_authority(self):
+        source_row = self.parsed.rows[-1].source_row
+        response = self.route_workflow(
+            build_known_workbook(sound_overrides={source_row: "A"})
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context["confirmation_proposal"].create_count, 1)
+        self.assertContains(response, "Assignments to create")
+        self.assertContains(response, "You are about to apply the reviewed Team Roster changes.")
+        self.assertContains(response, "Confirm and Apply Team Roster Changes")
+        self.assertContains(response, 'name="csrfmiddlewaretoken"', html=False)
+        form = response.context["confirmation_form"]
+        self.assertEqual(
+            tuple(form.fields),
+            (
+                "team_roster_action",
+                "signed_reviewed_person_state",
+                "signed_assignment_preview_state",
+                "signed_confirmation_state",
+            ),
+        )
+        self.assertTrue(all(field.required for field in form.fields.values()))
+        self.assertNotContains(response, 'name="event_id"', html=False)
+        self.assertNotContains(response, 'name="team_id"', html=False)
+        self.assertNotContains(response, 'name="membership_id"', html=False)
+
+    def test_route_renders_update_and_mixed_batch_as_one_confirmation_action(self):
+        source_row = self.parsed.rows[-1].source_row
+        self.assignment(source_row, members=(self.sound_a,))
+        response = self.route_workflow(
+            build_known_workbook(
+                projection_overrides={source_row: "A"},
+                sound_overrides={source_row: "A / B"},
+            ),
+            mapped={"E": self.projection, "F": self.sound},
+        )
+
+        proposal = response.context["confirmation_proposal"]
+        self.assertEqual((proposal.create_count, proposal.update_count), (1, 1))
+        self.assertContains(response, "Assignments whose rosters will update")
+        self.assertContains(response, "Confirm and Apply Team Roster Changes", count=1)
+
+    def test_noop_blocker_and_preview_capacity_never_render_confirm(self):
+        source_row = self.parsed.rows[-1].source_row
+        self.assignment(source_row, members=(self.sound_a,))
+        noop = self.route_workflow(
+            build_known_workbook(sound_overrides={source_row: "A"})
+        )
+        self.assertIsNone(noop.context["confirmation_proposal"])
+        self.assertContains(noop, "There is no Confirm button")
+        self.assertNotContains(noop, "Confirm and Apply Team Roster Changes")
+
+        blocker = self.route_workflow(
+            build_known_workbook(sound_overrides={source_row: "=1+1"})
+        )
+        self.assertTrue(blocker.context["assignment_preview"].has_hard_blockers)
+        self.assertContains(blocker, "Hard blockers are present")
+        self.assertNotContains(blocker, "Confirm and Apply Team Roster Changes")
+
+        with patch(
+            "ministry.services.team_roster_assignment_preview.build_team_roster_assignment_preview",
+            side_effect=TeamRosterAssignmentPreviewStateTooLarge(20_000),
+        ):
+            too_large = self.route_workflow(
+                build_known_workbook(sound_overrides={source_row: "A"})
+            )
+        self.assertContains(
+            too_large,
+            "This workbook produces more assignment-preview evidence than the "
+            "current safe import limit. No changes were applied.",
+        )
+        self.assertNotContains(too_large, "Confirm and Apply Team Roster Changes")
+
+    def test_confirm_post_passes_only_exact_three_signed_states_to_service(self):
+        source_row = self.parsed.rows[-1].source_row
+        response = self.route_workflow(
+            build_known_workbook(sound_overrides={source_row: "A"})
+        )
+        post = self.confirmation_post_data(response)
+        post.update(
+            {
+                "event_id": "999",
+                "team_id": "999",
+                "membership_ids": "999",
+                "create_count": "999",
+            }
+        )
+        fake_result = SimpleNamespace(
+            created_assignment_ids=(11,),
+            updated_assignment_ids=(22,),
+            created_assignment_member_ids=(101,),
+            added_assignment_member_ids=(102, 103),
+            removed_assignment_member_ids=(104,),
+        )
+        with patch(
+            "ministry.services.team_roster_assignment_confirmation.apply_team_roster_confirmation",
+            return_value=fake_result,
+        ) as apply_confirmation:
+            response = self.client.post(
+                reverse("team_roster_column_mapping_review"), post, follow=True
+            )
+
+        self.assertRedirects(
+            response, reverse("team_roster_column_mapping_review")
+        )
+        apply_confirmation.assert_called_once_with(
+            reviewed_person_state=post["signed_reviewed_person_state"],
+            assignment_preview_state=post["signed_assignment_preview_state"],
+            confirmation_state=post["signed_confirmation_state"],
+            user=self.staff,
+            language="en",
+        )
+        self.assertContains(
+            response,
+            "Team Roster changes applied: 1 assignments created, 1 rosters updated, "
+            "3 members added, 1 members removed.",
+        )
+
+    def test_valid_create_then_fresh_update_confirm_posts_succeed(self):
+        source_row = self.parsed.rows[-1].source_row
+        create_content = build_known_workbook(sound_overrides={source_row: "A"})
+        create_review = self.route_workflow(create_content)
+        with patch(
+            "ministry.services.team_roster_assignment_confirmation.timezone.now",
+            return_value=self.now,
+        ):
+            create_result = self.client.post(
+                reverse("team_roster_column_mapping_review"),
+                self.confirmation_post_data(create_review),
+            )
+        self.assertEqual(create_result.status_code, 302)
+        self.assertContains(
+            self.client.get(create_result.headers["Location"]),
+            "1 assignments created, 0 rosters updated, 1 members added, "
+            "0 members removed",
+        )
+
+        update_content = build_known_workbook(
+            sound_overrides={source_row: "A / B"}
+        )
+        update_review = self.route_workflow(update_content)
+        self.assertEqual(update_review.context["confirmation_proposal"].update_count, 1)
+        with patch(
+            "ministry.services.team_roster_assignment_confirmation.timezone.now",
+            return_value=self.now,
+        ):
+            update_result = self.client.post(
+                reverse("team_roster_column_mapping_review"),
+                self.confirmation_post_data(update_review),
+            )
+        self.assertEqual(update_result.status_code, 302)
+        self.assertContains(
+            self.client.get(update_result.headers["Location"]),
+            "0 assignments created, 1 rosters updated, 1 members added, "
+            "0 members removed",
+        )
+        self.assertEqual(
+            set(
+                TeamAssignmentMember.objects.values_list("membership_id", flat=True)
+            ),
+            {self.sound_a.pk, self.sound_b.pk},
+        )
+
+    def test_valid_mixed_confirm_uses_prg_and_exact_replay_is_stale_no_write(self):
+        source_row = self.parsed.rows[-1].source_row
+        existing, existing_rows = self.assignment(
+            source_row, members=(self.sound_a,), notes="keep"
+        )
+        content = build_known_workbook(
+            projection_overrides={source_row: "A"},
+            sound_overrides={source_row: "A / B"},
+        )
+        response = self.route_workflow(
+            content, mapped={"E": self.projection, "F": self.sound}
+        )
+        post = self.confirmation_post_data(response)
+        before_audience = list(
+            ServiceEventAudienceScope.objects.order_by("id").values_list(
+                "service_event_id", "unit_id"
+            )
+        )
+
+        with patch(
+            "ministry.services.team_roster_assignment_confirmation.timezone.now",
+            return_value=self.now,
+        ):
+            success = self.client.post(
+                reverse("team_roster_column_mapping_review"), post
+            )
+        self.assertEqual(success.status_code, 302)
+        self.assertEqual(
+            success.headers["Location"], reverse("team_roster_column_mapping_review")
+        )
+        success_page = self.client.get(success.headers["Location"])
+        self.assertContains(
+            success_page,
+            "Team Roster changes applied: 1 assignments created, 1 rosters updated, "
+            "2 members added, 0 members removed.",
+        )
+        existing.refresh_from_db()
+        self.assertEqual(existing.notes, "keep")
+        self.assertTrue(
+            TeamAssignmentMember.objects.filter(pk=existing_rows[0].pk).exists()
+        )
+        self.assertEqual(Notification.objects.count(), 0)
+        self.assertEqual(
+            list(
+                ServiceEventAudienceScope.objects.order_by("id").values_list(
+                    "service_event_id", "unit_id"
+                )
+            ),
+            before_audience,
+        )
+        snapshot_after_success = self.snapshot()
+
+        with patch(
+            "ministry.services.team_roster_assignment_confirmation.timezone.now",
+            return_value=self.now,
+        ):
+            replay = self.client.post(
+                reverse("team_roster_column_mapping_review"), post
+            )
+        self.assertEqual(replay.status_code, 200)
+        self.assertContains(replay, "Scheduling changed after your review")
+        self.assertNotContains(replay, "Confirm and Apply Team Roster Changes")
+        self.assertEqual(self.snapshot(), snapshot_after_success)
+
+        fresh_person = self.reviewed_person_state(
+            content, mapped={"E": self.projection, "F": self.sound}
+        )
+        fresh_preview = build_team_roster_assignment_preview(
+            reviewed_person_state=fresh_person, user=self.staff, now=self.now
+        )
+        self.assertFalse(fresh_preview.has_changes)
+
+    def test_confirmation_busy_and_stale_are_bounded_but_other_operational_error_is_not(self):
+        source_row = self.parsed.rows[-1].source_row
+        response = self.route_workflow(
+            build_known_workbook(sound_overrides={source_row: "A"})
+        )
+        post = self.confirmation_post_data(response)
+        url = reverse("team_roster_column_mapping_review")
+        before = self.snapshot()
+
+        with patch(
+            "ministry.services.team_roster_assignment_confirmation.apply_team_roster_confirmation",
+            side_effect=TeamRosterConfirmationBusyError("busy"),
+        ):
+            busy = self.client.post(url, post)
+        self.assertContains(busy, "Scheduling is busy")
+        self.assertNotContains(busy, "Scheduling changed after your review")
+        self.assertNotContains(busy, "Confirm and Apply Team Roster Changes")
+        self.assertEqual(self.snapshot(), before)
+
+        self.client.force_login(self.other_superuser)
+        wrong_user = self.client.post(url, post)
+        self.assertContains(wrong_user, "你复核后排班资料已发生变化")
+        self.assertNotContains(wrong_user, "Confirm and Apply Team Roster Changes")
+        self.assertEqual(self.snapshot(), before)
+        self.client.force_login(self.staff)
+        session = self.client.session
+        session["language"] = "en"
+        session.save()
+
+        stale_post = dict(post)
+        stale_post["signed_confirmation_state"] += "tampered"
+        with patch(
+            "ministry.services.team_roster_assignment_confirmation.timezone.now",
+            return_value=self.now,
+        ):
+            stale = self.client.post(url, stale_post)
+        self.assertContains(stale, "Scheduling changed after your review")
+        self.assertNotContains(stale, "Confirm and Apply Team Roster Changes")
+        self.assertEqual(self.snapshot(), before)
+
+        with patch(
+            "ministry.services.team_roster_assignment_confirmation.apply_team_roster_confirmation",
+            side_effect=OperationalError("disk I/O error"),
+        ), self.assertRaises(OperationalError):
+            self.client.post(url, post)
+
+    def test_superuser_reaches_explicit_confirm_service_boundary(self):
+        self.client.force_login(self.other_superuser)
+        fake_result = SimpleNamespace(
+            created_assignment_ids=(),
+            updated_assignment_ids=(),
+            created_assignment_member_ids=(),
+            added_assignment_member_ids=(),
+            removed_assignment_member_ids=(),
+        )
+        post = {
+            "team_roster_action": "confirm",
+            "signed_reviewed_person_state": "person",
+            "signed_assignment_preview_state": "preview",
+            "signed_confirmation_state": "confirmation",
+        }
+        with patch(
+            "ministry.services.team_roster_assignment_confirmation.apply_team_roster_confirmation",
+            return_value=fake_result,
+        ) as apply_confirmation:
+            response = self.client.post(
+                reverse("team_roster_column_mapping_review"), post
+            )
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(apply_confirmation.call_args.kwargs["user"], self.other_superuser)
 
     def test_strict_schema_hash_user_expiry_and_tamper(self):
         person, preview, proposal = self.workflow(

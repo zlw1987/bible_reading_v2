@@ -646,9 +646,9 @@ class TeamRosterPersonMappingTests(WorshipWorkbookDomainTestBase):
             response,
             "Person mapping reviewed. A read-only Assignment Preview was generated.",
         )
-        self.assertContains(response, "NO SCHEDULE HAS CHANGED")
+        self.assertContains(response, "NOT YET APPLIED")
         self.assertContains(response, "There is no Confirm button")
-        self.assertNotContains(response, ">Confirm<", html=False)
+        self.assertNotContains(response, "Confirm and Apply Team Roster Changes")
         self.set_language("zh")
         response = self.client.get(reverse("team_roster_column_mapping_review"))
         self.assertContains(response, "人员/团队成员映射复核")

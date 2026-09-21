@@ -6,7 +6,7 @@
 <div class="page-header">
     <h1 class="page-title">{% if language == "zh" %}团队名单列映射复核{% else %}Team Roster Column Mapping Review{% endif %}</h1>
     <p class="page-subtitle">
-        {% if language == "zh" %}上传工作簿 → 列映射复核 → 重新上传同一工作簿 → 人员/团队成员映射复核{% else %}Upload workbook → Column mapping review → Re-upload the same workbook → Person / Team Membership mapping review{% endif %}
+        {% if language == "zh" %}上传工作簿 → 列映射复核 → 重新上传同一工作簿 → 人员/团队成员映射复核 → 排班预览 → 明确确认{% else %}Upload workbook → Column mapping review → Re-upload the same workbook → Person / Team Membership mapping review → Assignment Preview → Explicit Confirmation{% endif %}
     </p>
 </div>
 
@@ -230,10 +230,20 @@
 </div>
 {% endif %}
 
+{% if confirmation_error %}
+<div class="card">
+    <h2 class="card-title">{% if confirmation_error_kind == "busy" %}{% if language == "zh" %}排班系统正忙{% else %}Scheduling Busy{% endif %}{% else %}{% if language == "zh" %}需要重新复核{% else %}Review Again{% endif %}{% endif %}</h2>
+    <p class="status status-warning">{{ confirmation_error }}</p>
+    <div class="actions">
+        <a class="button button-secondary" href="{% url 'team_roster_column_mapping_review' %}">{% if language == "zh" %}重新开始团队名单导入{% else %}Start a New Team Roster Import{% endif %}</a>
+    </div>
+</div>
+{% endif %}
+
 {% if assignment_preview %}
 <div class="card">
     <h2 class="card-title">{% if language == "zh" %}5. 排班状态 / 名单差异预览{% else %}5. Assignment State / Roster Diff Preview{% endif %}</h2>
-    <p class="status status-warning"><strong>ZERO WRITE</strong> — {% if language == "zh" %}没有任何排班发生更改。本阶段未实现确认写入。{% else %}NO SCHEDULE HAS CHANGED. THE CONFIRMATION WRITER IS NOT IMPLEMENTED IN THIS SLICE.{% endif %}</p>
+    <p class="status status-warning"><strong>{% if language == "zh" %}尚未写入{% else %}NOT YET APPLIED{% endif %}</strong> — {% if language == "zh" %}这是最终写入前的只读排班预览。只有下方出现有效确认操作并由你明确提交后，系统才会尝试应用变更。{% else %}This is the read-only Assignment Preview before the final write. Changes are attempted only when a valid confirmation action appears below and you explicitly submit it.{% endif %}</p>
     <p>{% if language == "zh" %}共 {{ assignment_preview.mapped_row_count }} 个聚会/团队预览：新建候选 {{ assignment_preview.create_count }}，完全无变化 {{ assignment_preview.exact_noop_count }}，名单更新候选 {{ assignment_preview.update_count }}，无来源提议 {{ assignment_preview.no_source_proposal_count }}，历史跳过 {{ assignment_preview.historical_event_skip_count }}，硬性阻止 {{ assignment_preview.hard_blocker_count }}。{% else %}{{ assignment_preview.mapped_row_count }} event/team rows: {{ assignment_preview.create_count }} create candidate(s), {{ assignment_preview.exact_noop_count }} exact no-op(s), {{ assignment_preview.update_count }} roster update candidate(s), {{ assignment_preview.no_source_proposal_count }} no-source proposal(s), {{ assignment_preview.historical_event_skip_count }} historical skip(s), and {{ assignment_preview.hard_blocker_count }} hard blocker(s).{% endif %}</p>
     <p class="muted">{% if language == "zh" %}签名预览证据：{{ assignment_preview.signed_state_bytes }} / 16384 字节。此证据只用于验证只读预览，不是写入权限。{% else %}Signed preview evidence: {{ assignment_preview.signed_state_bytes }} / 16,384 bytes. This evidence validates the read-only preview; it is not write authority.{% endif %}</p>
     <div class="table-wrap">
@@ -277,7 +287,35 @@
             </tbody>
         </table>
     </div>
-    <p class="status status-warning"><strong>{% if language == "zh" %}没有确认按钮，也没有写入操作。{% else %}There is no Confirm button and no write operation.{% endif %}</strong></p>
+    {% if not confirmation_proposal %}
+    <p class="status status-warning"><strong>{% if assignment_preview.has_hard_blockers %}{% if language == "zh" %}存在硬性阻止项，因此没有确认按钮，也不会写入。{% else %}Hard blockers are present, so there is no Confirm button and nothing can be applied.{% endif %}{% else %}{% if language == "zh" %}没有需要新建或更新的当前排班；当前 CMS 排班事实保持不变。没有确认按钮。{% else %}No reviewed current-schedule rows require a create or roster update; current CMS assignment truth remains unchanged. There is no Confirm button.{% endif %}{% endif %}</strong></p>
+    {% endif %}
+</div>
+{% endif %}
+
+{% if confirmation_proposal and confirmation_form %}
+<div class="card">
+    <h2 class="card-title">{% if language == "zh" %}6. 最终确认{% else %}6. Final Confirmation{% endif %}</h2>
+    <p class="status status-warning"><strong>{% if language == "zh" %}你即将应用上述已复核的团队排班变更。{% else %}You are about to apply the reviewed Team Roster changes.{% endif %}</strong></p>
+    <div class="table-wrap">
+        <table class="sound-preview-table">
+            <tbody>
+                <tr><th>{% if language == "zh" %}将新建的排班{% else %}Assignments to create{% endif %}</th><td>{{ confirmation_proposal.create_count }}</td></tr>
+                <tr><th>{% if language == "zh" %}将更新名单的排班{% else %}Assignments whose rosters will update{% endif %}</th><td>{{ confirmation_proposal.update_count }}</td></tr>
+                <tr><th>{% if language == "zh" %}将新增的成员{% else %}Members to add{% endif %}</th><td>{{ confirmation_proposal.add_member_count }}</td></tr>
+                <tr><th>{% if language == "zh" %}将移除的成员{% else %}Members to remove{% endif %}</th><td>{{ confirmation_proposal.remove_member_count }}</td></tr>
+            </tbody>
+        </table>
+    </div>
+    <p>{% if language == "zh" %}新建会建立已排定的团队排班。更新会保留原排班及继续服事的名单行；仅会移除上方已显示、尚未确认且备注为空的安全名单行。整个工作簿会以单一原子操作应用；任何一项失败都会全部回滚。系统不会发送通知。{% else %}CREATE creates scheduled assignments. UPDATE preserves the parent assignment and retained serving rows; only the safe unconfirmed, blank-note rows shown above are removed. The whole workbook is applied atomically, so any failure rolls back every change. No Notification will be sent.{% endif %}</p>
+    <form method="post">
+        {% csrf_token %}
+        {{ confirmation_form.team_roster_action }}
+        {{ confirmation_form.signed_reviewed_person_state }}
+        {{ confirmation_form.signed_assignment_preview_state }}
+        {{ confirmation_form.signed_confirmation_state }}
+        <div class="actions"><button type="submit">{% if language == "zh" %}确认并应用团队排班变更{% else %}Confirm and Apply Team Roster Changes{% endif %}</button></div>
+    </form>
 </div>
 {% endif %}
 {% endblock %}

@@ -274,8 +274,17 @@ MO-S.6F.GENERAL.0A is DOCS/READ-ONLY ARCHITECTURE COMPLETE;
 GENERAL.1A–1E are IMPLEMENTED / LOCAL VERIFIED as the generic zero-write
 workflow foundation; GENERAL.1F-0A is DOCS / READ-ONLY WRITER CONTRACT
 COMPLETE; GENERAL.1F-1A is IMPLEMENTED / LOCAL VERIFIED for the generic
-confirmation authority and atomic service writer core; and GENERAL.1F-1B is
-IMPLEMENTED / LOCAL VERIFIED for the explicit Confirm UI/POST adapter.
+confirmation authority and atomic service writer core; GENERAL.1F-1B is
+IMPLEMENTED / LOCAL VERIFIED for the explicit Confirm UI/POST adapter; and
+`MO-S.6F.GENERAL.1G-0A` is **LEGACY CUTOVER AUDIT / CONTRACT COMPLETE**.
+Retirement itself is not implemented. The 1G-0A contract makes generic Team
+Roster the only target staff-facing annual-roster entry, preserves historical
+Sound 1B production-created assignments/members as ordinary canonical rows,
+records that Sound 1C had no production apply and Projection 2A had no writer,
+and requires old confirmation endpoints/tokens to fail closed rather than
+translate into generic authority. No schema, migration, dependency, command,
+data mutation, or route change occurred in 1G-0A.
+
 Product-owner clarification supersedes the former
 current-direction count assumptions: any configured team-assignment cell is a
 complete 1..N roster, every ASCII-slash segment is one actual serving person, and blank
@@ -372,6 +381,17 @@ confirm, PRG success, and replay, plus Chinese 390x844 confirmation, stale, and
 typed-busy states with no relevant console warnings/errors or observed
 horizontal overflow. This slice adds no schema, migration, dependency,
 production apply, or legacy Sound/Projection cutover.
+
+The separately frozen `MO-S.6F.GENERAL.1G-0A` cutover contract requires a split
+implementation. First remove both state-changing Sound confirmation URL
+consumers and the Projection preview route, collapse assignment-list navigation
+to one **Team Roster Import / 团队名单导入** action, and retain only GET-only
+temporary redirects for old Sound preview/template bookmarks. Then retire the
+now-dead Sound/Projection parser, signer, writer, form, template, and legacy-only
+test code after continuing invariants are ported. The exact verified deployment
+workbook download remains useful through a generic route and carries no mapping
+or writer authority. Old Sound tokens are never generic tokens; URL removal is
+their operational expiry boundary even within the former 1,800-second age.
 
 `MO-S.REQUIRED.0A` is **EFFECTIVE REQUIRED-TEAM SEMANTICS / EVENT WORSHIP
 ENTRY AUDIT COMPLETE**. `MO-S.REQUIRED.1A` is **IMPLEMENTED / LOCAL VERIFIED /

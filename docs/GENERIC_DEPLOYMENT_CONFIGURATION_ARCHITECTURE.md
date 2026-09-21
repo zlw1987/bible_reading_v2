@@ -705,6 +705,19 @@ with clean checked console output and no observed horizontal overflow. No
 schema, migration, dependency, production apply, or old Sound/Projection route
 cutover is included.
 
+`MO-S.6F.GENERAL.1G-0A` is **LEGACY CUTOVER AUDIT / CONTRACT COMPLETE**;
+retirement is not implemented by that docs-only milestone. The frozen target is
+one staff-facing **Team Roster Import / 团队名单导入** entry. Sound 1B production-
+created assignments and members remain canonical model data and need no cleanup
+or migration; Sound 1C was never applied in production; Projection 2A never had
+write authority. The implementation must remove both legacy Sound confirmation
+POST consumers and the Projection route, never translate an old salt/token into
+generic authority, and use only bounded GET redirects for old Sound preview and
+template discoverability. The exact verified deployment workbook download may
+remain behind a generic route because it is valid input to the named generic
+adapter, but it grants no mapping or writer authority. Cutover and dead-code
+deletion are separate implementation slices.
+
 ## 3. Identity Model
 
 | Identity | Meaning | Portability |

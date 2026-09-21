@@ -3616,17 +3616,17 @@ rewritten for migration. Stop minting old Sound V1 proposals at cutover; new
 Sound uploads use the generic contracts and accept `Aaron / Nelson` as a
 two-person complete roster. Old `SOUND_ASSIGNMENT_CONFIRMATION_V1` and
 `SOUND_ASSIGNMENT_ROSTER_UPDATE_CONFIRMATION_V1` tokens must never be decoded as
-generic tokens. During a bounded transition, their existing endpoints may only
-finish still-valid old tokens under their exact old semantics, then be removed
-after the maximum signing age. Existing Sound links can become server-defined
-convenience entries into the generic page with the Sound hint preselected; they
-are not a second authority.
+generic tokens. GENERAL.1G-0A supersedes the earlier bounded-grace suggestion:
+remove the two legacy confirmation URL consumers at cutover even when an old
+token is younger than its 1,800-second signing age. A temporary old Sound GET
+bookmark may redirect to the generic import start, but no old POST body or token
+is forwarded, translated, or consumed.
 
 Projection 2A has no writer and no production verification. Refactor its local
-evidence onto the generic core before approval; refuse its old zero-write signed
-preview and require re-upload rather than preserving the one/two limit. Keep an
-optional Projection convenience link only as a server-defined shortcut to the
-generic page with the Projection hint preselected.
+evidence onto the generic core before approval; its route is removed at cutover
+and its old zero-write signed preview requires re-upload through the generic
+flow. There is no redirect or preselected alternate interpretation. Its one/two-
+person grammar remains historical regression evidence only.
 
 Video Column H proves the same parser naturally handles three people and its
 known exact header may be a prefill hint, but no hint alone authorizes a write.
@@ -3669,7 +3669,9 @@ Implementation should proceed only in separately approved slices:
    complete-roster diff, strict signed revalidation, and read-only UI;
 6. **implemented in GENERAL.1F-1A at service/test level:** generic confirmation
    authority and atomic writer core with file-backed SQLite race/rollback tests;
-7. Sound cutover/legacy-token expiry and focused regression/browser QA; and
+7. **contract frozen in GENERAL.1G-0A:** Sound/Projection surface cutover,
+   legacy-token endpoint expiry, dead-code retirement, and focused regression/
+   browser QA, with implementation still separately required; and
 8. separately approve any additional adapter/workbook family or event-column
    identification UX. Lighting stays outside identity authority.
 
@@ -3694,6 +3696,153 @@ configured deployment-locally through
 workbook remains outside Git; the endpoint does not parse, generate, save, or
 rewrite the XLSX. This does not change the Column-F/Sound import, identity,
 preview, confirmation, or mutation contract.
+
+##### MO-S.6F.GENERAL.1G-0A legacy import cutover audit
+
+`MO-S.6F.GENERAL.1G-0A` is **LEGACY CUTOVER AUDIT / CONTRACT COMPLETE**.
+This is a read-only repository audit plus documentation contract. It does not
+remove or redirect a route, change runtime code, create a schema or migration,
+change a dependency, run a production command, or mutate local/production data.
+Retirement is not implemented by this milestone.
+
+###### Production and authority facts
+
+- The Sound 1B production apply is historical committed domain data. The
+  `TeamAssignment` and `TeamAssignmentMember` rows it created are ordinary
+  canonical rows and remain untouched; importer retirement needs no migration,
+  provenance rewrite, data cleanup, or scheduling-revision change.
+- Sound 1C was implemented and locally verified, but its production review/apply
+  was never performed. No production compatibility window is required for a 1C
+  mutation that never occurred.
+- Projection 2A was a local zero-write prototype. It never had confirmation or
+  write authority and was never production verified.
+- Generic GENERAL.1A-1F-1B is now the sole target annual-roster authority. New
+  Sound rows use the same 1..N complete-roster interpretation as every other
+  reviewed team column. The old Sound one-person and Projection one/two-person
+  grammars are not alternate staff-facing paths.
+
+###### Complete active-reference inventory at audit time
+
+| Class | Current active references | Cutover classification |
+| --- | --- | --- |
+| URL patterns | `ministry/urls.py`: `sound_assignment_workbook_preview`, `confirm_sound_assignment_workbook`, `confirm_sound_assignment_roster_update_workbook`, `projection_assignment_workbook_preview`, `download_sound_assignment_workbook_template` | All five are legacy public surfaces; route-by-route disposition is frozen below. |
+| View consumers and permission gates | `ministry/views.py`: the five route views, Sound/Projection error/context helpers, lazy service imports, `ANNUAL_WORKBOOK_INTEGRATION_KEY` checks, and assignment-list booleans `can_preview_sound_assignment_workbook` / `can_preview_projection_assignment_workbook` | Remove legacy consumers/booleans; keep the shared integration gate and generic `can_review_team_roster_columns` path. The old permission helpers live in the legacy services, not `ministry/permissions.py`. |
+| Navigation and forms | `templates/ministry/assignment_list.html` exposes generic, Sound, and Projection buttons; `ministry/forms.py` owns `SoundAssignmentWorkbookUploadForm`, `SoundAssignmentMappingForm`, `ProjectionAssignmentWorkbookUploadForm`, and `ProjectionAssignmentMappingForm` | Present exactly one primary **Team Roster Import / 团队名单导入** button. Remove legacy forms with their dead views. |
+| Legacy templates | `templates/ministry/sound_assignment_workbook_preview.html` links the old template download and submits to both Sound confirmation routes; `templates/ministry/projection_assignment_workbook_preview.html` exposes the Projection grammar/preview | Remove after endpoint cutover. Do not preserve hidden or alternate upload forms. |
+| Sound parser/mapping/preview | `ministry/services/sound_assignment_xlsx_preview.py`: exact Column F/`Sound`, one-person grammar, mapping/preview salts and decoders, classifier, and `user_can_preview_sound_assignments` | Retire after public consumers are gone; do not import it from the generic core. |
+| Sound create confirmation | `ministry/services/sound_assignment_xlsx_confirmation.py`: `SOUND_ASSIGNMENT_CONFIRMATION_V1`, `ministry.sound-assignment-confirmation.v1`, decoder/proposal/writer, and `user_can_confirm_sound_assignments` | Retire. Its already-created model rows remain. Never translate its token to `TEAM_ROSTER_CONFIRMATION_V1`. |
+| Sound roster-update confirmation | `ministry/services/sound_assignment_xlsx_roster_update.py`: `SOUND_ASSIGNMENT_ROSTER_UPDATE_CONFIRMATION_V1`, `ministry.sound-assignment-roster-update.v1`, decoder/proposal/writer | Retire. There is no production 1C apply to preserve. |
+| Projection prototype | `ministry/services/projection_assignment_xlsx_preview.py`: Column E/`projector`, one/two-person parser, mapping/preview salts and decoders, and `user_can_preview_projection_assignments` | Retire as active code after porting only still-useful adapter/regression evidence. It must never gain a writer. |
+| Template utility/configuration | `ministry/services/sound_assignment_template.py`, `SOUND_ASSIGNMENT_IMPORT_TEMPLATE_PATH` in `config/settings.py` and `config/settings_godaddy.py`, and the exact real-workbook hash in `ministry/services/worship_xlsx_preview.py` | Retain the verified raw-byte behavior because the complete deployment workbook is valid input to the generic adapter; expose it through a generic Team Roster download route/copy. The legacy setting/helper names may remain temporarily as configuration compatibility debt and grant no import/write authority. |
+| Shared integration/adapter | `core/integration_registry.py` registers `svca_bethany_2026_worship_xlsx`; `ministry/integrations/svca_bethany_2026_worship_xlsx/team_roster_sources.py` owns current A:O inventory, C:I review scope, exact hints, and mapped-cell extraction | Retain. These are shared generic-adapter infrastructure, not legacy Sound/Projection authority. Likewise retain `worship_xlsx_preview.py` because Worship and the generic adapter consume it. |
+| Direct legacy tests | `test_sound_assignment_xlsx_preview.py` (36 tests), `test_sound_assignment_xlsx_confirmation.py` (29), `test_sound_assignment_xlsx_roster_update.py` (16), `test_projection_assignment_xlsx_preview.py` (36), and `test_sound_assignment_template_download.py` (9): 126 direct tests total | Preserve valuable invariants by porting them before deleting tests whose runtime owner is removed. Keep/adapt the template-download coverage. Do not retain executable tests solely to keep dead legacy code alive. |
+| Management commands and other callers | Repository search found no management command, static asset, JavaScript caller, integration-registry callable, or non-test Python consumer beyond `ministry/views.py` and the legacy modules' internal imports. Exact route-name references outside docs occur only in the listed URL/view/templates/tests. | No command retirement or registry-key removal is required. Historical docs remain evidence and must be updated only where they claim current authority. |
+
+The legacy services import shared canonical models, the Worship parser and
+governance helpers, and each other; that dependency direction does not make the
+legacy contracts shared infrastructure. Conversely, the generic Team Roster
+services do not import any legacy Sound/Projection service or salt.
+
+###### Route and navigation cutover contract
+
+| Old route | First cutover implementation | Final state |
+| --- | --- | --- |
+| `sound_assignment_workbook_preview` | Replace the old GET/POST consumer with a temporary **GET-only** redirect to `team_roster_column_mapping_review`; POST returns 405 and no old mapping/preview token is decoded. Remove its assignment-list button. | Remove the compatibility URL after one bounded release/operational verification; old path returns 404. |
+| `confirm_sound_assignment_workbook` | Remove URL pattern and view immediately. Do not redirect POST. | 404; every old create-confirmation token is unusable regardless of remaining cryptographic age. |
+| `confirm_sound_assignment_roster_update_workbook` | Remove URL pattern and view immediately. Do not redirect POST. | 404; every old roster-update token is unusable regardless of remaining cryptographic age. |
+| `projection_assignment_workbook_preview` | Remove URL pattern/view and assignment-list button immediately. Do not redirect GET or POST; users re-upload in generic Team Roster Import. | 404. This prevents the one/two-person grammar from remaining active. |
+| `download_sound_assignment_workbook_template` | Add a generic Team Roster template-download route and link on the generic workflow, then make the old route a temporary GET-only redirect to it. POST stays 405. | Remove the old alias after the same bounded release; retain only the generic download route. |
+
+The assignment list ultimately exposes one primary button with exact copy
+**Team Roster Import / 团队名单导入**. The generic route remains integration-gated
+and active-staff/superuser-only. No Sound/Projection convenience button,
+preselected team authority, hidden legacy form, or forwarded POST remains.
+
+###### Template-download decision
+
+Retain the utility behavior, not the Sound-import product meaning. The current
+helper streams the exact server-private workbook only when its SHA-256 equals
+the known supported Bethany 2026 workbook. That complete workbook is also the
+input consumed by the current generic adapter, which inventories A:O and permits
+review only for C:I. It is therefore useful deployment-specific workbook help,
+not a Sound-only writer artifact. The generic page must describe it as an exact
+deployment workbook/template, must not instruct users to edit only Column F or
+one Sound person, and must not imply that downloading it maps any column or
+authorizes any write. Keep the source outside Git, preserve byte-for-byte
+streaming/hash verification, fail closed when missing/mismatched, and retain
+GET-only plus staff/integration gates. Renaming the helper/configuration symbols
+is optional cleanup after the user-facing cutover, not a reason to risk a broken
+deployment path during authority retirement.
+
+###### Legacy-token expiry and regression contract
+
+All old mapping, preview, and confirmation salts remain disjoint from the
+generic salts. The generic confirmation decoder accepts only the exact
+`ministry.team_roster.confirmation.v1` salt, strict
+`TEAM_ROSTER_CONFIRMATION_V1` contract/state type, and its bound generic parent
+tokens. Cutover adds no cross-salt decoder, fallback, translation, token replay,
+or legacy-to-generic adapter. URL removal is the operational expiry boundary:
+the two state-changing old POST endpoints return 404 from the moment of deploy,
+even though legacy `signing.loads(..., max_age=1800)` could otherwise accept a
+recent token. Preview/mapping POSTs likewise have no consumer; a user must start
+again from the generic upload.
+
+Before deleting a legacy test module, port only distinct continuing invariants:
+
+1. generic confirmation explicitly rejects representative old Sound create and
+   roster-update tokens, including correctly signed/unexpired examples;
+2. route tests prove both old confirmation POSTs and Projection path are 404,
+   old Sound preview/template aliases are GET-only redirects during the bounded
+   compatibility release, and no redirect forwards POST data;
+3. assignment-list tests prove exactly one annual-roster action with the exact
+   bilingual copy and no Sound/Projection buttons;
+4. generic 1..N tests continue to cover one, two, three, and greater-than-three
+   members, so the old count constraints cannot regress;
+5. adapted template tests preserve exact bytes, content type, filename,
+   integration/permission gate, missing/non-regular/hash-mismatch failure, zero
+   database writes, and generic non-authority copy; and
+6. generic/adaptor tests retain exact Column E/F hint/header evidence, literal
+   unknown-header behavior, exact event/profile matching, privacy, audience,
+   history, concurrency, atomicity, idempotency, audit, and zero Notification.
+
+Historical milestone documentation remains. It must label 1B production apply,
+1C local-only/no production apply, and Projection 2A zero-write/no production
+authority accurately. Delete legacy executable tests only because their runtime
+owner is removed and their continuing invariants have been ported—not to reduce
+file count.
+
+###### Exact implementation files and slice/rollback decision
+
+The cutover is safer as two implementation slices, not one large deletion:
+
+1. **Authority and UX cutover:** change `ministry/urls.py`, `ministry/views.py`,
+   `templates/ministry/assignment_list.html`, and
+   `templates/ministry/team_roster_column_mapping_review.html`; add/adapt focused
+   tests in the generic Team Roster and template suites. Remove the two legacy
+   confirmation URLs and Projection URL, install the two GET-only compatibility
+   redirects, expose the generic template download, and prove old signed tokens
+   cannot reach any writer. This slice changes no models/data and is independently
+   deployable/rollbackable.
+2. **Dead-code retirement after cutover verification:** remove
+   `sound_assignment_xlsx_preview.py`, `sound_assignment_xlsx_confirmation.py`,
+   `sound_assignment_xlsx_roster_update.py`,
+   `projection_assignment_xlsx_preview.py`, the four legacy forms in
+   `ministry/forms.py`, both legacy preview templates, and legacy-only test code
+   after porting the continuing cases above. Remove the temporary old Sound GET
+   aliases at the end of the bounded compatibility period. Retain
+   `sound_assignment_template.py` behavior/tests (adapted to the generic route),
+   the integration registry, the named adapter, all generic Team Roster services/
+   tests, shared Worship services/tests, historical docs, and all canonical model
+   rows.
+
+Rollback is code/configuration-only: restore the prior route/view/template code
+from the immediately preceding release if needed. Do not roll back by deleting,
+rewriting, or recreating assignments/members, by decrementing scheduling
+revisions, or by translating tokens. Any token minted before a rollback is still
+accepted only by its exact old decoder and salt if that old endpoint is
+deliberately restored; generic tokens and rows remain separate. A rollback plan
+must preserve the same integration/staff gates and must never make both writers
+staff-facing for new uploads.
 
 ### MO-S.6G — Operational Board Polish
 

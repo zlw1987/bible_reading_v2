@@ -151,13 +151,17 @@ team key rows. This creates no `events -> ministry` reverse dependency, generic
 arbitrary-ETL engine, plugin framework, fuzzy event/team matching, global User
 lookup, or mutable-name authority.
 
-The new generic contracts are architecture only:
-`TEAM_ROSTER_MAPPING_V1`, `TEAM_ROSTER_PREVIEW_V1`, and
-`TEAM_ROSTER_CONFIRMATION_V1` are not implemented. The current local Projection
-2A route remains zero-write and is not production-ready; it must be refactored
-before any writer is approved. Existing Sound V1 signatures retain only their
-old semantics and may never be reinterpreted by the generic decoder. Sound and
-Exact known Sound/Projection/Video headers may prefill reviewed mappings, but
+The generic Team Roster workflow through explicit confirmation is now
+implemented and locally verified through GENERAL.1F-1B. GENERAL.1G-0A is
+**LEGACY CUTOVER AUDIT / CONTRACT COMPLETE**, but retirement is not implemented.
+The current local Projection 2A route remains zero-write and not production-
+ready until the approved cutover removes it. Existing Sound V1 signatures retain
+only their old semantics and may never be reinterpreted by the generic decoder.
+Sound 1B production-created assignment/member rows remain ordinary canonical
+model data; Sound 1C was never production-applied. Cutover removes the old
+confirmation consumers, keeps at most temporary GET-only Sound discoverability
+redirects, and requires one Team Roster Import staff entry. Exact known Sound/
+Projection/Video headers may prefill reviewed mappings, but
 they are convenience rather than an importable-team allowlist; formula-derived
 Lighting remains outside identity authority. Duplicate columns selecting one
 team fail closed and are never merged. Event matching remains exact. No runtime/

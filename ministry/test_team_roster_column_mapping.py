@@ -607,13 +607,13 @@ class TeamRosterColumnMappingTests(WorshipWorkbookDomainTestBase):
         self.client.force_login(self.staff)
         self.set_language("en")
         response = self.client.get(reverse("team_roster_column_mapping_review"))
-        self.assertContains(response, "Team Roster Column Mapping Review")
+        self.assertContains(response, "Team Roster Import")
         self.set_language("zh")
         response = self.client.post(
             reverse("team_roster_column_mapping_review"),
             {"workbook": self.upload(f3="sounder")},
         )
-        self.assertContains(response, "团队名单列映射复核")
+        self.assertContains(response, "团队名单导入")
         self.assertContains(response, "未知或未提示的表头默认忽略")
         self.assertContains(response, 'class="sound-preview-table"', html=False)
         self.assertContains(response, "data-label=", html=False)

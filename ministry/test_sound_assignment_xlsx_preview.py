@@ -731,12 +731,6 @@ class SoundPreviewPermissionPrivacyAndZeroWriteTests(SoundAssignmentPreviewTestB
         self.assertTrue(user_can_preview_sound_assignments(self.staff))
         self.assertTrue(user_can_preview_sound_assignments(self.superuser))
         self.assertFalse(user_can_preview_sound_assignments(self.alice))
-        for user in (self.staff, self.superuser):
-            self.client.force_login(user)
-            self.assertEqual(
-                self.client.get(reverse("sound_assignment_workbook_preview")).status_code,
-                200,
-            )
 
     def test_global_manager_team_lead_event_planner_and_member_are_denied(self):
         lead = User.objects.create_user("sound_lead", password="pw")
@@ -765,23 +759,7 @@ class SoundPreviewPermissionPrivacyAndZeroWriteTests(SoundAssignmentPreviewTestB
             self.assertTrue(can_manage_team_assignments(global_manager))
         for user in (global_manager, lead, planner, self.alice):
             with self.subTest(user=user.username):
-                self.client.force_login(user)
-                self.assertEqual(
-                    self.client.get(
-                        reverse("sound_assignment_workbook_preview")
-                    ).status_code,
-                    403,
-                )
-
-    @override_settings(CMS_ENABLED_INTEGRATIONS=[])
-    def test_disabled_integration_returns_404_for_staff_before_adapter_import(self):
-        self.client.force_login(self.staff)
-        with patch(
-            "ministry.services.sound_assignment_xlsx_preview.parse_known_sound_assignment_workbook"
-        ) as parser:
-            response = self.client.get(reverse("sound_assignment_workbook_preview"))
-        self.assertEqual(response.status_code, 404)
-        parser.assert_not_called()
+                self.assertFalse(user_can_preview_sound_assignments(user))
 
     def _domain_snapshot(self):
         return {
@@ -825,55 +803,6 @@ class SoundPreviewPermissionPrivacyAndZeroWriteTests(SoundAssignmentPreviewTestB
             "logs": LogEntry.objects.count(),
         }
 
-    def test_upload_mapping_preview_and_confirmation_proposal_are_zero_write_and_privacy_bounded(self):
-        self.event_for_row()
-        unrelated = TeamMembership.objects.create(
-            team=self.other_team,
-            display_name="Unrelated Private Person",
-            email="unrelated@example.test",
-            notes="unrelated note",
-        )
-        self.client.force_login(self.staff)
-        session = self.client.session
-        session["language"] = "en"
-        session.save()
-        before = self._domain_snapshot()
-        with patch(
-            "ministry.services.sound_assignment_xlsx_preview.timezone.now",
-            return_value=self.preview_now(),
-        ), patch("django.db.transaction.on_commit") as on_commit:
-            upload_response = self.client.post(
-                reverse("sound_assignment_workbook_preview"),
-                {"workbook": self.upload({4: "Alice"})},
-            )
-            review = upload_response.context["mapping_review"]
-            preview_response = self.client.post(
-                reverse("sound_assignment_workbook_preview"),
-                {
-                    "signed_mapping_state": review.signed_state,
-                    "mapping_0": str(self.alice_membership.pk),
-                },
-            )
-        self.assertEqual(preview_response.status_code, 200)
-        self.assertEqual(
-            preview_response.context["preview"].rows[0].target_state,
-            SoundTargetState.CREATE_CANDIDATE,
-        )
-        rendered = preview_response.content.decode()
-        for private_value in (
-            self.alice_membership.email,
-            self.alice_membership.notes,
-            unrelated.display_name,
-            unrelated.email,
-            unrelated.notes,
-        ):
-            self.assertNotIn(private_value, rendered)
-        self.assertContains(preview_response, "This preview will not change any assignments")
-        self.assertIsNotNone(preview_response.context["confirmation_proposal"])
-        self.assertContains(preview_response, "Confirm and Create")
-        self.assertEqual(self._domain_snapshot(), before)
-        on_commit.assert_not_called()
-
     def test_historical_event_preview_is_domain_zero_write(self):
         self.event_for_row(status=ServiceEvent.STATUS_COMPLETED)
         before = self._domain_snapshot()
@@ -889,28 +818,3 @@ class SoundPreviewPermissionPrivacyAndZeroWriteTests(SoundAssignmentPreviewTestB
             SoundTargetState.HISTORICAL_EVENT_BLOCKER,
         )
         self.assertEqual(self._domain_snapshot(), before)
-
-    def test_historical_event_blocker_has_bilingual_preview_copy(self):
-        self.event_for_row(status=ServiceEvent.STATUS_COMPLETED)
-        self.client.force_login(self.staff)
-        for language, expected in (
-            ("en", "Historical event — backfill not supported"),
-            ("zh", "历史聚会 — 当前版本不补建排班"),
-        ):
-            with self.subTest(language=language):
-                session = self.client.session
-                session["language"] = language
-                session.save()
-                upload_response = self.client.post(
-                    reverse("sound_assignment_workbook_preview"),
-                    {"workbook": self.upload({4: "Alice"})},
-                )
-                review = upload_response.context["mapping_review"]
-                preview_response = self.client.post(
-                    reverse("sound_assignment_workbook_preview"),
-                    {
-                        "signed_mapping_state": review.signed_state,
-                        "mapping_0": str(self.alice_membership.pk),
-                    },
-                )
-                self.assertContains(preview_response, expected)

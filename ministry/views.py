@@ -2955,19 +2955,19 @@ def _sound_preview_context(
 
 @login_required
 @require_GET
-def download_sound_assignment_workbook_template(request):
-    """Stream the verified private template without parsing or rewriting it."""
+def download_team_roster_workbook_template(request):
+    """Stream the verified private annual workbook for generic Team Roster."""
 
     try:
         require_integration_enabled(ANNUAL_WORKBOOK_INTEGRATION_KEY)
     except IntegrationDisabled as exc:
         raise Http404 from exc
 
-    from ministry.services.sound_assignment_xlsx_preview import (
-        user_can_preview_sound_assignments,
+    from ministry.services.team_roster_column_mapping import (
+        user_can_review_team_roster_columns,
     )
 
-    if not user_can_preview_sound_assignments(request.user):
+    if not user_can_review_team_roster_columns(request.user):
         raise PermissionDenied
 
     from ministry.services.sound_assignment_template import (
@@ -2981,15 +2981,15 @@ def download_sound_assignment_workbook_template(request):
         source = open_verified_sound_assignment_template()
     except SoundAssignmentTemplateUnavailable as exc:
         logger.warning(
-            "Sound assignment template unavailable: reason=%s user_id=%s",
+            "Team Roster workbook template unavailable: reason=%s user_id=%s",
             exc.code.value,
             request.user.pk,
         )
         language = get_user_language(request)
         return HttpResponseNotFound(
-            "2026 音控导入模板目前不可用。"
+            "已验证的年度工作簿目前不可用。"
             if language == "zh"
-            else "The 2026 Sound import template is currently unavailable."
+            else "The verified annual workbook is currently unavailable."
         )
 
     return FileResponse(
@@ -3001,9 +3001,25 @@ def download_sound_assignment_workbook_template(request):
 
 
 @login_required
-@require_http_methods(["GET", "POST"])
+@require_GET
+def download_sound_assignment_workbook_template(request):
+    """Temporary GET-only compatibility alias for the generic download."""
+
+    return redirect("download_team_roster_workbook_template")
+
+
+@login_required
+@require_GET
 def sound_assignment_workbook_preview(request):
-    """Staff-only Column-F review; preview itself writes no domain row."""
+    """Temporary GET-only compatibility alias for Team Roster Import."""
+
+    return redirect("team_roster_column_mapping_review")
+
+
+@login_required
+@require_http_methods(["GET", "POST"])
+def _retired_sound_assignment_workbook_preview(request):
+    """Unreachable legacy implementation retained for GENERAL.1G-1B."""
 
     try:
         require_integration_enabled(ANNUAL_WORKBOOK_INTEGRATION_KEY)
@@ -3646,16 +3662,6 @@ def team_assignment_list(request):
             "can_create": can_create,
             "can_show_new_assignment": can_show_new_assignment,
             "show_setup_actions": show_setup_actions,
-            "can_preview_sound_assignment_workbook": bool(
-                request.user.is_active
-                and (request.user.is_staff or request.user.is_superuser)
-                and is_integration_enabled(ANNUAL_WORKBOOK_INTEGRATION_KEY)
-            ),
-            "can_preview_projection_assignment_workbook": bool(
-                request.user.is_active
-                and (request.user.is_staff or request.user.is_superuser)
-                and is_integration_enabled(ANNUAL_WORKBOOK_INTEGRATION_KEY)
-            ),
             "can_review_team_roster_columns": bool(
                 request.user.is_active
                 and (request.user.is_staff or request.user.is_superuser)

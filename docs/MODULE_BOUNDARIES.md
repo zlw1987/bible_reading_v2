@@ -153,19 +153,27 @@ lookup, or mutable-name authority.
 
 The generic Team Roster workflow through explicit confirmation is now
 implemented and locally verified through GENERAL.1F-1B. GENERAL.1G-0A is
-**LEGACY CUTOVER AUDIT / CONTRACT COMPLETE**, but retirement is not implemented.
-The current local Projection 2A route remains zero-write and not production-
-ready until the approved cutover removes it. Existing Sound V1 signatures retain
-only their old semantics and may never be reinterpreted by the generic decoder.
+**LEGACY CUTOVER AUDIT / CONTRACT COMPLETE**, and GENERAL.1G-1A is
+**IMPLEMENTED / LOCAL VERIFIED** for authority and UX cutover. Generic Team
+Roster is the only active staff-facing annual-roster import. The two Sound
+confirmation routes and Projection preview route are removed/404; the old Sound
+preview/template routes are temporary authenticated GET-only redirects with
+POST 405. Existing Sound V1 signatures retain only their old semantics and may
+never be reinterpreted by the generic decoder.
 Sound 1B production-created assignment/member rows remain ordinary canonical
 model data; Sound 1C was never production-applied. Cutover removes the old
 confirmation consumers, keeps at most temporary GET-only Sound discoverability
-redirects, and requires one Team Roster Import staff entry. Exact known Sound/
+redirects, and now exposes one Team Roster Import staff entry plus a generic
+verified-workbook download using generic active-staff/superuser authority.
+Exact known Sound/
 Projection/Video headers may prefill reviewed mappings, but
 they are convenience rather than an importable-team allowlist; formula-derived
 Lighting remains outside identity authority. Duplicate columns selecting one
 team fail closed and are never merged. Event matching remains exact. No runtime/
 schema/migration/dependency/data change occurs in GENERAL.0A.
+GENERAL.1G-1A changed no writer semantics, canonical data, schema, migration,
+dependency, production data, or normal-local data. Legacy Sound/Projection
+service/form/template retirement remains explicitly pending GENERAL.1G-1B.
 During the 5D/5E transition, readiness, the retained bounded reset, ServiceEvent
 Admin, and Worship XLSX matching/confirmation switched to FK/Profile authority
 while compatibility storage still existed as drift evidence. The strict V2

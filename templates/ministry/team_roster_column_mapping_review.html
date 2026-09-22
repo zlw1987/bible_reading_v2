@@ -1,10 +1,10 @@
 {% extends "base.html" %}
 
-{% block title %}{% if language == "zh" %}团队名单列映射复核{% else %}Team Roster Column Mapping Review{% endif %} | {{ ui.site_title }}{% endblock %}
+{% block title %}{% if language == "zh" %}团队名单导入{% else %}Team Roster Import{% endif %} | {{ ui.site_title }}{% endblock %}
 
 {% block content %}
 <div class="page-header">
-    <h1 class="page-title">{% if language == "zh" %}团队名单列映射复核{% else %}Team Roster Column Mapping Review{% endif %}</h1>
+    <h1 class="page-title">{% if language == "zh" %}团队名单导入{% else %}Team Roster Import{% endif %}</h1>
     <p class="page-subtitle">
         {% if language == "zh" %}上传工作簿 → 列映射复核 → 重新上传同一工作簿 → 人员/团队成员映射复核 → 排班预览 → 明确确认{% else %}Upload workbook → Column mapping review → Re-upload the same workbook → Person / Team Membership mapping review → Assignment Preview → Explicit Confirmation{% endif %}
     </p>
@@ -14,6 +14,10 @@
     <p class="status status-warning"><strong>ZERO WRITE</strong> — {% if language == "zh" %}上传和列映射不会建立或更改任何排班、团队或成员资料。{% else %}Upload and column mapping do not create or change assignments, teams, or membership data.{% endif %}</p>
     <p>{% if language == "zh" %}自动匹配只是建议，仍必须由你看见并复核。选择“忽略”是安全默认；未知列名可以保留为忽略，也可以手动映射到任何当前有效且可排班的团队。{% else %}Automatic matches are suggestions only and remain visible for review. Ignore is the safe default. An unknown header may stay ignored or be mapped manually to any current active, assignable team.{% endif %}</p>
     <p class="muted">{% if language == "zh" %}列映射步骤不会打开名单单元格或查询团队成员。只有在列映射复核后重新上传完全相同的工作簿，人员映射步骤才会解析已映射列并读取其精确团队的有效成员。不会查询或更改排班。{% else %}Column review does not open roster cells or query memberships. Only after the reviewed workbook is re-uploaded byte-for-byte will person mapping parse mapped columns and read active memberships from their exact teams. Assignments are neither queried nor changed.{% endif %}</p>
+    <div class="actions">
+        <a class="button button-secondary" href="{% url 'download_team_roster_workbook_template' %}">{% if language == "zh" %}下载已验证的年度工作簿{% else %}Download Verified Annual Workbook{% endif %}</a>
+    </div>
+    <p class="help-text">{% if language == "zh" %}这是此导入适配器支持的精确部署工作簿。下载不会映射任何列，也不会授权任何写入；上传后仍须明确复核名单列。{% else %}This is the exact deployment workbook supported by this import adapter. Downloading it does not map columns or authorize any write; uploaded roster columns still require explicit review.{% endif %}</p>
 </div>
 
 {% if not reviewed_column_state and not person_review and not reviewed_person_mapping %}

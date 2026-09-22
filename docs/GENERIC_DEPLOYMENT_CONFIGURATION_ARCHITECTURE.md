@@ -718,6 +718,21 @@ remain behind a generic route because it is valid input to the named generic
 adapter, but it grants no mapping or writer authority. Cutover and dead-code
 deletion are separate implementation slices.
 
+`MO-S.6F.GENERAL.1G-1A` is **IMPLEMENTED / LOCAL VERIFIED** for the first of
+those slices. The only active staff-facing annual-roster action is now generic
+**Team Roster Import / 团队名单导入**. Both legacy Sound confirmation patterns and
+the Projection preview pattern are removed and 404; the old Sound preview and
+template routes are authenticated GET-only compatibility redirects whose POST
+requests return 405 without forwarding files, tokens, or state. The new generic
+download route reuses only the verified private-workbook byte-stream helper and
+uses `user_can_review_team_roster_columns(...)`, not the Sound preview helper.
+Strict salt separation remains unchanged and representative old Sound create/
+update tokens are rejected by the generic decoder. No generic writer semantics,
+canonical data, schema, migration, dependency, production apply, or normal-
+local apply changed. Legacy Sound/Projection services, forms, templates, and
+service tests remain unreachable debt for GENERAL.1G-1B; retirement is not
+complete.
+
 ## 3. Identity Model
 
 | Identity | Meaning | Portability |

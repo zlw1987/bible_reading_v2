@@ -3036,8 +3036,9 @@ generic architecture below; it is not production-ready.
 Status: **READ-ONLY REPOSITORY AUDIT + ARCHITECTURE COMPLETE;
 GENERAL.1A/1B/1C/1D/1E ZERO-WRITE FOUNDATION IMPLEMENTED / LOCAL VERIFIED;
 GENERAL.1F-0A DOCS / READ-ONLY WRITER CONTRACT COMPLETE;
-GENERAL.1F-1A CONFIRMATION WRITER CORE IMPLEMENTED / LOCAL VERIFIED; CONFIRM UI
-NOT YET IMPLEMENTED**.
+GENERAL.1F-1A/1F-1B CONFIRMATION WRITER + EXPLICIT CONFIRM UI IMPLEMENTED /
+LOCAL VERIFIED; GENERAL.1G-0A LEGACY CUTOVER CONTRACT COMPLETE; GENERAL.1G-1A
+AUTHORITY + UX CUTOVER IMPLEMENTED / LOCAL VERIFIED**.
 
 MO-S.6F.GENERAL.1A is IMPLEMENTED / LOCAL VERIFIED for the writer-free generic
 domain foundation: TEAM_ROSTER_CELL_V1, typed cell input, TeamRosterColumnHint,
@@ -3843,6 +3844,44 @@ accepted only by its exact old decoder and salt if that old endpoint is
 deliberately restored; generic tokens and rows remain separate. A rollback plan
 must preserve the same integration/staff gates and must never make both writers
 staff-facing for new uploads.
+
+##### MO-S.6F.GENERAL.1G-1A import-authority and UX cutover
+
+`MO-S.6F.GENERAL.1G-1A` is **IMPLEMENTED / LOCAL VERIFIED**. Generic **Team
+Roster Import / 团队名单导入** is now the only active staff-facing annual-roster
+entry. Its existing route and GENERAL.1A-1F authority/writer semantics are
+unchanged; Column Mapping remains the first reviewed stage rather than the
+product name.
+
+The old Sound create-confirmation and roster-update-confirmation URL patterns
+are removed, so their former GET/POST paths return 404 and their correctly
+signed legacy tokens are never decoded, redirected, or translated into
+`TEAM_ROSTER_CONFIRMATION_V1`. The Projection preview URL pattern is likewise
+removed and returns 404. The old Sound preview and template names remain only
+as authenticated GET-only 302 redirects to the generic workflow and generic
+download respectively; POST returns 405 and no query, upload, body, or legacy
+token state is forwarded.
+
+The generic download route streams the same SHA-256-verified server-private
+workbook bytes behind the annual-workbook integration gate and generic active-
+staff/superuser authority. Its bilingual copy states that download does not map
+columns or authorize a write and that uploaded roster columns still require
+explicit review. Local synthetic browser QA covered English desktop navigation
+and the complete upload -> column review -> exact re-upload -> person review ->
+preview -> explicit confirmation flow, plus the old Sound redirect and
+Projection 404. Chinese 390x844 QA showed the single import action and readable
+generic/download copy with no observed horizontal overflow or relevant console
+warnings/errors.
+
+No canonical assignment, member, scheduling revision, RequiredTeam, audience,
+Worship, TeamMembership, MinistryTeam, ServiceProfile, LogEntry, or
+Notification data was changed by this repository slice. Browser writes were
+limited to a disposable synthetic SQLite database and were removed afterward.
+No schema, migration, dependency, production command, normal-local apply,
+stage, commit, or push occurred. The legacy Sound/Projection services, forms,
+templates, and remaining service-level tests are intentionally retained as
+unreachable dead implementation pending GENERAL.1G-1B; dead-code retirement is
+not complete.
 
 ### MO-S.6G — Operational Board Polish
 

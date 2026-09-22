@@ -1141,67 +1141,6 @@ class SoundAssignmentConfirmationAdditionalTests(SoundAssignmentPreviewTestBase)
             )
             self._confirm(payload)
 
-    def test_ui_exposes_post_only_confirmation_and_redirects_after_success(self):
-        event = self.event_for_row()
-        self.client.force_login(self.staff)
-        session = self.client.session
-        session["language"] = "en"
-        session.save()
-        upload = self.client.post(
-            reverse("sound_assignment_workbook_preview"),
-            {"workbook": self.upload({4: "Alice"})},
-        )
-        mapping_review = upload.context["mapping_review"]
-        with patch(
-            "ministry.services.sound_assignment_xlsx_preview.timezone.now",
-            return_value=self.preview_now(),
-        ), patch(
-            "ministry.services.sound_assignment_xlsx_confirmation.timezone.now",
-            return_value=self.preview_now(),
-        ):
-            preview_response = self.client.post(
-                reverse("sound_assignment_workbook_preview"),
-                {
-                    "signed_mapping_state": mapping_review.signed_state,
-                    "mapping_0": str(self.alice_membership.pk),
-                },
-            )
-            proposal = preview_response.context["confirmation_proposal"]
-            self.assertContains(preview_response, "Create 1 future Sound assignments")
-            self.assertContains(preview_response, "Past rows are not backfilled")
-            self.assertEqual(
-                self.client.get(
-                    reverse("confirm_sound_assignment_workbook")
-                ).status_code,
-                405,
-            )
-            response = self.client.post(
-                reverse("confirm_sound_assignment_workbook"),
-                {"signed_confirmation": proposal.signed_payload},
-            )
-        self.assertRedirects(response, reverse("team_assignment_list"))
-        event.refresh_from_db()
-        self.assertEqual(event.scheduling_revision, 1)
-        self.assertEqual(TeamAssignment.objects.count(), 1)
-
-    def test_confirmation_view_denies_member_and_disabled_integration(self):
-        self.event_for_row()
-        proposal, _payload = self._proposal()
-        self.client.force_login(self.alice)
-        denied = self.client.post(
-            reverse("confirm_sound_assignment_workbook"),
-            {"signed_confirmation": proposal.signed_payload},
-        )
-        self.assertEqual(denied.status_code, 403)
-        self.client.force_login(self.staff)
-        with override_settings(CMS_ENABLED_INTEGRATIONS=[]):
-            disabled = self.client.post(
-                reverse("confirm_sound_assignment_workbook"),
-                {"signed_confirmation": proposal.signed_payload},
-            )
-        self.assertEqual(disabled.status_code, 404)
-        self.assertEqual(TeamAssignment.objects.count(), 0)
-
     def test_active_superuser_can_confirm_and_is_recorded_as_creator(self):
         event = self.event_for_row()
         review = prepare_sound_assignment_mapping(

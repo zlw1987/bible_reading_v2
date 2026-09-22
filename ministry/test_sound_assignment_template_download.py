@@ -1,4 +1,4 @@
-"""Focused MO-S.6F private Sound import template download tests."""
+"""Focused generic Team Roster verified-workbook download tests."""
 
 from datetime import timedelta
 from hashlib import sha256
@@ -33,6 +33,9 @@ class SoundAssignmentTemplateDownloadTests(TestCase):
         cls.temp_parent.mkdir(exist_ok=True)
         cls.staff = User.objects.create_user(
             "template_staff", password="pw", is_staff=True
+        )
+        cls.inactive_staff = User.objects.create_user(
+            "template_inactive_staff", password="pw", is_staff=True, is_active=False
         )
         cls.superuser = User.objects.create_superuser(
             "template_super", "template-super@example.test", "pw"
@@ -92,7 +95,7 @@ class SoundAssignmentTemplateDownloadTests(TestCase):
         ):
             self._force_login(user)
             response = self.client.get(
-                reverse("download_sound_assignment_workbook_template")
+                reverse("download_team_roster_workbook_template")
             )
             downloaded = b"".join(response.streaming_content)
             response.close()
@@ -108,7 +111,7 @@ class SoundAssignmentTemplateDownloadTests(TestCase):
 
     def test_authentication_is_required(self):
         response = self.client.get(
-            reverse("download_sound_assignment_workbook_template")
+            reverse("download_team_roster_workbook_template")
         )
         self.assertEqual(response.status_code, 302)
         self.assertIn(reverse("login"), response["Location"])
@@ -131,9 +134,15 @@ class SoundAssignmentTemplateDownloadTests(TestCase):
                 with self.subTest(user=user.username):
                     self._force_login(user)
                     response = self.client.get(
-                        reverse("download_sound_assignment_workbook_template")
+                        reverse("download_team_roster_workbook_template")
                     )
                     self.assertEqual(response.status_code, 403)
+
+    def test_inactive_staff_is_denied_by_generic_authority(self):
+        self._force_login(self.inactive_staff)
+        response = self.client.get(reverse("download_team_roster_workbook_template"))
+        self.assertEqual(response.status_code, 302)
+        self.assertIn(reverse("login"), response["Location"])
 
     @override_settings(CMS_ENABLED_INTEGRATIONS=[])
     def test_disabled_integration_fails_closed_before_template_open(self):
@@ -143,7 +152,7 @@ class SoundAssignmentTemplateDownloadTests(TestCase):
             "open_verified_sound_assignment_template"
         ) as opener:
             response = self.client.get(
-                reverse("download_sound_assignment_workbook_template")
+                reverse("download_team_roster_workbook_template")
             )
         self.assertEqual(response.status_code, 404)
         opener.assert_not_called()
@@ -158,12 +167,12 @@ class SoundAssignmentTemplateDownloadTests(TestCase):
                 SOUND_ASSIGNMENT_IMPORT_TEMPLATE_PATH=configured_path
             ):
                 response = self.client.get(
-                    reverse("download_sound_assignment_workbook_template")
+                    reverse("download_team_roster_workbook_template")
                 )
                 self.assertEqual(response.status_code, 404)
                 self.assertContains(
                     response,
-                    "The 2026 Sound import template is currently unavailable.",
+                    "The verified annual workbook is currently unavailable.",
                     status_code=404,
                 )
                 self.assertNotContains(
@@ -182,7 +191,7 @@ class SoundAssignmentTemplateDownloadTests(TestCase):
                 SOUND_ASSIGNMENT_IMPORT_TEMPLATE_PATH=str(configured_path)
             ):
                 response = self.client.get(
-                    reverse("download_sound_assignment_workbook_template")
+                    reverse("download_team_roster_workbook_template")
                 )
                 self.assertEqual(response.status_code, 404)
                 self.assertNotContains(
@@ -208,7 +217,7 @@ class SoundAssignmentTemplateDownloadTests(TestCase):
             connection
         ) as queries:
             response = self.client.get(
-                reverse("download_sound_assignment_workbook_template")
+                reverse("download_team_roster_workbook_template")
             )
             downloaded = b"".join(response.streaming_content)
             response.close()
@@ -234,34 +243,51 @@ class SoundAssignmentTemplateDownloadTests(TestCase):
     def test_route_is_get_only(self):
         self._force_login(self.staff)
         response = self.client.post(
-            reverse("download_sound_assignment_workbook_template")
+            reverse("download_team_roster_workbook_template")
         )
         self.assertEqual(response.status_code, 405)
 
-    def test_preview_page_links_template_and_shows_bilingual_instructions(self):
+    def test_generic_page_links_verified_workbook_with_non_authority_copy(self):
         self._force_login(self.staff)
         for language, expected in (
-            ("en", "Download 2026 Sound Import Template"),
-            ("zh", "下载 2026 音控导入模板"),
+            ("en", "Download Verified Annual Workbook"),
+            ("zh", "下载已验证的年度工作簿"),
         ):
             with self.subTest(language=language):
                 session = self.client.session
                 session["language"] = language
                 session.save()
                 response = self.client.get(
-                    reverse("sound_assignment_workbook_preview")
+                    reverse("team_roster_column_mapping_review")
                 )
                 self.assertContains(response, expected)
                 self.assertContains(
                     response,
-                    reverse("download_sound_assignment_workbook_template"),
+                    reverse("download_team_roster_workbook_template"),
                 )
                 if language == "en":
                     for instruction in (
-                        "edit only All 930 → Sound / Column F",
-                        "exactly one Sound person",
-                        "does not clear anything",
-                        "Historical Sundays are not backfilled",
-                        "Other assignment columns are not enabled",
+                        "exact deployment workbook supported by this import adapter",
+                        "does not map columns or authorize any write",
+                        "uploaded roster columns still require explicit review",
                     ):
                         self.assertContains(response, instruction)
+                    self.assertNotContains(response, "Sound template")
+                    self.assertNotContains(response, "edit Column F only")
+
+    def test_old_template_route_is_get_only_redirect(self):
+        self._force_login(self.staff)
+        response = self.client.get(
+            reverse("download_sound_assignment_workbook_template")
+        )
+        self.assertRedirects(
+            response,
+            reverse("download_team_roster_workbook_template"),
+            fetch_redirect_response=False,
+        )
+        response = self.client.post(
+            reverse("download_sound_assignment_workbook_template"),
+            {"signed_confirmation": "legacy-state-must-not-forward"},
+        )
+        self.assertEqual(response.status_code, 405)
+        self.assertNotIn("Location", response)

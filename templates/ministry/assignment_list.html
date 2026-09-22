@@ -21,17 +21,7 @@
         {% endif %}
         {% if can_review_team_roster_columns %}
         <a class="button" href="{% url 'team_roster_column_mapping_review' %}">
-            {% if language == "zh" %}团队名单列映射{% else %}Team Roster Column Mapping{% endif %}
-        </a>
-        {% endif %}
-        {% if can_preview_sound_assignment_workbook %}
-        <a class="button button-secondary" href="{% url 'sound_assignment_workbook_preview' %}">
-            {% if language == "zh" %}音控工作簿预览{% else %}Sound Workbook Preview{% endif %}
-        </a>
-        {% endif %}
-        {% if can_preview_projection_assignment_workbook %}
-        <a class="button button-secondary" href="{% url 'projection_assignment_workbook_preview' %}">
-            {% if language == "zh" %}投影工作簿预览{% else %}Projection Workbook Preview{% endif %}
+            {% if language == "zh" %}团队名单导入{% else %}Team Roster Import{% endif %}
         </a>
         {% endif %}
     </div>

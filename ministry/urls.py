@@ -26,24 +26,14 @@ urlpatterns = [
         name="team_roster_column_mapping_review",
     ),
     path(
-        "assignments/import/projection-preview/",
-        views.projection_assignment_workbook_preview,
-        name="projection_assignment_workbook_preview",
+        "assignments/import/team-roster/template/",
+        views.download_team_roster_workbook_template,
+        name="download_team_roster_workbook_template",
     ),
     path(
         "assignments/import/sound-template/",
         views.download_sound_assignment_workbook_template,
         name="download_sound_assignment_workbook_template",
-    ),
-    path(
-        "assignments/import/sound-confirm/",
-        views.confirm_sound_assignment_workbook,
-        name="confirm_sound_assignment_workbook",
-    ),
-    path(
-        "assignments/import/sound-roster-update-confirm/",
-        views.confirm_sound_assignment_roster_update_workbook,
-        name="confirm_sound_assignment_roster_update_workbook",
     ),
     path("assignments/new/", views.create_team_assignment, name="create_team_assignment"),
     path(

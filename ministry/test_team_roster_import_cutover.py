@@ -8,14 +8,6 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase, override_settings
 from django.urls import NoReverseMatch, reverse
 
-from .services.sound_assignment_xlsx_confirmation import (
-    CONFIRMATION_CONTRACT_REVISION,
-    CONFIRMATION_SIGNING_SALT,
-)
-from .services.sound_assignment_xlsx_roster_update import (
-    ROSTER_UPDATE_CONTRACT_REVISION,
-    ROSTER_UPDATE_SIGNING_SALT,
-)
 from .services.team_roster_assignment_confirmation import (
     TeamRosterConfirmationProposalError,
     decode_team_roster_confirmation,
@@ -26,6 +18,19 @@ from .views import (
     download_team_roster_workbook_template,
     sound_assignment_workbook_preview,
     team_roster_column_mapping_review,
+)
+
+
+# Historical fixtures only. These frozen literals prove that still-valid tokens
+# from the retired Sound writers are not generic Team Roster authority. They are
+# deliberately not imported from, or decoded by, production compatibility code.
+HISTORICAL_SOUND_CREATE_CONTRACT = "SOUND_ASSIGNMENT_CONFIRMATION_V1"
+HISTORICAL_SOUND_CREATE_SALT = "ministry.sound-assignment-confirmation.v1"
+HISTORICAL_SOUND_ROSTER_UPDATE_CONTRACT = (
+    "SOUND_ASSIGNMENT_ROSTER_UPDATE_CONFIRMATION_V1"
+)
+HISTORICAL_SOUND_ROSTER_UPDATE_SALT = (
+    "ministry.sound-assignment-roster-update.v1"
 )
 
 
@@ -111,8 +116,11 @@ class TeamRosterImportCutoverTests(TestCase):
 
     def test_legacy_sound_confirmation_tokens_are_not_generic_authority(self):
         for contract, salt in (
-            (CONFIRMATION_CONTRACT_REVISION, CONFIRMATION_SIGNING_SALT),
-            (ROSTER_UPDATE_CONTRACT_REVISION, ROSTER_UPDATE_SIGNING_SALT),
+            (HISTORICAL_SOUND_CREATE_CONTRACT, HISTORICAL_SOUND_CREATE_SALT),
+            (
+                HISTORICAL_SOUND_ROSTER_UPDATE_CONTRACT,
+                HISTORICAL_SOUND_ROSTER_UPDATE_SALT,
+            ),
         ):
             with self.subTest(contract=contract):
                 legacy_token = signing.dumps(

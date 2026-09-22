@@ -3038,7 +3038,8 @@ GENERAL.1A/1B/1C/1D/1E ZERO-WRITE FOUNDATION IMPLEMENTED / LOCAL VERIFIED;
 GENERAL.1F-0A DOCS / READ-ONLY WRITER CONTRACT COMPLETE;
 GENERAL.1F-1A/1F-1B CONFIRMATION WRITER + EXPLICIT CONFIRM UI IMPLEMENTED /
 LOCAL VERIFIED; GENERAL.1G-0A LEGACY CUTOVER CONTRACT COMPLETE; GENERAL.1G-1A
-AUTHORITY + UX CUTOVER IMPLEMENTED / LOCAL VERIFIED**.
+AUTHORITY + UX CUTOVER IMPLEMENTED / LOCAL VERIFIED; GENERAL.1G-1B DEAD-CODE
+RETIREMENT IMPLEMENTED / LOCAL VERIFIED**.
 
 MO-S.6F.GENERAL.1A is IMPLEMENTED / LOCAL VERIFIED for the writer-free generic
 domain foundation: TEAM_ROSTER_CELL_V1, typed cell input, TeamRosterColumnHint,
@@ -3882,6 +3883,43 @@ stage, commit, or push occurred. The legacy Sound/Projection services, forms,
 templates, and remaining service-level tests are intentionally retained as
 unreachable dead implementation pending GENERAL.1G-1B; dead-code retirement is
 not complete.
+
+##### MO-S.6F.GENERAL.1G-1B dead-code retirement
+
+`MO-S.6F.GENERAL.1G-1B` is **IMPLEMENTED / LOCAL VERIFIED** after the separately
+established production deployment and operational verification of 1G-1A. A
+fresh reachability audit found no continuing runtime consumer beyond the
+already-unreachable legacy view bodies and forms. This slice removes the Sound
+preview, create-confirmation, and roster-update services; the Projection
+preview service; their four legacy forms; both preview templates; the dead
+Sound/Projection view helpers and bodies; and the four legacy-only service test
+modules.
+
+Continuing authority remains entirely in GENERAL.1A-1F generic services and
+tests. The 1G cutover regression freezes representative old Sound create/update
+contract and salt literals as test-local historical fixtures, proving that
+correctly signed, unexpired old tokens remain invalid generic confirmation
+authority without retaining a production legacy decoder. Template-download
+tests import the integration key from the shared Worship parser and continue to
+cover exact bytes/SHA, permissions, integration gating, GET-only behavior, and
+zero database writes. Generic/adaptor suites retain 1..N and ASCII-slash/blank
+semantics, exact E `projector` and F `Sound` hints, unknown-header Ignore/manual
+review, exact event/profile/team-membership authority, person eligibility,
+history/audience/Worship governance, stale/tamper/user bounds, atomicity,
+SQLite serialization, replay, audit, and zero Notification coverage.
+
+The named Bethany adapter, integration registration, shared
+`worship_xlsx_preview.py`, `sound_assignment_template.py`,
+`SOUND_ASSIGNMENT_IMPORT_TEMPLATE_PATH`, generic download, and all canonical
+`TeamAssignment` / `TeamAssignmentMember` rows remain unchanged. Sound 1B's
+production-created rows remain canonical; Sound 1C was never production-
+applied; Projection 2A never had writer authority. This slice changes no generic
+writer semantics, signed-state bounds, schema, migration, dependency,
+scheduling revision, or data. Because the bounded bookmark-removal condition is
+not established here, `/assignments/import/sound-preview/` and
+`/assignments/import/sound-template/` remain authenticated GET-only redirects;
+they are the sole legacy compatibility surface, still return 405 for POST, and
+forward no query, upload, body, or token state.
 
 ### MO-S.6G — Operational Board Polish
 

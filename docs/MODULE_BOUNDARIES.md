@@ -153,8 +153,10 @@ lookup, or mutable-name authority.
 
 The generic Team Roster workflow through explicit confirmation is now
 implemented and locally verified through GENERAL.1F-1B. GENERAL.1G-0A is
-**LEGACY CUTOVER AUDIT / CONTRACT COMPLETE**, and GENERAL.1G-1A is
-**IMPLEMENTED / LOCAL VERIFIED** for authority and UX cutover. Generic Team
+**LEGACY CUTOVER AUDIT / CONTRACT COMPLETE**; GENERAL.1G-1A is
+**IMPLEMENTED / LOCAL VERIFIED** for authority and UX cutover; and
+GENERAL.1G-1B is **IMPLEMENTED / LOCAL VERIFIED** for dead-code retirement.
+Generic Team
 Roster is the only active staff-facing annual-roster import. The two Sound
 confirmation routes and Projection preview route are removed/404; the old Sound
 preview/template routes are temporary authenticated GET-only redirects with
@@ -172,8 +174,13 @@ Lighting remains outside identity authority. Duplicate columns selecting one
 team fail closed and are never merged. Event matching remains exact. No runtime/
 schema/migration/dependency/data change occurs in GENERAL.0A.
 GENERAL.1G-1A changed no writer semantics, canonical data, schema, migration,
-dependency, production data, or normal-local data. Legacy Sound/Projection
-service/form/template retirement remains explicitly pending GENERAL.1G-1B.
+dependency, production data, or normal-local data. GENERAL.1G-1B removes the
+unreachable legacy Sound/Projection services, forms, templates, view bodies,
+and legacy-only tests after their continuing invariants were established in the
+generic and adapter suites. It retains shared Worship/adapter/template behavior
+and changes no generic writer semantics, canonical data, schema, migration, or
+dependency. The two Sound bookmark aliases remain temporary GET-only redirects
+because their bounded removal condition was not established by this slice.
 During the 5D/5E transition, readiness, the retained bounded reset, ServiceEvent
 Admin, and Worship XLSX matching/confirmation switched to FK/Profile authority
 while compatibility storage still existed as drift evidence. The strict V2

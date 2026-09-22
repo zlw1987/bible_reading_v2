@@ -278,16 +278,21 @@ confirmation authority and atomic service writer core; GENERAL.1F-1B is
 IMPLEMENTED / LOCAL VERIFIED for the explicit Confirm UI/POST adapter; and
 `MO-S.6F.GENERAL.1G-0A` is **LEGACY CUTOVER AUDIT / CONTRACT COMPLETE**.
 `MO-S.6F.GENERAL.1G-1A` is **IMPLEMENTED / LOCAL VERIFIED** for the separate
-authority and UX cutover. Generic Team Roster is now the only active staff-
+authority and UX cutover, and `MO-S.6F.GENERAL.1G-1B` is **IMPLEMENTED / LOCAL
+VERIFIED** for unreachable implementation retirement. Generic Team Roster is
+now the only active staff-
 facing annual-roster import; both legacy Sound confirmation routes and the
 Projection preview route are removed/404, while old Sound preview/template
 bookmarks are temporary authenticated GET-only redirects and reject POST with
 405. A generic verified-workbook download uses the generic active-staff/
 superuser gate and unchanged private-source/hash/byte-stream behavior. Old
-Sound tokens are not translated. No canonical assignment data, schema,
-migration, dependency, production apply, or normal-local apply changed. The
-unreachable legacy implementation remains pending GENERAL.1G-1B, so dead-code
-retirement is not complete. The 1G-0A contract made generic Team
+Sound tokens are not translated. The old Sound/Projection services, four forms,
+two preview templates, dead view bodies, and legacy-only tests are removed;
+continuing generic, adapter, template-download, and cutover regressions remain.
+No generic writer semantics, canonical assignment data, schema, migration,
+dependency, production apply, or normal-local apply changed. The two bounded
+Sound aliases remain GET-only pending separate evidence that their bookmark
+period is complete. The 1G-0A contract made generic Team
 Roster the only target staff-facing annual-roster entry, preserves historical
 Sound 1B production-created assignments/members as ordinary canonical rows,
 records that Sound 1C had no production apply and Projection 2A had no writer,
@@ -411,8 +416,12 @@ and the generic download route retains exact verified bytes behind the generic
 permission and integration gates. Focused regressions prove representative
 correctly signed legacy Sound create/update tokens fail the strict generic
 decoder, and rendered disposable QA covered the complete generic confirm flow
-without Notification. GENERAL.1G-1B still owns legacy service/form/template and
-remaining legacy-only test retirement.
+without Notification. `MO-S.6F.GENERAL.1G-1B` subsequently removed the
+unreachable legacy service/form/template/view implementation and its
+legacy-only executable tests after confirming continuing coverage in the
+generic and named-adapter suites. The verified private-workbook helper/setting,
+shared Worship parser, named adapter, and both GET-only bookmark aliases remain;
+the aliases still reject POST and forward no legacy state.
 
 `MO-S.REQUIRED.0A` is **EFFECTIVE REQUIRED-TEAM SEMANTICS / EVENT WORSHIP
 ENTRY AUDIT COMPLETE**. `MO-S.REQUIRED.1A` is **IMPLEMENTED / LOCAL VERIFIED /

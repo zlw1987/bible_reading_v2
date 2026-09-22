@@ -727,11 +727,20 @@ requests return 405 without forwarding files, tokens, or state. The new generic
 download route reuses only the verified private-workbook byte-stream helper and
 uses `user_can_review_team_roster_columns(...)`, not the Sound preview helper.
 Strict salt separation remains unchanged and representative old Sound create/
-update tokens are rejected by the generic decoder. No generic writer semantics,
-canonical data, schema, migration, dependency, production apply, or normal-
-local apply changed. Legacy Sound/Projection services, forms, templates, and
-service tests remain unreachable debt for GENERAL.1G-1B; retirement is not
-complete.
+update tokens are rejected by the generic decoder.
+
+`MO-S.6F.GENERAL.1G-1B` is **IMPLEMENTED / LOCAL VERIFIED** for the second
+slice. After the separately established 1G-1A deployment/operational
+precondition, it removes the unreachable Sound/Projection preview and writer
+services, their four forms and two templates, their dead view bodies, and their
+legacy-only executable tests. Historical token literals now live only in the
+cutover regression, and the template tests import the integration key from the
+continuing shared Worship owner. Generic Team Roster services/writer semantics,
+the named adapter, shared Worship parser, verified byte-stream helper and
+`SOUND_ASSIGNMENT_IMPORT_TEMPLATE_PATH` compatibility, canonical assignment
+data, schema, migrations, and dependencies are unchanged. Because this slice
+does not establish completion of the bounded bookmark period, the two Sound
+GET-only aliases remain the sole compatibility surface and still reject POST.
 
 ## 3. Identity Model
 

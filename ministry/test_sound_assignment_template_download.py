@@ -18,11 +18,11 @@ from events.models import ServiceEvent, ServiceEventPlannerAssignment
 
 from .models import MinistryTeam, MinistryTeamRoleAssignment, MinistryTeamRoleType
 from .permissions import can_manage_team_assignments
-from .services.sound_assignment_xlsx_preview import INTEGRATION_KEY
 from .services.sound_assignment_template import (
     DOWNLOAD_CONTENT_TYPE,
     DOWNLOAD_FILENAME,
 )
+from .services.worship_xlsx_preview import INTEGRATION_KEY
 
 
 @override_settings(CMS_ENABLED_INTEGRATIONS=[INTEGRATION_KEY])

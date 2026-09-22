@@ -171,8 +171,7 @@ Exact known Sound/
 Projection/Video headers may prefill reviewed mappings, but
 they are convenience rather than an importable-team allowlist; formula-derived
 Lighting remains outside identity authority. Duplicate columns selecting one
-team fail closed and are never merged. Event matching remains exact. No runtime/
-schema/migration/dependency/data change occurs in GENERAL.0A.
+team fail closed and are never merged. Event matching remains exact. No runtime/schema/migration/dependency/data change occurred in GENERAL.0A itself.
 GENERAL.1G-1A changed no writer semantics, canonical data, schema, migration,
 dependency, production data, or normal-local data. GENERAL.1G-1B removes the
 unreachable legacy Sound/Projection services, forms, templates, view bodies,

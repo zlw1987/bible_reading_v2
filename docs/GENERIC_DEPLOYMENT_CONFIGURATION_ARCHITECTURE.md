@@ -730,8 +730,7 @@ Strict salt separation remains unchanged and representative old Sound create/
 update tokens are rejected by the generic decoder.
 
 `MO-S.6F.GENERAL.1G-1B` is **IMPLEMENTED / LOCAL VERIFIED** for the second
-slice. After the separately established 1G-1A deployment/operational
-precondition, it removes the unreachable Sound/Projection preview and writer
+slice. Following the GENERAL.1G-1A authority/UX cutover in the repository, it removes the unreachable Sound/Projection preview and writer
 services, their four forms and two templates, their dead view bodies, and their
 legacy-only executable tests. Historical token literals now live only in the
 cutover regression, and the template tests import the integration key from the
